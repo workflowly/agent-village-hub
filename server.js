@@ -25,6 +25,9 @@ import {
   shouldSkipForCost,
   readBotDailyCost as readBotDailyCostImpl,
   validateObserverAuth as validateObserverAuthImpl,
+  trackInteractions,
+  updateCoLocation,
+  updateRelationships,
 } from './logic.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -60,6 +63,7 @@ let state = {
   publicLogs: {},
   clock: { tick: 0, phase: 'morning', ticksInPhase: 0 },
   emptyTicks: {},
+  relationships: {},
 };
 let paused = false;
 let tickInProgress = false;
@@ -84,6 +88,7 @@ async function loadState() {
       publicLogs: loaded.publicLogs || {},
       clock: loaded.clock || { tick: 0, phase: 'morning', ticksInPhase: 0 },
       emptyTicks: loaded.emptyTicks || {},
+      relationships: loaded.relationships || {},
     };
     for (const loc of ALL_LOCATIONS) {
       if (!state.locations[loc]) state.locations[loc] = [];
@@ -114,6 +119,7 @@ async function loadState() {
     state.publicLogs[loc] = [];
     state.emptyTicks[loc] = 0;
   }
+  state.relationships = {};
   console.log('[village] Fresh state initialized');
 }
 
@@ -390,6 +396,7 @@ async function tick() {
           whispers: pendingWhispers,
           movements: [],
           sceneHistoryCap: SCENE_HISTORY_CAP,
+          relationships: state.relationships,
         });
 
         allSceneRequests.push({ botName, port, conversationId, scene, loc });
@@ -437,6 +444,24 @@ async function tick() {
           ...extra,
         });
       }
+    }
+
+    // Track relationships
+    trackInteractions(allEvents, state, displayNames);
+    updateCoLocation(state);
+    const relChanges = updateRelationships(state, displayNames);
+    for (const change of relChanges) {
+      broadcastEvent({
+        type: 'relationship',
+        tick: tickNum,
+        from: change.from,
+        to: change.to,
+        fromDisplay: change.fromDisplay,
+        toDisplay: change.toDisplay,
+        label: change.label,
+        prevLabel: change.prevLabel,
+      });
+      console.log(`[village] relationship: ${change.fromDisplay} & ${change.toDisplay} → ${change.label || '(none)'}`);
     }
 
     // Write village memories per bot
@@ -504,6 +529,7 @@ async function tick() {
           name: b, displayName: displayNames[b] || b,
         }))])
       ),
+      relationships: state.relationships,
     });
   } catch (err) {
     console.error(`[village] Tick error: ${err.message}`);
@@ -683,6 +709,7 @@ const server = createServer(async (req, res) => {
       locations: Object.fromEntries(
         ALL_LOCATIONS.map(l => [l, state.locations[l] || []])
       ),
+      relationships: state.relationships,
     });
     res.write(`data: ${initData}\n\n`);
 

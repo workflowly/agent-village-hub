@@ -24,6 +24,11 @@ canvas{image-rendering:pixelated;image-rendering:crisp-edges}
 .le .t{color:#333}.le .b{color:#4a9;font-weight:600}.le .s{color:#999}
 .le .w{color:#7af;font-style:italic}.le .m{color:#da5}
 .le .j{color:#4a9}.le .l{color:#e55}.le .o{color:#555;font-style:italic}.le .k{color:#333}
+#rels{background:#0d0d0d;border-top:1px solid #1a1a1a;padding:4px 14px;font:11px/1.4 -apple-system,'Segoe UI',sans-serif;color:#555;display:none;flex-shrink:0;flex-wrap:wrap;gap:4px 12px}
+#rels.show{display:flex}
+.rel{transition:background .6s}
+.rel.highlight{background:rgba(255,215,0,.15)}
+.rel-acq{color:#777}.rel-friend{color:#4a9}.rel-good{color:#5cb85c}.rel-best{color:#daa520}
 #auth{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.7);color:#777;font:14px -apple-system,sans-serif;z-index:20}
 #auth a{color:#4a9}
 ::-webkit-scrollbar{width:4px}
@@ -42,6 +47,7 @@ canvas{image-rendering:pixelated;image-rendering:crisp-edges}
     <span id="tick">&mdash;</span>
     <span id="st" class="st-off">Connecting</span>
   </div>
+  <div id="rels"></div>
   <div id="log"></div>
 </div>
 <script>
@@ -82,6 +88,7 @@ let sprites = {};
 let bubbleDom = {};
 let tick = 0, phase = '', paused = false, online = false;
 let nextTickAt = 0, tickIntervalMs = 60000, villageTime = '';
+let relationships = {};
 let logHtml = [];
 let frame = 0;
 
@@ -374,6 +381,34 @@ function updateBar() {
   else { se.textContent='Running'; se.className='st-run'; }
 }
 
+// ========== RELATIONSHIPS PANEL ==========
+function relClass(label) {
+  if (label.startsWith('best')) return 'rel-best';
+  if (label.startsWith('good')) return 'rel-good';
+  if (label.startsWith('friend')) return 'rel-friend';
+  return 'rel-acq';
+}
+
+function renderRels(highlightKey) {
+  const el = document.getElementById('rels');
+  const entries = Object.entries(relationships).filter(([,r]) => r.label);
+  if (entries.length === 0) { el.classList.remove('show'); return; }
+  el.classList.add('show');
+  el.innerHTML = entries.map(([key, r]) => {
+    const [a, b] = key.split('::');
+    const da = (sprites[a]||{}).dn || a;
+    const db = (sprites[b]||{}).dn || b;
+    const hl = key === highlightKey ? ' highlight' : '';
+    return `<span class="rel ${relClass(r.label)}${hl}" data-key="${esc(key)}">\u2665 ${esc(da)} &amp; ${esc(db)}: ${esc(r.label)}</span>`;
+  }).join(' \u00b7 ');
+  if (highlightKey) {
+    setTimeout(() => {
+      const h = el.querySelector('.highlight');
+      if (h) h.classList.remove('highlight');
+    }, 1500);
+  }
+}
+
 // ========== SSE EVENTS ==========
 function onEvent(d) {
   const t = `<span class="t">${hm()}</span>`;
@@ -384,6 +419,7 @@ function onEvent(d) {
       if (d.nextTickAt) nextTickAt=d.nextTickAt;
       if (d.tickIntervalMs) tickIntervalMs=d.tickIntervalMs;
       if (d.villageTime) villageTime=d.villageTime;
+      if (d.relationships) relationships=d.relationships;
       for (const loc of LOC_IDS) {
         const bots = d.locations[loc]||[];
         locBots[loc] = bots.map(b => typeof b==='string'?b:(b.name||b));
@@ -394,6 +430,7 @@ function onEvent(d) {
         });
       }
       updateBar();
+      renderRels();
       break;
 
     case 'action': {
@@ -438,6 +475,7 @@ function onEvent(d) {
       if (d.nextTickAt) nextTickAt=d.nextTickAt;
       if (d.tickIntervalMs) tickIntervalMs=d.tickIntervalMs;
       if (d.villageTime) villageTime=d.villageTime;
+      if (d.relationships) { relationships=d.relationships; renderRels(); }
       if (d.locations) {
         const allBots = new Set();
         for (const loc of LOC_IDS) {
@@ -460,6 +498,17 @@ function onEvent(d) {
       const a=d.actions||{};
       addLog(`${t} <span class="k">\u2014 tick ${d.tick} \u00b7 ${d.phase} \u00b7 ${d.bots}/${d.botsTotal} bots \u00b7 say:${a.say||0} whisper:${a.whisper||0} move:${a.move||0} \u2014</span>`);
       break;
+
+    case 'relationship': {
+      const key = [d.from,d.to].sort().join('::');
+      if (!relationships[key]) relationships[key] = { says:0, whispers:0, coTicks:0, label:'', prevLabel:'', since:0 };
+      relationships[key].label = d.label;
+      relationships[key].prevLabel = d.prevLabel;
+      renderRels(key);
+      const verb = d.label ? `became ${d.label}s` : 'are no longer close';
+      addLog(`${t} <span class="b">${esc(d.fromDisplay)}</span> \u2665 <span class="b">${esc(d.toDisplay)}</span> <span class="j">\u2014 ${esc(verb)}</span>`);
+      break;
+    }
 
     case 'status':
       paused=d.paused; updateBar();

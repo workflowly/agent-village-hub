@@ -64,6 +64,7 @@ const ALL_LOCATIONS = Object.keys(LOCATION_NAMES);
  * @param {Array} opts.whispers - Pending whispers for this bot
  * @param {Array} opts.movements - Recent movement events at this location
  * @param {number} opts.sceneHistoryCap - Max messages in public log (default 10)
+ * @param {object} [opts.relationships] - state.relationships object
  * @returns {string} The scene prompt
  */
 export function buildScene({
@@ -78,6 +79,7 @@ export function buildScene({
   whispers,
   movements,
   sceneHistoryCap = 10,
+  relationships,
 }) {
   const lines = [];
 
@@ -95,6 +97,24 @@ export function buildScene({
     lines.push(`Also here: ${names}`);
   }
   lines.push('');
+
+  // Relationships
+  if (relationships) {
+    const relLines = [];
+    for (const [key, rel] of Object.entries(relationships)) {
+      if (!rel.label) continue;
+      const [a, b] = key.split('::');
+      if (a !== botName && b !== botName) continue;
+      const other = a === botName ? b : a;
+      const otherDisplay = botDisplayNames[other] || other;
+      relLines.push(`- ${otherDisplay}: ${rel.label}`);
+    }
+    if (relLines.length > 0) {
+      lines.push('Your relationships:');
+      lines.push(...relLines);
+      lines.push('');
+    }
+  }
 
   // Movement events
   if (movements && movements.length > 0) {

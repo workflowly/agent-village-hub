@@ -236,4 +236,125 @@ export function validateObserverAuth(cookieHeader, tokens) {
   return null;
 }
 
+// --- Relationship tracking ---
+
+/**
+ * Create a canonical pair key from two bot names (sorted, "::" delimited).
+ */
+export function pairKey(a, b) {
+  return a < b ? `${a}::${b}` : `${b}::${a}`;
+}
+
+/**
+ * Compute a relationship label from interaction counts.
+ *
+ * @param {{ says: number, whispers: number, coTicks: number }} rel
+ * @returns {string} Label string, or '' if score too low
+ */
+export function computeLabel(rel) {
+  const score = rel.says * 2 + rel.whispers * 5 + rel.coTicks * 0.2;
+  let label = '';
+  if (score >= 60) label = 'best friend';
+  else if (score >= 35) label = 'good friend';
+  else if (score >= 15) label = 'friend';
+  else if (score >= 5) label = 'acquaintance';
+
+  if (label && rel.whispers > rel.says) {
+    label += ' & confidant';
+  }
+  return label;
+}
+
+/**
+ * Track interactions from processed events. Call after processActions.
+ *
+ * For each 'say' event, increment `says` for every other bot at that location.
+ * For each 'whisper' event, increment `whispers` for the pair.
+ *
+ * @param {Map<string, Array>} allEvents - location → events[]
+ * @param {object} state - State with locations, relationships
+ * @param {object} displayNames - botName → displayName map
+ */
+export function trackInteractions(allEvents, state, displayNames) {
+  if (!state.relationships) state.relationships = {};
+
+  for (const [loc, events] of allEvents) {
+    const botsAtLoc = state.locations[loc] || [];
+
+    for (const ev of events) {
+      if (ev.action === 'say') {
+        for (const other of botsAtLoc) {
+          if (other === ev.bot) continue;
+          const key = pairKey(ev.bot, other);
+          if (!state.relationships[key]) {
+            state.relationships[key] = { says: 0, whispers: 0, coTicks: 0, label: '', prevLabel: '', since: state.clock.tick };
+          }
+          state.relationships[key].says++;
+        }
+      } else if (ev.action === 'whisper' && ev.target) {
+        const key = pairKey(ev.bot, ev.target);
+        if (!state.relationships[key]) {
+          state.relationships[key] = { says: 0, whispers: 0, coTicks: 0, label: '', prevLabel: '', since: state.clock.tick };
+        }
+        state.relationships[key].whispers++;
+      }
+    }
+  }
+}
+
+/**
+ * Increment coTicks for all pairs of bots at the same location.
+ *
+ * @param {object} state - State with locations, relationships
+ */
+export function updateCoLocation(state) {
+  if (!state.relationships) state.relationships = {};
+
+  for (const loc of Object.keys(state.locations)) {
+    const bots = state.locations[loc];
+    if (bots.length < 2) continue;
+
+    for (let i = 0; i < bots.length; i++) {
+      for (let j = i + 1; j < bots.length; j++) {
+        const key = pairKey(bots[i], bots[j]);
+        if (!state.relationships[key]) {
+          state.relationships[key] = { says: 0, whispers: 0, coTicks: 0, label: '', prevLabel: '', since: state.clock.tick };
+        }
+        state.relationships[key].coTicks++;
+      }
+    }
+  }
+}
+
+/**
+ * Recompute labels for all relationships and detect changes.
+ *
+ * @param {object} state - State with relationships
+ * @param {object} displayNames - botName → displayName map
+ * @returns {Array<{ from: string, to: string, fromDisplay: string, toDisplay: string, label: string, prevLabel: string }>}
+ */
+export function updateRelationships(state, displayNames) {
+  if (!state.relationships) state.relationships = {};
+  const changes = [];
+
+  for (const [key, rel] of Object.entries(state.relationships)) {
+    const newLabel = computeLabel(rel);
+    if (newLabel !== rel.label) {
+      rel.prevLabel = rel.label;
+      rel.label = newLabel;
+      const [a, b] = key.split('::');
+      changes.push({
+        from: a,
+        to: b,
+        fromDisplay: displayNames[a] || a,
+        toDisplay: displayNames[b] || b,
+        label: newLabel,
+        prevLabel: rel.prevLabel,
+      });
+    }
+  }
+
+  return changes;
+}
+
 export { PHASES };
