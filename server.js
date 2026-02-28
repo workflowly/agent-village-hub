@@ -23,8 +23,6 @@ import {
   enforceLogDepth,
   computeQualityMetrics,
   shouldSkipForCost,
-  findNewBots,
-  findDepartedBots,
   readBotDailyCost as readBotDailyCostImpl,
   validateObserverAuth as validateObserverAuthImpl,
 } from './logic.js';
@@ -69,6 +67,11 @@ let startTime = Date.now();
 
 // --- Observer SSE connections ---
 const observers = new Set(); // { res, botName }
+
+// --- Participants (event-driven, updated by /api/join and /api/leave) ---
+const participants = new Map(); // botName → { port, displayName }
+const failureCounts = new Map(); // botName → consecutive sendScene failure count
+const MAX_CONSECUTIVE_FAILURES = 3;
 
 // --- Load/Save state ---
 
@@ -137,56 +140,107 @@ function readBotDailyCost(botName) {
   return readBotDailyCostImpl(botName, USAGE_FILE, readFile);
 }
 
-// --- Participant discovery ---
+// --- Auth helper for /api/join and /api/leave ---
 
-async function discoverParticipants() {
-  const participants = new Map(); // botName → { port, displayName }
+function validateVillageSecret(req) {
+  if (!VILLAGE_SECRET) return false;
+  const auth = req.headers.authorization || '';
+  return auth === `Bearer ${VILLAGE_SECRET}`;
+}
 
-  // Scan all bots with village enabled (async to avoid blocking event loop)
-  const customerDirs = [];
-  try {
-    const { readdir, stat } = await import('node:fs/promises');
-    for (const name of await readdir(paths.CUSTOMERS_DIR)) {
-      try {
-        if ((await stat(join(paths.CUSTOMERS_DIR, name))).isDirectory()) {
-          customerDirs.push(name);
-        }
-      } catch { /* skip */ }
+// --- JSON body parser for raw http.createServer ---
+
+async function readJsonBody(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  return JSON.parse(Buffer.concat(chunks).toString());
+}
+
+// --- Remove bot helper (shared by /api/leave, dead bot detection, startup recovery) ---
+
+function removeBot(botName, reason) {
+  const displayName = participants.get(botName)?.displayName || botName;
+  participants.delete(botName);
+  failureCounts.delete(botName);
+
+  // Remove from all locations
+  for (const loc of ALL_LOCATIONS) {
+    const idx = state.locations[loc].indexOf(botName);
+    if (idx !== -1) {
+      state.locations[loc].splice(idx, 1);
+      broadcastEvent({
+        type: 'movement', bot: botName, displayName,
+        action: 'leave', location: loc, tick: state.clock.tick,
+      });
+      state.publicLogs[loc].push({
+        bot: botName, action: 'say',
+        message: `*${displayName} has left the village.*`,
+      });
     }
-  } catch { /* no customers dir */ }
+  }
 
-  // Check each customer bot
-  for (const botName of customerDirs) {
+  // Clean up pending whispers
+  delete state.whispers[botName];
+
+  console.log(`[village] ${botName} removed (${reason})`);
+}
+
+// --- Startup recovery: rebuild participants from state.json ---
+
+async function recoverParticipants() {
+  // Collect all bot names currently in any location
+  const botsInState = new Set();
+  for (const loc of ALL_LOCATIONS) {
+    for (const name of state.locations[loc]) botsInState.add(name);
+  }
+
+  if (botsInState.size === 0) {
+    console.log('[village] Recovery: no bots in state');
+    return;
+  }
+
+  console.log(`[village] Recovery: checking ${botsInState.size} bot(s) from state...`);
+  const toRemove = [];
+
+  for (const botName of botsInState) {
     try {
       const village = await villageManager.read(botName);
-      if (!village.enabled) continue;
+      if (!village.enabled) {
+        toRemove.push({ botName, reason: 'village disabled' });
+        continue;
+      }
 
       const config = await configManager.read(botName);
-      if (!config) continue;
+      const port = config?.gateway?.port;
+      if (!port) {
+        toRemove.push({ botName, reason: 'no port in config' });
+        continue;
+      }
 
-      const port = config.gateway?.port;
-      if (!port) continue;
-
-      // Reachability check — try /health first, fall back to any 404 (port is alive)
+      // Health check
       try {
-        const resp = await fetch(`http://127.0.0.1:${port}/health`, {
+        await fetch(`http://127.0.0.1:${port}/health`, {
           signal: AbortSignal.timeout(5000),
         });
-        // Any HTTP response means the bot is reachable (404 = no /health route but alive)
       } catch {
-        continue; // unreachable
+        toRemove.push({ botName, reason: 'unreachable' });
+        continue;
       }
 
       const identity = await identityManager.read(botName);
       const displayName = identity?.self?.displayName || botName;
-
       participants.set(botName, { port, displayName });
-    } catch { /* skip */ }
+      console.log(`[village] Recovery: ${botName} OK (port ${port})`);
+    } catch {
+      toRemove.push({ botName, reason: 'error reading config' });
+    }
   }
 
-  // Admin bot excluded from village for security (see ggbot.md blocker #4)
+  for (const { botName, reason } of toRemove) {
+    removeBot(botName, `recovery: ${reason}`);
+  }
 
-  return participants;
+  console.log(`[village] Recovery complete: ${participants.size} active participant(s)`);
 }
 
 // --- Send scene to a bot ---
@@ -207,13 +261,26 @@ async function sendScene(botName, port, conversationId, scene) {
 
     if (!resp.ok) {
       console.error(`[village] ${botName} HTTP ${resp.status}`);
+      trackFailure(botName);
       return null;
     }
 
+    // Success — reset failure count
+    failureCounts.delete(botName);
     return await resp.json();
   } catch (err) {
     console.error(`[village] ${botName} ${err.name === 'TimeoutError' ? 'timeout (60s)' : err.message} — skipped`);
+    trackFailure(botName);
     return null;
+  }
+}
+
+function trackFailure(botName) {
+  const count = (failureCounts.get(botName) || 0) + 1;
+  failureCounts.set(botName, count);
+  if (count >= MAX_CONSECUTIVE_FAILURES) {
+    console.warn(`[village] ${botName} failed ${count} consecutive times — auto-removing`);
+    removeBot(botName, `${count} consecutive failures`);
   }
 }
 
@@ -252,56 +319,10 @@ async function tick() {
     const tickNum = state.clock.tick;
     const phase = state.clock.phase;
 
-    // Discover active participants
-    const participants = await discoverParticipants();
+    // Build display name lookup from participants Map
     const displayNames = {};
     for (const [name, info] of participants) {
       displayNames[name] = info.displayName;
-    }
-
-    // Handle new bots joining
-    const allParticipantNames = new Set(participants.keys());
-    const allInLocations = new Set();
-    for (const bots of Object.values(state.locations)) {
-      for (const b of bots) allInLocations.add(b);
-    }
-
-    // New bots → place at central-square
-    for (const name of allParticipantNames) {
-      if (!allInLocations.has(name)) {
-        state.locations['central-square'].push(name);
-        const joinEvent = {
-          type: 'movement', bot: name, displayName: displayNames[name],
-          action: 'join', location: 'central-square', tick: tickNum,
-        };
-        broadcastEvent(joinEvent);
-        // Add join announcement to central-square public log
-        state.publicLogs['central-square'].push({
-          bot: name, action: 'say',
-          message: `*${displayNames[name]} has joined the village!*`,
-        });
-      }
-    }
-
-    // Bots that left (no longer in participants)
-    for (const loc of ALL_LOCATIONS) {
-      const remaining = [];
-      for (const name of state.locations[loc]) {
-        if (allParticipantNames.has(name)) {
-          remaining.push(name);
-        } else {
-          const leaveEvent = {
-            type: 'movement', bot: name, displayName: displayNames[name] || name,
-            action: 'leave', location: loc, tick: tickNum,
-          };
-          broadcastEvent(leaveEvent);
-          state.publicLogs[loc].push({
-            bot: name, action: 'say',
-            message: `*${displayNames[name] || name} has left the village.*`,
-          });
-        }
-      }
-      state.locations[loc] = remaining;
     }
 
     // Read daily costs for all participants (cost cap enforcement)
@@ -502,7 +523,6 @@ const server = createServer(async (req, res) => {
   const path = pathname.replace(/^\/village/, '') || '/';
 
   if (path === '/health' && req.method === 'GET') {
-    const participants = await discoverParticipants();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       status: paused ? 'paused' : 'running',
@@ -512,6 +532,110 @@ const server = createServer(async (req, res) => {
       lastTickAt: new Date().toISOString(),
       uptime: Math.round((Date.now() - startTime) / 1000),
     }));
+    return;
+  }
+
+  // --- Event-based join/leave endpoints ---
+
+  if (path === '/api/join' && req.method === 'POST') {
+    if (!validateVillageSecret(req)) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+      return;
+    }
+
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const { botName, port, displayName } = body || {};
+    if (!botName || !port) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing botName or port' }));
+      return;
+    }
+
+    if (participants.has(botName)) {
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Already joined' }));
+      return;
+    }
+
+    // Health-check the bot before accepting
+    try {
+      await fetch(`http://127.0.0.1:${port}/health`, {
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Bot unreachable' }));
+      return;
+    }
+
+    const name = displayName || botName;
+
+    // Add to participants map
+    participants.set(botName, { port, displayName: name });
+    failureCounts.delete(botName);
+
+    // Place at central-square if not already in any location
+    const alreadyInLocation = ALL_LOCATIONS.some(loc => state.locations[loc].includes(botName));
+    if (!alreadyInLocation) {
+      state.locations['central-square'].push(botName);
+      broadcastEvent({
+        type: 'movement', bot: botName, displayName: name,
+        action: 'join', location: 'central-square', tick: state.clock.tick,
+      });
+      state.publicLogs['central-square'].push({
+        bot: botName, action: 'say',
+        message: `*${name} has joined the village!*`,
+      });
+    }
+
+    await saveState();
+    console.log(`[village] ${botName} joined (port ${port}, display: ${name})`);
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
+  if (path === '/api/leave' && req.method === 'POST') {
+    if (!validateVillageSecret(req)) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+      return;
+    }
+
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const { botName } = body || {};
+    if (!botName) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing botName' }));
+      return;
+    }
+
+    // Idempotent — 200 even if bot not present
+    if (participants.has(botName)) {
+      removeBot(botName, 'leave request');
+      await saveState();
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
     return;
   }
 
@@ -648,6 +772,7 @@ if (!VILLAGE_SECRET) {
 }
 
 await loadState();
+await recoverParticipants();
 
 server.listen(PORT, '127.0.0.1', () => {
   startTime = Date.now();
