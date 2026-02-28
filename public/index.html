@@ -3,516 +3,485 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Village Observer</title>
+<title>Village</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    background: #0a0a0a;
-    color: #ccc;
-    min-height: 100vh;
-  }
-
-  .container {
-    max-width: 800px;
-    margin: 0 auto;
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-  }
-
-  /* Header */
-  .header {
-    padding: 16px 20px 12px;
-    border-bottom: 1px solid #222;
-  }
-  .header-top {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 4px;
-  }
-  .header-title {
-    font-size: 16px;
-    color: #888;
-    font-weight: 600;
-  }
-  .header-title span { color: #555; }
-  .status-badge {
-    font-size: 11px;
-    padding: 2px 8px;
-    border-radius: 10px;
-    margin-left: auto;
-  }
-  .status-badge.running { background: #143; color: #4a9; }
-  .status-badge.paused { background: #331; color: #a84; }
-  .status-badge.disconnected { background: #311; color: #a44; }
-  .header-sub {
-    font-size: 12px;
-    color: #555;
-  }
-  .header-sub .value { color: #777; }
-
-  /* Location tabs */
-  .tabs {
-    display: flex;
-    gap: 4px;
-    padding: 10px 20px;
-    border-bottom: 1px solid #222;
-    overflow-x: auto;
-    flex-shrink: 0;
-  }
-  .tab {
-    font-size: 12px;
-    padding: 5px 12px;
-    border-radius: 4px;
-    background: #111;
-    border: 1px solid #222;
-    color: #666;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
-  }
-  .tab:hover { background: #1a1a1a; color: #888; }
-  .tab.active {
-    background: #1a2a20;
-    border-color: #2a4a35;
-    color: #4a9;
-  }
-  .tab .count {
-    font-size: 10px;
-    color: #444;
-    margin-left: 4px;
-  }
-  .tab.active .count { color: #3a7; }
-
-  /* Location pane */
-  .location-pane {
-    flex: 1;
-    overflow-y: auto;
-    padding: 14px 20px;
-    border-bottom: 1px solid #222;
-    min-height: 200px;
-  }
-  .loc-header {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    margin-bottom: 10px;
-  }
-  .loc-name {
-    font-size: 14px;
-    font-weight: 600;
-    color: #888;
-  }
-  .loc-bots {
-    font-size: 12px;
-    color: #4a9;
-  }
-  .loc-empty {
-    font-size: 12px;
-    color: #333;
-    font-style: italic;
-  }
-  .loc-messages {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-  }
-  .loc-msg {
-    font-size: 12px;
-    line-height: 1.5;
-    padding: 2px 0;
-  }
-  .loc-msg .bot-name { color: #4a9; font-weight: 600; }
-  .loc-msg .msg-say { color: #ccc; }
-  .loc-msg .msg-whisper { color: #7af; font-style: italic; }
-  .loc-msg .msg-observe { color: #666; font-style: italic; }
-  .loc-msg .msg-move { color: #da5; font-style: italic; }
-  .loc-msg .msg-join { color: #4a9; font-style: italic; }
-  .loc-msg .msg-leave { color: #e55; font-style: italic; }
-
-  /* Activity log */
-  .activity-log {
-    flex-shrink: 0;
-    max-height: 260px;
-    overflow-y: auto;
-    padding: 10px 20px 16px;
-  }
-  .log-title {
-    font-size: 12px;
-    font-weight: 600;
-    color: #555;
-    margin-bottom: 8px;
-  }
-  .log-entry {
-    font-size: 11px;
-    line-height: 1.6;
-    color: #666;
-  }
-  .log-entry .log-time { color: #444; margin-right: 6px; }
-  .log-entry .log-bot { color: #4a9; font-weight: 600; }
-  .log-entry .log-say { color: #aaa; }
-  .log-entry .log-whisper { color: #7af; }
-  .log-entry .log-move { color: #da5; }
-  .log-entry .log-join { color: #4a9; }
-  .log-entry .log-leave { color: #e55; }
-  .log-entry .log-tick { color: #444; }
-
-  /* Auth / connection messages */
-  .auth-msg {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex: 1;
-    color: #555;
-    font-size: 13px;
-    text-align: center;
-    padding: 40px 20px;
-  }
-  .auth-msg a { color: #4a9; }
-
-  /* Scrollbar */
-  ::-webkit-scrollbar { width: 6px; }
-  ::-webkit-scrollbar-track { background: #0a0a0a; }
-  ::-webkit-scrollbar-thumb { background: #222; border-radius: 3px; }
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;background:#111}
+#game{display:flex;flex-direction:column;height:100vh}
+#map-wrap{flex:1;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;background:#1a2a1a}
+canvas{image-rendering:pixelated;image-rendering:crisp-edges}
+.bubble{position:absolute;background:#fff;color:#222;font:12px/1.3 -apple-system,'Segoe UI',sans-serif;padding:5px 8px;border-radius:8px;max-width:220px;pointer-events:none;z-index:10;box-shadow:0 2px 12px rgba(0,0,0,.4);transform:translate(-12px,-100%);transition:opacity .8s;word-wrap:break-word}
+.bubble::after{content:'';position:absolute;bottom:-5px;left:12px;border:5px solid transparent;border-top-color:#fff;border-bottom:0}
+.bubble .bn{font-weight:700;font-size:10px;display:block;margin-bottom:1px}
+.bubble.whisper{background:#e8e0f8}
+.bubble.whisper::after{border-top-color:#e8e0f8}
+.bubble.fade{opacity:0}
+#bar{height:26px;background:#0d0d0d;border-top:1px solid #1a1a1a;display:flex;align-items:center;padding:0 14px;font:11px/1 -apple-system,'Segoe UI',sans-serif;color:#444;gap:10px;flex-shrink:0}
+#bar .lbl{color:#4a9;font-weight:700}
+.st-run{color:#4a9}.st-pause{color:#a84}.st-off{color:#a44}
+#log{height:120px;overflow-y:auto;background:#0a0a0a;padding:8px 14px;flex-shrink:0;border-top:1px solid #1a1a1a}
+.le{font:11px/1.6 -apple-system,'Segoe UI',sans-serif;color:#555}
+.le .t{color:#333}.le .b{color:#4a9;font-weight:600}.le .s{color:#999}
+.le .w{color:#7af;font-style:italic}.le .m{color:#da5}
+.le .j{color:#4a9}.le .l{color:#e55}.le .o{color:#555;font-style:italic}.le .k{color:#333}
+#auth{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.7);color:#777;font:14px -apple-system,sans-serif;z-index:20}
+#auth a{color:#4a9}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:#0a0a0a}
+::-webkit-scrollbar-thumb{background:#1a1a1a;border-radius:2px}
 </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <div class="header-top">
-        <div class="header-title">ggbot <span>/</span> Village</div>
-        <div class="status-badge disconnected" id="statusBadge">Connecting</div>
-      </div>
-      <div class="header-sub" id="headerSub"></div>
-    </div>
-
-    <div class="tabs" id="tabs"></div>
-
-    <div class="location-pane" id="locationPane">
-      <div class="auth-msg" id="connectMsg">Connecting to village...</div>
-    </div>
-
-    <div class="activity-log" id="activityLog">
-      <div class="log-title">Activity Log</div>
-    </div>
+<div id="game">
+  <div id="map-wrap">
+    <canvas id="c"></canvas>
+    <div id="auth">Log in via the <a href="/admin/ggbot">admin page</a> first, then return here.</div>
   </div>
-
+  <div id="bar">
+    <span class="lbl">Village</span>
+    <span id="tick">&mdash;</span>
+    <span id="st" class="st-off">Connecting</span>
+  </div>
+  <div id="log"></div>
+</div>
 <script>
-  const LOCATION_NAMES = {
-    'central-square': 'Central Square',
-    'coffee-hub': 'Coffee Hub',
-    'knowledge-corner': 'Knowledge Corner',
-    'chill-zone': 'Chill Zone',
-    'workshop': 'Workshop',
-    'sunset-lounge': 'Sunset Lounge',
+(() => {
+const CW = 480, CH = 270;
+const cv = document.getElementById('c');
+const cx = cv.getContext('2d');
+cv.width = CW; cv.height = CH;
+cx.imageSmoothingEnabled = false;
+
+function resize() {
+  const w = document.getElementById('map-wrap');
+  const s = Math.min(w.clientWidth / CW, w.clientHeight / CH);
+  cv.style.width = (CW * s) + 'px';
+  cv.style.height = (CH * s) + 'px';
+}
+addEventListener('resize', resize);
+resize();
+
+// --- Locations ---
+const LOCS = {
+  'central-square':   {n:'Central Square',  x:180,y:85, w:120,h:65, c:'#9a8a7a',r:'#7a6a5a',t:'plaza'},
+  'coffee-hub':       {n:'Coffee Hub',       x:30, y:22, w:72, h:48, c:'#8a5a3a',r:'#6a4020',t:'bld'},
+  'knowledge-corner': {n:'Knowledge Corner', x:360,y:15, w:90, h:52, c:'#5a6a8a',r:'#3a4a6a',t:'bld'},
+  'chill-zone':       {n:'Chill Zone',       x:18, y:170,w:85, h:58, c:'#4a8a4a',r:'#2a6a2a',t:'park'},
+  'workshop':         {n:'Workshop',         x:200,y:200,w:80, h:50, c:'#7a6a4a',r:'#5a4a2a',t:'bld'},
+  'sunset-lounge':    {n:'Sunset Lounge',    x:375,y:155,w:80, h:55, c:'#8a4a6a',r:'#6a3050',t:'bld'},
+};
+const LOC_IDS = Object.keys(LOCS);
+const LNAMES = Object.fromEntries(LOC_IDS.map(k => [k, LOCS[k].n]));
+
+const BCOLORS = ['#e74c3c','#3498db','#2ecc71','#f1c40f','#9b59b6','#1abc9c','#e67e22','#e91e63','#00bcd4','#8bc34a','#ff5722','#607d8b'];
+let ci = 0;
+
+// --- State ---
+let locBots = {}; LOC_IDS.forEach(l => locBots[l] = []);
+let sprites = {};
+let bubbleDom = {};
+let tick = 0, phase = '', paused = false, online = false;
+let logHtml = [];
+let frame = 0;
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function hm() { return new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false}); }
+
+// ========== PRE-RENDER MAP ==========
+let bgCanvas;
+
+function drawTree(c, x, y) {
+  c.fillStyle = '#5a3a1a'; c.fillRect(x+3, y+7, 3, 6);
+  c.fillStyle = '#2a7a2a'; c.fillRect(x, y+3, 9, 6); c.fillRect(x+1, y, 7, 4);
+  c.fillStyle = '#3a9a3a'; c.fillRect(x+2, y+1, 5, 5);
+}
+
+function prerenderBg() {
+  bgCanvas = document.createElement('canvas');
+  bgCanvas.width = CW; bgCanvas.height = CH;
+  const c = bgCanvas.getContext('2d');
+
+  // Grass
+  c.fillStyle = '#3b7d34'; c.fillRect(0, 0, CW, CH);
+  for (let x = 0; x < CW; x += 3) for (let y = 0; y < CH; y += 3) {
+    const v = (x*7+y*13) % 11;
+    if (v < 3) { c.fillStyle = '#4a8b3f'; c.fillRect(x, y, 2, 2); }
+    else if (v === 5) { c.fillStyle = '#55a048'; c.fillRect(x, y, 1, 2); }
+    if ((x*31+y*17) % 127 === 0) { c.fillStyle = ['#ff6','#f8f','#6ef','#fa5'][((x+y)>>3)&3]; c.fillRect(x, y, 1, 1); }
+  }
+
+  // Paths
+  function pathSeg(x1,y1,x2,y2,w) {
+    const dx=x2-x1, dy=y2-y1, steps=Math.max(Math.abs(dx),Math.abs(dy)), hw=w>>1;
+    for (let i=0;i<=steps;i++) {
+      const t=steps?i/steps:0, px=Math.round(x1+dx*t), py=Math.round(y1+dy*t);
+      c.fillStyle='#7d6b50'; c.fillRect(px-hw-1,py-hw-1,w+2,w+2);
+      c.fillStyle='#9a8468'; c.fillRect(px-hw,py-hw,w,w);
+      if (i%18===7) { c.fillStyle='#b0a080'; c.fillRect(px-1,py,2,1); }
+    }
+  }
+  const mid = k => ({x:LOCS[k].x+LOCS[k].w/2, y:LOCS[k].y+LOCS[k].h/2});
+  const cs = mid('central-square');
+  LOC_IDS.forEach(k => { if (k!=='central-square') pathSeg(cs.x,cs.y,mid(k).x,mid(k).y,5); });
+  pathSeg(mid('coffee-hub').x,mid('coffee-hub').y,mid('chill-zone').x,mid('chill-zone').y,4);
+  pathSeg(mid('knowledge-corner').x,mid('knowledge-corner').y,mid('sunset-lounge').x,mid('sunset-lounge').y,4);
+
+  // Decorative trees
+  [[140,12],[310,42],[138,172],[322,188],[460,82],[5,98],[312,248],[458,238],[98,238]].forEach(([x,y]) => drawTree(c,x,y));
+
+  // Rocks
+  [[110,62],[320,128],[450,178],[50,143],[280,88]].forEach(([x,y]) => {
+    c.fillStyle='#7a7a6a'; c.fillRect(x,y,5,3);
+    c.fillStyle='#8a8a7a'; c.fillRect(x+1,y,3,2);
+  });
+
+  // Buildings
+  for (const [id, L] of Object.entries(LOCS)) {
+    const {x,y,w,h,t} = L;
+    const col = L.c, roof = L.r;
+
+    if (t === 'plaza') {
+      c.fillStyle='#bab0a0'; c.fillRect(x,y,w,h);
+      c.fillStyle='#a09888'; c.fillRect(x+2,y+2,w-4,h-4);
+      c.fillStyle='#8a8070';
+      for (let i=0;i<w;i+=6) { c.fillRect(x+i,y,3,1); c.fillRect(x+i,y+h-1,3,1); }
+      for (let i=0;i<h;i+=6) { c.fillRect(x,y+i,1,3); c.fillRect(x+w-1,y+i,1,3); }
+      const fx=x+w/2-10, fy=y+h/2-8;
+      c.fillStyle='#778'; c.fillRect(fx,fy,20,16);
+      c.fillStyle='#889'; c.fillRect(fx+2,fy+1,16,1);
+      c.fillStyle='#4488cc'; c.fillRect(fx+3,fy+3,14,10);
+      c.fillStyle='#55aadd'; c.fillRect(fx+5,fy+5,10,6);
+      c.fillStyle='#889'; c.fillRect(fx+9,fy+4,3,8); c.fillRect(fx+7,fy+3,7,2);
+      continue;
+    }
+
+    if (t === 'park') {
+      c.fillStyle='#4a9a50'; c.fillRect(x,y,w,h);
+      c.fillStyle='#3a8a40'; c.fillRect(x+2,y+2,w-4,h-4);
+      c.fillStyle='#3a6a8a'; c.fillRect(x+40,y+25,18,12);
+      c.fillStyle='#4a8aaa'; c.fillRect(x+42,y+27,14,8);
+      drawTree(c,x+5,y+5); drawTree(c,x+60,y+3); drawTree(c,x+8,y+h-18); drawTree(c,x+55,y+h-16);
+      c.fillStyle='#7a5030'; c.fillRect(x+28,y+14,14,3);
+      c.fillRect(x+28,y+11,2,3); c.fillRect(x+40,y+11,2,3);
+      continue;
+    }
+
+    // Regular building
+    c.fillStyle='rgba(0,0,0,.15)'; c.fillRect(x+3,y+4,w,h);
+    c.fillStyle=col; c.fillRect(x,y+10,w,h-10);
+    c.fillStyle='rgba(255,255,255,.06)'; c.fillRect(x+1,y+11,w-2,3);
+    c.fillStyle=roof;
+    c.fillRect(x-3,y+6,w+6,7); c.fillRect(x+2,y+3,w-4,5); c.fillRect(x+8,y,w-16,5);
+    c.fillStyle='rgba(255,255,255,.08)'; c.fillRect(x+8,y+1,w-16,1);
+    const dw=7, dh=12;
+    c.fillStyle='#3a2a1a'; c.fillRect(x+w/2-dw/2,y+h-dh,dw,dh);
+    c.fillStyle='#4a3a2a'; c.fillRect(x+w/2-dw/2+1,y+h-dh+1,dw-2,dh-1);
+    c.fillStyle='#da5'; c.fillRect(x+w/2+1,y+h-6,1,1);
+    const winY=y+16;
+    c.fillStyle='#ffe';
+    c.fillRect(x+8,winY,6,5); c.fillRect(x+w-14,winY,6,5);
+    c.fillStyle='#5a4a3a';
+    c.fillRect(x+11,winY,1,5); c.fillRect(x+8,winY+2,6,1);
+    c.fillRect(x+w-11,winY,1,5); c.fillRect(x+w-14,winY+2,6,1);
+
+    if (id==='coffee-hub') {
+      c.fillStyle='#6a4020'; c.fillRect(x+w-16,y-5,6,10); c.fillStyle='#5a3010'; c.fillRect(x+w-17,y-6,8,3);
+    } else if (id==='knowledge-corner') {
+      c.fillStyle='#c33'; c.fillRect(x+w-19,y+17,6,1);
+      c.fillStyle='#33c'; c.fillRect(x+w-19,y+18,6,1);
+      c.fillStyle='#3c3'; c.fillRect(x+w-19,y+19,6,1);
+      c.fillStyle='#cc3'; c.fillRect(x+w-19,y+20,6,1);
+    } else if (id==='workshop') {
+      c.fillStyle='#556'; c.fillRect(x+w+3,y+h-12,10,4);
+      c.fillStyle='#667'; c.fillRect(x+w+5,y+h-16,6,4);
+    } else if (id==='sunset-lounge') {
+      c.fillStyle='#fa8'; c.fillRect(x-4,y+14,2,3); c.fillRect(x+w+2,y+14,2,3);
+      c.fillStyle='#fc6'; c.fillRect(x-3,y+15,1,1); c.fillRect(x+w+2,y+15,1,1);
+    }
+  }
+}
+prerenderBg();
+
+// ========== SPRITES ==========
+function mkSprite(name, display, loc) {
+  if (sprites[name]) { sprites[name].dn = display || name; return sprites[name]; }
+  const L = LOCS[loc] || LOCS['central-square'];
+  const color = BCOLORS[ci++ % BCOLORS.length];
+  const px = L.x + 12 + Math.random() * (L.w - 24);
+  const py = L.y + 16 + Math.random() * (L.h - 24);
+  sprites[name] = { x:px, y:py, tx:px, ty:py, color, loc, dn:display||name, f:0, mt:60+Math.random()*100 };
+  return sprites[name];
+}
+
+function drawSprite(s) {
+  const px = Math.round(s.x), py = Math.round(s.y);
+  // Shadow
+  cx.fillStyle = 'rgba(0,0,0,.2)'; cx.fillRect(px-2, py+8, 7, 2);
+  // Feet
+  const walk = s.f%20<10 && Math.abs(s.x-s.tx)>0.5;
+  cx.fillStyle = '#446';
+  cx.fillRect(px-1,py+6,2,2); cx.fillRect(px+2+(walk?1:0),py+6,2,2);
+  // Body
+  cx.fillStyle = s.color; cx.fillRect(px-1,py+1,5,5);
+  // Arms
+  cx.fillRect(px-2,py+2,1,3); cx.fillRect(px+4,py+2,1,3);
+  // Head
+  cx.fillStyle = '#fdb'; cx.fillRect(px,py-2,3,3);
+  // Hair
+  cx.fillStyle = s.color; cx.fillRect(px-1,py-3,5,2);
+  // Eyes
+  cx.fillStyle = '#333'; cx.fillRect(px,py-1,1,1); cx.fillRect(px+2,py-1,1,1);
+  // Name tag
+  cx.font = '5px sans-serif'; cx.textAlign = 'center';
+  const nw = cx.measureText(s.dn).width;
+  cx.fillStyle = 'rgba(0,0,0,.5)'; cx.fillRect(px+1-nw/2-1, py+10, nw+2, 6);
+  cx.fillStyle = '#fff'; cx.fillText(s.dn, px+1, py+15);
+  cx.textAlign = 'left';
+}
+
+function updateSprite(s) {
+  s.mt--;
+  if (s.mt <= 0) {
+    const L = LOCS[s.loc];
+    if (L) { s.tx = L.x+10+Math.random()*(L.w-20); s.ty = L.y+16+Math.random()*(L.h-22); }
+    s.mt = 80 + Math.random() * 160;
+  }
+  const dx=s.tx-s.x, dy=s.ty-s.y, d=Math.sqrt(dx*dx+dy*dy);
+  if (d > 0.5) { s.x += dx/d*0.25; s.y += dy/d*0.25; s.f++; }
+}
+
+function teleportSprite(name, toLoc) {
+  const s = sprites[name]; if (!s) return;
+  const L = LOCS[toLoc]; if (!L) return;
+  s.loc = toLoc;
+  s.x = s.tx = L.x + L.w/2;
+  s.y = s.ty = L.y + L.h/2;
+  s.mt = 30;
+}
+
+// ========== ANIMATED EFFECTS ==========
+function drawSmoke() {
+  const L = LOCS['coffee-hub'];
+  const sx = L.x + L.w - 13, sy = L.y - 8;
+  for (let i=0; i<3; i++) {
+    const off = ((frame+i*20)%60)/60;
+    const px = sx + Math.sin((frame+i*30)*0.05)*3;
+    const py = sy - off*15;
+    cx.fillStyle = `rgba(200,200,200,${(1-off)*0.3})`;
+    cx.fillRect(Math.round(px), Math.round(py), 2, 2);
+  }
+}
+
+function drawWaterAnim() {
+  const L = LOCS['central-square'];
+  const fx = L.x+L.w/2-7, fy = L.y+L.h/2-5;
+  for (let i=0; i<4; i++) {
+    const ox = 5+((frame*3+i*7)%11), oy = 4+((frame*2+i*5)%7);
+    if ((frame+i*13)%20<10) { cx.fillStyle='#88ccff'; cx.fillRect(fx+ox,fy+oy,1,1); }
+  }
+  if (frame%30<15) { cx.fillStyle='#aaddff'; cx.fillRect(fx+10,fy,1,3); }
+}
+
+function drawPondAnim() {
+  const L = LOCS['chill-zone'];
+  const px = L.x+42, py = L.y+27;
+  for (let i=0; i<3; i++) {
+    const ox = 2+((frame*2+i*5)%10), oy = 1+((frame+i*7)%6);
+    if ((frame+i*11)%18<9) { cx.fillStyle='#6aaacc'; cx.fillRect(px+ox,py+oy,1,1); }
+  }
+}
+
+// ========== LABELS ==========
+function drawLabels() {
+  cx.textAlign = 'center'; cx.font = 'bold 7px sans-serif';
+  for (const L of Object.values(LOCS)) {
+    const lx = L.x+L.w/2, ly = L.y-4;
+    const tw = cx.measureText(L.n).width;
+    cx.fillStyle = 'rgba(0,0,0,.55)'; cx.fillRect(lx-tw/2-3, ly-7, tw+6, 10);
+    cx.fillStyle = '#eee'; cx.fillText(L.n, lx, ly);
+  }
+  cx.textAlign = 'left';
+}
+
+// ========== PHASE TINT ==========
+function phaseTint() {
+  const p = (phase||'').toLowerCase();
+  if (p.includes('night')) { cx.fillStyle='rgba(10,15,40,.25)'; cx.fillRect(0,0,CW,CH); }
+  else if (p.includes('evening')||p.includes('sunset')) { cx.fillStyle='rgba(40,20,5,.15)'; cx.fillRect(0,0,CW,CH); }
+  else if (p.includes('morning')||p.includes('dawn')) { cx.fillStyle='rgba(40,30,10,.08)'; cx.fillRect(0,0,CW,CH); }
+}
+
+// ========== BUBBLES (DOM) ==========
+function showBubble(botName, text, isWhisper) {
+  removeBubble(botName);
+  const s = sprites[botName]; if (!s) return;
+  const txt = text.length > 80 ? text.slice(0,80)+'…' : text;
+  const el = document.createElement('div');
+  el.className = 'bubble' + (isWhisper ? ' whisper' : '');
+  el.innerHTML = `<span class="bn" style="color:${s.color}">${esc(s.dn)}</span>${esc(txt)}`;
+  document.getElementById('map-wrap').appendChild(el);
+  bubbleDom[botName] = { el };
+  setTimeout(() => el.classList.add('fade'), 4200);
+  setTimeout(() => removeBubble(botName), 5000);
+}
+
+function removeBubble(name) {
+  if (bubbleDom[name]) { bubbleDom[name].el.remove(); delete bubbleDom[name]; }
+}
+
+function positionBubbles() {
+  const cr = cv.getBoundingClientRect();
+  const wr = document.getElementById('map-wrap').getBoundingClientRect();
+  const sx = cr.width/CW, sy = cr.height/CH;
+  const ox = cr.left-wr.left, oy = cr.top-wr.top;
+  for (const [name, b] of Object.entries(bubbleDom)) {
+    const s = sprites[name]; if (!s) continue;
+    b.el.style.left = (ox + s.x*sx) + 'px';
+    b.el.style.top = (oy + (s.y-8)*sy) + 'px';
+  }
+}
+
+// ========== CHAT LOG ==========
+function addLog(html) {
+  logHtml.unshift(html);
+  if (logHtml.length > 150) logHtml.pop();
+  const el = document.getElementById('log');
+  const div = document.createElement('div');
+  div.className = 'le';
+  div.innerHTML = html;
+  el.insertBefore(div, el.firstChild);
+  while (el.children.length > 150) el.lastChild.remove();
+}
+
+// ========== STATUS BAR ==========
+function updateBar() {
+  const te = document.getElementById('tick');
+  const se = document.getElementById('st');
+  te.textContent = tick > 0 ? `Tick ${tick}${phase ? ' \u00b7 '+phase[0].toUpperCase()+phase.slice(1) : ''}` : '\u2014';
+  if (!online) { se.textContent='Disconnected'; se.className='st-off'; }
+  else if (paused) { se.textContent='Paused'; se.className='st-pause'; }
+  else { se.textContent='Running'; se.className='st-run'; }
+}
+
+// ========== SSE EVENTS ==========
+function onEvent(d) {
+  const t = `<span class="t">${hm()}</span>`;
+
+  switch (d.type) {
+    case 'init':
+      tick=d.tick; phase=d.phase; paused=d.paused; online=true;
+      for (const loc of LOC_IDS) {
+        const bots = d.locations[loc]||[];
+        locBots[loc] = bots.map(b => typeof b==='string'?b:(b.name||b));
+        bots.forEach(b => {
+          const nm = typeof b==='string'?b:(b.name||b);
+          const dn = typeof b==='string'?b:(b.displayName||b.name||b);
+          mkSprite(nm, dn, loc);
+        });
+      }
+      updateBar();
+      break;
+
+    case 'action': {
+      const nm = d.displayName||d.bot;
+      if (d.bot && d.location) mkSprite(d.bot, nm, d.location);
+
+      if (d.action==='say') {
+        showBubble(d.bot, d.message);
+        addLog(`${t} <span class="b">${esc(nm)}</span>: <span class="s">"${esc(d.message)}"</span>`);
+      } else if (d.action==='whisper') {
+        const tgt = (sprites[d.target]||{}).dn || d.target || '?';
+        showBubble(d.bot, `(whispers to ${tgt})`, true);
+        addLog(`${t} <span class="b">${esc(nm)}</span> <span class="w">whispered to ${esc(tgt)}</span>`);
+      } else if (d.action==='observe') {
+        addLog(`${t} <span class="o">${esc(nm)} observed silently</span>`);
+      } else if (d.action==='move') {
+        const tn = LNAMES[d.to]||d.to;
+        teleportSprite(d.bot, d.to);
+        if (locBots[d.from]) locBots[d.from] = locBots[d.from].filter(b=>b!==d.bot);
+        if (locBots[d.to] && !locBots[d.to].includes(d.bot)) locBots[d.to].push(d.bot);
+        addLog(`${t} <span class="b">${esc(nm)}</span> <span class="m">\u2192 ${esc(tn)}</span>`);
+      }
+      break;
+    }
+
+    case 'movement': {
+      const nm = d.displayName||d.bot;
+      if (d.action==='join') {
+        mkSprite(d.bot, nm, d.location);
+        if (locBots[d.location] && !locBots[d.location].includes(d.bot)) locBots[d.location].push(d.bot);
+        addLog(`${t} <span class="b">${esc(nm)}</span> <span class="j">joined the village</span>`);
+      } else if (d.action==='leave') {
+        if (locBots[d.location]) locBots[d.location] = locBots[d.location].filter(b=>b!==d.bot);
+        removeBubble(d.bot); delete sprites[d.bot];
+        addLog(`${t} <span class="b">${esc(nm)}</span> <span class="l">left the village</span>`);
+      }
+      break;
+    }
+
+    case 'tick':
+      tick=d.tick; phase=d.phase;
+      if (d.locations) {
+        for (const loc of LOC_IDS) {
+          const bots = d.locations[loc]||[];
+          locBots[loc] = bots.map(b=>typeof b==='string'?b:(b.name||b));
+          bots.forEach(b => {
+            const nm = typeof b==='string'?b:(b.name||b);
+            const dn = typeof b==='string'?b:(b.displayName||b.name||b);
+            const sp = mkSprite(nm, dn, loc);
+            if (sp.loc !== loc) teleportSprite(nm, loc);
+          });
+        }
+      }
+      updateBar();
+      const a=d.actions||{};
+      addLog(`${t} <span class="k">\u2014 tick ${d.tick} \u00b7 ${d.phase} \u00b7 ${d.bots}/${d.botsTotal} bots \u00b7 say:${a.say||0} whisper:${a.whisper||0} move:${a.move||0} \u2014</span>`);
+      break;
+
+    case 'status':
+      paused=d.paused; updateBar();
+      break;
+  }
+}
+
+// ========== SSE CONNECTION ==========
+function connect() {
+  const bp = location.pathname.replace(/\/index\.html$/, '').replace(/\/+$/, '');
+  const url = bp ? `${bp}/events` : '/events';
+  const es = new EventSource(url);
+  es.onopen = () => { online=true; updateBar(); document.getElementById('auth').style.display='none'; };
+  es.onmessage = (e) => { try { onEvent(JSON.parse(e.data)); } catch {} };
+  es.onerror = () => {
+    es.close(); online=false; updateBar();
+    fetch(url).then(r => {
+      if (r.status===401) document.getElementById('auth').style.display='flex';
+      else setTimeout(connect, 3000);
+    }).catch(() => setTimeout(connect, 3000));
   };
-  const LOCATIONS = Object.keys(LOCATION_NAMES);
+}
 
-  // State
-  let locationBots = {};       // loc → [bot names or {name, displayName}]
-  let locationMessages = {};   // loc → [{html}] last 50
-  let tick = 0;
-  let phase = '';
-  let isPaused = false;
-  let selectedLocation = LOCATIONS[0];
+// ========== MAIN LOOP ==========
+function loop() {
+  frame++;
+  cx.imageSmoothingEnabled = false;
+  cx.drawImage(bgCanvas, 0, 0);
+  drawSmoke();
+  drawWaterAnim();
+  drawPondAnim();
+  phaseTint();
+  drawLabels();
 
-  LOCATIONS.forEach(l => {
-    locationBots[l] = [];
-    locationMessages[l] = [];
-  });
+  // Sort sprites by Y for proper z-order
+  const sorted = Object.values(sprites).sort((a,b) => a.y - b.y);
+  for (const s of sorted) { updateSprite(s); drawSprite(s); }
 
-  const tabsEl = document.getElementById('tabs');
-  const paneEl = document.getElementById('locationPane');
-  const logEl = document.getElementById('activityLog');
+  positionBubbles();
+  requestAnimationFrame(loop);
+}
 
-  function esc(s) {
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-
-  function fmtTime() {
-    const d = new Date();
-    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-  }
-
-  function botDisplayName(b) {
-    if (typeof b === 'string') return b;
-    return b.displayName || b.name || '?';
-  }
-
-  function botList(bots) {
-    return bots.map(b => esc(botDisplayName(b))).join(', ');
-  }
-
-  // --- Tabs ---
-  function renderTabs() {
-    let html = '';
-    for (const loc of LOCATIONS) {
-      const count = (locationBots[loc] || []).length;
-      const active = loc === selectedLocation ? ' active' : '';
-      html += `<div class="tab${active}" data-loc="${loc}">${LOCATION_NAMES[loc]}<span class="count">${count}</span></div>`;
-    }
-    tabsEl.innerHTML = html;
-  }
-
-  tabsEl.addEventListener('click', (e) => {
-    const tab = e.target.closest('.tab');
-    if (!tab) return;
-    selectedLocation = tab.dataset.loc;
-    renderTabs();
-    renderLocationPane();
-  });
-
-  // --- Location pane ---
-  function renderLocationPane() {
-    const loc = selectedLocation;
-    const bots = locationBots[loc] || [];
-    const msgs = locationMessages[loc] || [];
-
-    const connectMsg = document.getElementById('connectMsg');
-    if (connectMsg) connectMsg.remove();
-
-    let html = '<div class="loc-header">';
-    html += `<div class="loc-name">${LOCATION_NAMES[loc]}</div>`;
-    if (bots.length > 0) {
-      html += `<div class="loc-bots">${botList(bots)}</div>`;
-    } else {
-      html += `<div class="loc-empty">empty</div>`;
-    }
-    html += '</div>';
-
-    html += '<div class="loc-messages">';
-    for (const m of msgs) {
-      html += `<div class="loc-msg">${m.html}</div>`;
-    }
-    html += '</div>';
-
-    paneEl.innerHTML = html;
-    // Auto-scroll to bottom
-    paneEl.scrollTop = paneEl.scrollHeight;
-  }
-
-  // --- Activity log ---
-  function addLogEntry(html) {
-    const div = document.createElement('div');
-    div.className = 'log-entry';
-    div.innerHTML = html;
-
-    // Insert after the title (newest first)
-    const title = logEl.querySelector('.log-title');
-    if (title && title.nextSibling) {
-      logEl.insertBefore(div, title.nextSibling);
-    } else {
-      logEl.appendChild(div);
-    }
-
-    // Cap at 200 entries
-    const entries = logEl.querySelectorAll('.log-entry');
-    if (entries.length > 200) {
-      entries[entries.length - 1].remove();
-    }
-  }
-
-  // --- Add message to a location pane ---
-  function addLocationMessage(loc, html) {
-    if (!locationMessages[loc]) locationMessages[loc] = [];
-    locationMessages[loc].push({ html });
-    // Cap at 50
-    if (locationMessages[loc].length > 50) {
-      locationMessages[loc].shift();
-    }
-    // Re-render if this is the selected location
-    if (loc === selectedLocation) {
-      renderLocationPane();
-    }
-  }
-
-  // --- Status display ---
-  function updateStatus() {
-    const badge = document.getElementById('statusBadge');
-    const sub = document.getElementById('headerSub');
-
-    if (isPaused) {
-      badge.textContent = 'Paused';
-      badge.className = 'status-badge paused';
-    } else {
-      badge.textContent = 'Running';
-      badge.className = 'status-badge running';
-    }
-
-    const parts = [];
-    if (tick > 0) parts.push(`Tick ${tick}`);
-    if (phase) parts.push(`<span class="value">${phase.charAt(0).toUpperCase() + phase.slice(1)}</span>`);
-    sub.innerHTML = parts.join(' · ');
-  }
-
-  // --- Event handling ---
-  function handleEvent(data) {
-    const time = `<span class="log-time">${fmtTime()}</span>`;
-
-    switch (data.type) {
-      case 'init':
-        tick = data.tick;
-        phase = data.phase;
-        isPaused = data.paused;
-        for (const loc of LOCATIONS) {
-          locationBots[loc] = data.locations[loc] || [];
-        }
-        updateStatus();
-        renderTabs();
-        renderLocationPane();
-        break;
-
-      case 'action': {
-        const name = esc(data.displayName || data.bot);
-        const loc = data.location;
-
-        if (data.action === 'say') {
-          addLocationMessage(loc,
-            `<span class="bot-name">${name}</span>: <span class="msg-say">${esc(data.message)}</span>`);
-          addLogEntry(
-            `${time}<span class="log-bot">${name}</span> (say): <span class="log-say">"${esc(data.message)}"</span>`);
-
-        } else if (data.action === 'whisper') {
-          const target = esc(data.targetDisplayName || data.target || '?');
-          addLocationMessage(loc,
-            `<span class="bot-name">${name}</span> <span class="msg-whisper">whispered to ${target}</span>`);
-          addLogEntry(
-            `${time}<span class="log-bot">${name}</span> <span class="log-whisper">whispered to ${target}</span>`);
-
-        } else if (data.action === 'observe') {
-          addLocationMessage(loc,
-            `<span class="msg-observe">*${name} observed silently*</span>`);
-
-        } else if (data.action === 'move') {
-          const from = LOCATION_NAMES[data.from] || data.from;
-          const to = LOCATION_NAMES[data.to] || data.to;
-          // Show in both source and destination locations
-          addLocationMessage(data.from,
-            `<span class="msg-move">*${name} moved to ${esc(to)}*</span>`);
-          addLocationMessage(data.to,
-            `<span class="msg-move">*${name} arrived from ${esc(from)}*</span>`);
-          addLogEntry(
-            `${time}<span class="log-bot">${name}</span> <span class="log-move">→ ${esc(to)}</span>`);
-
-          // Update location bot lists for moves
-          if (locationBots[data.from]) {
-            locationBots[data.from] = locationBots[data.from].filter(
-              b => (typeof b === 'string' ? b : b.name) !== data.bot
-            );
-          }
-          if (locationBots[data.to]) {
-            locationBots[data.to].push(data.displayName || data.bot);
-          }
-          renderTabs();
-          if (data.from === selectedLocation || data.to === selectedLocation) {
-            renderLocationPane();
-          }
-        }
-        break;
-      }
-
-      case 'movement': {
-        const name = esc(data.displayName || data.bot);
-        if (data.action === 'join') {
-          addLocationMessage(data.location,
-            `<span class="msg-join">*${name} has joined the village!*</span>`);
-          addLogEntry(
-            `${time}<span class="log-bot">${name}</span> <span class="log-join">joined the village</span>`);
-          // Add to location
-          if (locationBots[data.location]) {
-            locationBots[data.location].push(data.displayName || data.bot);
-          }
-          renderTabs();
-          if (data.location === selectedLocation) renderLocationPane();
-
-        } else if (data.action === 'leave') {
-          addLocationMessage(data.location,
-            `<span class="msg-leave">*${name} has left the village.*</span>`);
-          addLogEntry(
-            `${time}<span class="log-bot">${name}</span> <span class="log-leave">left the village</span>`);
-          // Remove from location
-          if (locationBots[data.location]) {
-            locationBots[data.location] = locationBots[data.location].filter(
-              b => (typeof b === 'string' ? b : b.name) !== data.bot
-            );
-          }
-          renderTabs();
-          if (data.location === selectedLocation) renderLocationPane();
-        }
-        break;
-      }
-
-      case 'tick':
-        tick = data.tick;
-        phase = data.phase;
-        // Sync location state from authoritative tick data
-        if (data.locations) {
-          for (const loc of LOCATIONS) {
-            locationBots[loc] = data.locations[loc] || [];
-          }
-        }
-        updateStatus();
-        renderTabs();
-        if (selectedLocation) renderLocationPane();
-
-        // Tick summary in activity log
-        const acts = data.actions || {};
-        addLogEntry(
-          `${time}<span class="log-tick">— tick ${data.tick} (${data.phase}) · ` +
-          `${data.bots}/${data.botsTotal} bots · ${data.duration}s · ` +
-          `say:${acts.say || 0} whisper:${acts.whisper || 0} observe:${acts.observe || 0} move:${acts.move || 0} —</span>`
-        );
-        break;
-
-      case 'status':
-        isPaused = data.paused;
-        updateStatus();
-        break;
-    }
-  }
-
-  // --- SSE Connection ---
-  function connect() {
-    const basePath = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/+$/, '');
-    const eventsUrl = basePath ? `${basePath}/events` : '/events';
-
-    const es = new EventSource(eventsUrl);
-
-    es.onopen = () => {
-      updateStatus();
-    };
-
-    es.onmessage = (e) => {
-      try {
-        handleEvent(JSON.parse(e.data));
-      } catch { /* ignore parse errors */ }
-    };
-
-    es.onerror = () => {
-      es.close();
-      const badge = document.getElementById('statusBadge');
-      badge.textContent = 'Disconnected';
-      badge.className = 'status-badge disconnected';
-
-      // Check if it was a 401 by fetching the endpoint
-      fetch(eventsUrl).then(r => {
-        if (r.status === 401) {
-          paneEl.innerHTML =
-            '<div class="auth-msg">Log in via the <a href="/admin/ggbot">admin page</a> first, then return here.</div>';
-        } else {
-          // Generic reconnect
-          setTimeout(connect, 3000);
-        }
-      }).catch(() => {
-        setTimeout(connect, 3000);
-      });
-    };
-  }
-
-  renderTabs();
-  connect();
+connect();
+requestAnimationFrame(loop);
+})();
 </script>
 </body>
 </html>
