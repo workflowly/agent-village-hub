@@ -357,4 +357,155 @@ export function updateRelationships(state, displayNames) {
   return changes;
 }
 
-export { PHASES };
+// --- Emotion tracking ---
+
+const EMOTIONS = ['neutral', 'happy', 'content', 'excited', 'lonely', 'bored'];
+const EMOTION_DECAY = 0.85;
+const EMOTION_THRESHOLD = 0.1;
+
+/**
+ * Update emotions for all bots based on tick events.
+ *
+ * @param {object} state - State with locations, emotions, clock
+ * @param {Map<string, Array>} allEvents - location → events[]
+ * @param {Array<{ botName: string, response: object|null, loc: string }>} allResults - scene results
+ * @param {object} displayNames - botName → displayName map
+ * @returns {Array<{ bot: string, displayName: string, emotion: string, prevEmotion: string }>} change events
+ */
+export function updateEmotions(state, allEvents, allResults, displayNames) {
+  if (!state.emotions) state.emotions = {};
+  const changes = [];
+
+  // Build sets for quick lookup
+  const botsWithActions = new Set();
+  const botsWhispered = new Set();
+  const botsSaid = new Map(); // bot → count of others present when they spoke
+  const botsMoved = new Set();
+
+  for (const [loc, events] of allEvents) {
+    for (const ev of events) {
+      if (ev.action === 'say') {
+        botsWithActions.add(ev.bot);
+        const othersCount = (state.locations[loc] || []).filter(b => b !== ev.bot).length;
+        // Track max others present across all say events for this bot
+        const prev = botsSaid.get(ev.bot) || 0;
+        if (othersCount > prev) botsSaid.set(ev.bot, othersCount);
+      } else if (ev.action === 'whisper' && ev.target) {
+        botsWithActions.add(ev.bot);
+        botsWhispered.add(ev.target);
+      } else if (ev.action === 'move') {
+        botsWithActions.add(ev.bot);
+        botsMoved.add(ev.bot);
+      } else if (ev.action === 'observe') {
+        botsWithActions.add(ev.bot);
+      }
+    }
+  }
+
+  // Build set of bots that were sent a scene this tick
+  const botsSent = new Set(allResults.map(r => r.botName));
+
+  // Process each bot in any location
+  const allBots = new Set();
+  for (const loc of Object.keys(state.locations)) {
+    for (const bot of state.locations[loc]) allBots.add(bot);
+  }
+
+  for (const bot of allBots) {
+    if (!botsSent.has(bot)) continue; // skip bots that weren't active this tick
+
+    if (!state.emotions[bot]) {
+      state.emotions[bot] = { emotion: 'neutral', intensity: 0, prevEmotion: 'neutral', since: state.clock.tick };
+    }
+
+    const emo = state.emotions[bot];
+
+    // 1. Decay current intensity
+    emo.intensity *= EMOTION_DECAY;
+
+    // 2. Compute impulses
+    const impulses = [];
+
+    if (botsWhispered.has(bot)) {
+      impulses.push({ emotion: 'happy', intensity: 0.8 });
+    }
+
+    if (botsSaid.has(bot)) {
+      const othersCount = botsSaid.get(bot);
+      if (othersCount >= 2) {
+        impulses.push({ emotion: 'content', intensity: 0.6 });
+      } else if (othersCount >= 1) {
+        impulses.push({ emotion: 'content', intensity: 0.4 });
+      }
+    }
+
+    if (botsMoved.has(bot)) {
+      impulses.push({ emotion: 'excited', intensity: 0.5 });
+    }
+
+    // Find bot's current location
+    let botLoc = null;
+    for (const loc of Object.keys(state.locations)) {
+      if (state.locations[loc].includes(bot)) { botLoc = loc; break; }
+    }
+
+    if (botLoc) {
+      const othersHere = (state.locations[botLoc] || []).filter(b => b !== bot);
+      if (othersHere.length === 0) {
+        // Alone — additive lonely
+        if (emo.emotion === 'lonely') {
+          impulses.push({ emotion: 'lonely', intensity: emo.intensity + 0.15 });
+        } else {
+          impulses.push({ emotion: 'lonely', intensity: 0.15 });
+        }
+      } else if (!botsWithActions.has(bot)) {
+        // Others present but no actions
+        impulses.push({ emotion: 'bored', intensity: 0.4 });
+      }
+    }
+
+    // 3. Pick strongest impulse
+    let best = null;
+    for (const imp of impulses) {
+      if (!best || imp.intensity > best.intensity) best = imp;
+    }
+
+    if (best && best.intensity > emo.intensity) {
+      const prevEmotion = emo.emotion;
+      emo.emotion = best.emotion;
+      emo.intensity = Math.min(best.intensity, 1.0);
+      emo.since = state.clock.tick;
+
+      if (prevEmotion !== emo.emotion) {
+        emo.prevEmotion = prevEmotion;
+        changes.push({
+          bot,
+          displayName: displayNames[bot] || bot,
+          emotion: emo.emotion,
+          prevEmotion,
+        });
+      }
+    }
+
+    // 4. Reset to neutral if below threshold
+    if (emo.intensity < EMOTION_THRESHOLD) {
+      if (emo.emotion !== 'neutral') {
+        const prevEmotion = emo.emotion;
+        emo.prevEmotion = prevEmotion;
+        emo.emotion = 'neutral';
+        emo.intensity = 0;
+        emo.since = state.clock.tick;
+        changes.push({
+          bot,
+          displayName: displayNames[bot] || bot,
+          emotion: 'neutral',
+          prevEmotion,
+        });
+      }
+    }
+  }
+
+  return changes;
+}
+
+export { PHASES, EMOTIONS };

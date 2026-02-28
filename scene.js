@@ -65,6 +65,7 @@ const ALL_LOCATIONS = Object.keys(LOCATION_NAMES);
  * @param {Array} opts.movements - Recent movement events at this location
  * @param {number} opts.sceneHistoryCap - Max messages in public log (default 10)
  * @param {object} [opts.relationships] - state.relationships object
+ * @param {object} [opts.emotions] - state.emotions object
  * @returns {string} The scene prompt
  */
 export function buildScene({
@@ -80,6 +81,7 @@ export function buildScene({
   movements,
   sceneHistoryCap = 10,
   relationships,
+  emotions,
 }) {
   const lines = [];
 
@@ -114,6 +116,12 @@ export function buildScene({
       lines.push(...relLines);
       lines.push('');
     }
+  }
+
+  // Current emotion
+  if (emotions && emotions[botName] && emotions[botName].emotion !== 'neutral') {
+    lines.push(`You're feeling **${emotions[botName].emotion}**.`);
+    lines.push('');
   }
 
   // Movement events

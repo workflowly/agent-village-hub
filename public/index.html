@@ -29,6 +29,9 @@ canvas{image-rendering:pixelated;image-rendering:crisp-edges}
 .rel{transition:background .6s}
 .rel.highlight{background:rgba(255,215,0,.15)}
 .rel-acq{color:#777}.rel-friend{color:#4a9}.rel-good{color:#5cb85c}.rel-best{color:#daa520}
+#moods{background:#0d0d0d;border-top:1px solid #1a1a1a;padding:4px 14px;font:11px/1.4 -apple-system,'Segoe UI',sans-serif;color:#555;display:none;flex-shrink:0;flex-wrap:wrap;gap:4px 12px}
+#moods.show{display:flex}
+.mood-pos{color:#6a9a6a}.mood-neg{color:#888}
 #auth{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.7);color:#777;font:14px -apple-system,sans-serif;z-index:20}
 #auth a{color:#4a9}
 ::-webkit-scrollbar{width:4px}
@@ -48,6 +51,7 @@ canvas{image-rendering:pixelated;image-rendering:crisp-edges}
     <span id="st" class="st-off">Connecting</span>
   </div>
   <div id="rels"></div>
+  <div id="moods"></div>
   <div id="log"></div>
 </div>
 <script>
@@ -89,6 +93,7 @@ let bubbleDom = {};
 let tick = 0, phase = '', paused = false, online = false;
 let nextTickAt = 0, tickIntervalMs = 60000, villageTime = '';
 let relationships = {};
+let emotions = {};
 let logHtml = [];
 let frame = 0;
 
@@ -409,6 +414,23 @@ function renderRels(highlightKey) {
   }
 }
 
+// ========== MOODS PANEL ==========
+const MOOD_EMOJI = { happy:'\u{1F60A}', content:'\u{1F60C}', excited:'\u{1F929}', lonely:'\u{1F614}', bored:'\u{1F610}' };
+const MOOD_POS = new Set(['happy','content','excited']);
+
+function renderMoods() {
+  const el = document.getElementById('moods');
+  const entries = Object.entries(emotions).filter(([,e]) => e.emotion && e.emotion !== 'neutral');
+  if (entries.length === 0) { el.classList.remove('show'); return; }
+  el.classList.add('show');
+  el.innerHTML = entries.map(([bot, e]) => {
+    const dn = (sprites[bot]||{}).dn || bot;
+    const emoji = MOOD_EMOJI[e.emotion] || '';
+    const cls = MOOD_POS.has(e.emotion) ? 'mood-pos' : 'mood-neg';
+    return `<span class="${cls}">${emoji} ${esc(dn)}: ${esc(e.emotion)}</span>`;
+  }).join(' \u00b7 ');
+}
+
 // ========== SSE EVENTS ==========
 function onEvent(d) {
   const t = `<span class="t">${hm()}</span>`;
@@ -420,6 +442,7 @@ function onEvent(d) {
       if (d.tickIntervalMs) tickIntervalMs=d.tickIntervalMs;
       if (d.villageTime) villageTime=d.villageTime;
       if (d.relationships) relationships=d.relationships;
+      if (d.emotions) emotions=d.emotions;
       for (const loc of LOC_IDS) {
         const bots = d.locations[loc]||[];
         locBots[loc] = bots.map(b => typeof b==='string'?b:(b.name||b));
@@ -431,6 +454,7 @@ function onEvent(d) {
       }
       updateBar();
       renderRels();
+      renderMoods();
       break;
 
     case 'action': {
@@ -476,6 +500,7 @@ function onEvent(d) {
       if (d.tickIntervalMs) tickIntervalMs=d.tickIntervalMs;
       if (d.villageTime) villageTime=d.villageTime;
       if (d.relationships) { relationships=d.relationships; renderRels(); }
+      if (d.emotions) { emotions=d.emotions; renderMoods(); }
       if (d.locations) {
         const allBots = new Set();
         for (const loc of LOC_IDS) {
@@ -507,6 +532,19 @@ function onEvent(d) {
       renderRels(key);
       const verb = d.label ? `became ${d.label}s` : 'are no longer close';
       addLog(`${t} <span class="b">${esc(d.fromDisplay)}</span> \u2665 <span class="b">${esc(d.toDisplay)}</span> <span class="j">\u2014 ${esc(verb)}</span>`);
+      break;
+    }
+
+    case 'emotion': {
+      if (!emotions[d.bot]) emotions[d.bot] = {};
+      emotions[d.bot].emotion = d.emotion;
+      emotions[d.bot].prevEmotion = d.prevEmotion;
+      renderMoods();
+      if (d.emotion !== 'neutral') {
+        const nm = d.displayName || (sprites[d.bot]||{}).dn || d.bot;
+        const emoji = MOOD_EMOJI[d.emotion] || '';
+        addLog(`${t} ${emoji} <span class="b">${esc(nm)}</span> <span class="j">is feeling ${esc(d.emotion)}</span>`);
+      }
       break;
     }
 

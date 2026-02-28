@@ -28,6 +28,7 @@ import {
   trackInteractions,
   updateCoLocation,
   updateRelationships,
+  updateEmotions,
 } from './logic.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -64,6 +65,7 @@ let state = {
   clock: { tick: 0, phase: 'morning', ticksInPhase: 0 },
   emptyTicks: {},
   relationships: {},
+  emotions: {},
 };
 let paused = false;
 let tickInProgress = false;
@@ -89,6 +91,7 @@ async function loadState() {
       clock: loaded.clock || { tick: 0, phase: 'morning', ticksInPhase: 0 },
       emptyTicks: loaded.emptyTicks || {},
       relationships: loaded.relationships || {},
+      emotions: loaded.emotions || {},
     };
     for (const loc of ALL_LOCATIONS) {
       if (!state.locations[loc]) state.locations[loc] = [];
@@ -397,6 +400,7 @@ async function tick() {
           movements: [],
           sceneHistoryCap: SCENE_HISTORY_CAP,
           relationships: state.relationships,
+          emotions: state.emotions,
         });
 
         allSceneRequests.push({ botName, port, conversationId, scene, loc });
@@ -462,6 +466,20 @@ async function tick() {
         prevLabel: change.prevLabel,
       });
       console.log(`[village] relationship: ${change.fromDisplay} & ${change.toDisplay} → ${change.label || '(none)'}`);
+    }
+
+    // Track emotions
+    const emotionChanges = updateEmotions(state, allEvents, allResults, displayNames);
+    for (const change of emotionChanges) {
+      broadcastEvent({
+        type: 'emotion',
+        tick: tickNum,
+        bot: change.bot,
+        displayName: change.displayName,
+        emotion: change.emotion,
+        prevEmotion: change.prevEmotion,
+      });
+      console.log(`[village] emotion: ${change.displayName} → ${change.emotion}`);
     }
 
     // Write village memories per bot
@@ -530,6 +548,7 @@ async function tick() {
         }))])
       ),
       relationships: state.relationships,
+      emotions: state.emotions,
     });
   } catch (err) {
     console.error(`[village] Tick error: ${err.message}`);
@@ -710,6 +729,7 @@ const server = createServer(async (req, res) => {
         ALL_LOCATIONS.map(l => [l, state.locations[l] || []])
       ),
       relationships: state.relationships,
+      emotions: state.emotions,
     });
     res.write(`data: ${initData}\n\n`);
 
