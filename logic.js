@@ -17,12 +17,28 @@ const MAX_WHISPERS_PER_BOT = 20;
  * @param {Array} actions - Array of { tool, params }
  * @param {string} location - Bot's current location
  * @param {object} state - Mutable state object (locations, publicLogs, whispers)
+ * @param {object} [opts] - Optional: { lastMoveTick: Map, tick: number }
  * @returns {Array} Events generated
  */
-export function processActions(botName, actions, location, state) {
+export function processActions(botName, actions, location, state, opts = {}) {
   const events = [];
+  const { lastMoveTick, tick } = opts;
+
+  // Move cooldown: reject move if bot moved last tick
+  const onCooldown = lastMoveTick && tick != null
+    && (lastMoveTick.get(botName) || 0) >= tick - 1;
+
+  // Check if bot wants to move — if so, move is exclusive (skip all other actions)
+  const hasMove = actions.some(a =>
+    a.tool === 'village_move' && a.params?.location
+    && ALL_LOCATIONS.includes(a.params.location) && a.params.location !== location
+  );
+  const moveExclusive = hasMove && !onCooldown;
 
   for (const action of actions) {
+    // If moving this tick, skip non-move actions
+    if (moveExclusive && action.tool !== 'village_move') continue;
+
     switch (action.tool) {
       case 'village_say': {
         const msg = action.params?.message || '';
@@ -54,6 +70,7 @@ export function processActions(botName, actions, location, state) {
         break;
       }
       case 'village_move': {
+        if (onCooldown) break; // enforce cooldown
         const dest = action.params?.location;
         if (!dest || !ALL_LOCATIONS.includes(dest) || dest === location) {
           break;
@@ -64,6 +81,8 @@ export function processActions(botName, actions, location, state) {
         if (!state.locations[dest]) state.locations[dest] = [];
         state.locations[dest].push(botName);
         events.push({ bot: botName, action: 'move', from: location, to: dest });
+        // Record move tick for cooldown
+        if (lastMoveTick) lastMoveTick.set(botName, tick);
         break;
       }
     }

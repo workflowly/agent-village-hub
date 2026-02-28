@@ -164,7 +164,7 @@ describe('processActions', () => {
     expect(events).toHaveLength(0);
   });
 
-  it('handles multiple actions in sequence', () => {
+  it('move is exclusive — skips other actions when moving', () => {
     const state = freshState();
     state.locations['coffee-hub'] = ['bot-a', 'bot-b'];
 
@@ -173,9 +173,53 @@ describe('processActions', () => {
       { tool: 'village_move', params: { location: 'workshop' } },
     ], 'coffee-hub', state);
 
+    // Move is exclusive: say is dropped, only move event produced
+    expect(events).toHaveLength(1);
+    expect(events[0].action).toBe('move');
+    expect(state.locations['workshop']).toContain('bot-a');
+    expect(state.publicLogs['coffee-hub']).toHaveLength(0); // say not recorded
+  });
+
+  it('handles multiple non-move actions in sequence', () => {
+    const state = freshState();
+    state.locations['coffee-hub'] = ['bot-a', 'bot-b'];
+
+    const events = processActions('bot-a', [
+      { tool: 'village_say', params: { message: 'hello' } },
+      { tool: 'village_observe' },
+    ], 'coffee-hub', state);
+
     expect(events).toHaveLength(2);
     expect(events[0].action).toBe('say');
-    expect(events[1].action).toBe('move');
+    expect(events[1].action).toBe('observe');
+  });
+
+  it('enforces move cooldown when lastMoveTick provided', () => {
+    const state = freshState();
+    state.locations['coffee-hub'] = ['bot-a'];
+
+    const lastMoveTick = new Map([['bot-a', 5]]);
+    const events = processActions('bot-a', [
+      { tool: 'village_move', params: { location: 'workshop' } },
+    ], 'coffee-hub', state, { lastMoveTick, tick: 6 });
+
+    // Tick 6, last moved tick 5 → cooldown (moved last tick)
+    expect(events).toHaveLength(0);
+    expect(state.locations['coffee-hub']).toContain('bot-a');
+  });
+
+  it('allows move after cooldown expires', () => {
+    const state = freshState();
+    state.locations['coffee-hub'] = ['bot-a'];
+
+    const lastMoveTick = new Map([['bot-a', 5]]);
+    const events = processActions('bot-a', [
+      { tool: 'village_move', params: { location: 'workshop' } },
+    ], 'coffee-hub', state, { lastMoveTick, tick: 7 });
+
+    // Tick 7, last moved tick 5 → cooldown expired
+    expect(events).toHaveLength(1);
+    expect(events[0].action).toBe('move');
     expect(state.locations['workshop']).toContain('bot-a');
   });
 

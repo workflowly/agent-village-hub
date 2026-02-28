@@ -66,6 +66,7 @@ const ALL_LOCATIONS = Object.keys(LOCATION_NAMES);
  * @param {number} opts.sceneHistoryCap - Max messages in public log (default 10)
  * @param {object} [opts.relationships] - state.relationships object
  * @param {object} [opts.emotions] - state.emotions object
+ * @param {boolean} [opts.canMove=true] - Whether move action is available (false during cooldown)
  * @returns {string} The scene prompt
  */
 export function buildScene({
@@ -82,6 +83,7 @@ export function buildScene({
   sceneHistoryCap = 10,
   relationships,
   emotions,
+  canMove = true,
 }) {
   const lines = [];
 
@@ -173,15 +175,23 @@ export function buildScene({
   lines.push('- **village_say**：对这里所有人说话');
   lines.push('- **village_whisper**：对某人说悄悄话');
   lines.push('- **village_observe**：安静观察，不说话');
-  lines.push('- **village_move**：去别的地方');
+  if (canMove) {
+    lines.push('- **village_move**：去别的地方（选了move就不能同时做其他动作）');
+    lines.push('');
+
+    // Available locations (for move)
+    const otherLocations = ALL_LOCATIONS.filter(l => l !== location);
+    lines.push(`可去的地方：${otherLocations.map(l => `${l}（${LOCATION_NAMES[l]}）`).join('、')}`);
+  } else {
+    lines.push('（你刚到这里，这一轮不能移动。）');
+  }
   lines.push('');
 
-  // Available locations (for move)
-  const otherLocations = ALL_LOCATIONS.filter(l => l !== location);
-  lines.push(`可去的地方：${otherLocations.map(l => `${l}（${LOCATION_NAMES[l]}）`).join('、')}`);
-  lines.push('');
-
-  lines.push('选最多2个动作。用中文自然地说话，做你自己。');
+  if (canMove) {
+    lines.push('如果你选了 village_move，这轮就只能移动，不能说话。其他动作最多选2个。用中文自然地说话，做你自己。');
+  } else {
+    lines.push('最多选2个动作。用中文自然地说话，做你自己。');
+  }
 
   return lines.join('\n');
 }

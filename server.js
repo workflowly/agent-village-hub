@@ -79,6 +79,7 @@ const observers = new Set(); // { res, botName }
 // --- Participants (event-driven, updated by /api/join and /api/leave) ---
 const participants = new Map(); // botName → { port, displayName }
 const failureCounts = new Map(); // botName → consecutive sendScene failure count
+const lastMoveTick = new Map();  // botName → tick number of last move (cooldown)
 const MAX_CONSECUTIVE_FAILURES = 3;
 
 // --- Load/Save state ---
@@ -399,6 +400,7 @@ async function tick() {
         const pendingWhispers = state.whispers[botName] || [];
         const conversationId = `village:${loc}:tick-${tickNum}`;
 
+        const canMove = (lastMoveTick.get(botName) || 0) < tickNum - 1;
         const scene = buildScene({
           botName,
           botDisplayName: displayNames[botName],
@@ -413,6 +415,7 @@ async function tick() {
           sceneHistoryCap: SCENE_HISTORY_CAP,
           relationships: state.relationships,
           emotions: state.emotions,
+          canMove,
         });
 
         allSceneRequests.push({ botName, port, conversationId, scene, loc });
@@ -443,7 +446,7 @@ async function tick() {
       }
 
       botsResponded++;
-      const events = processActions(botName, response.actions, loc, state);
+      const events = processActions(botName, response.actions, loc, state, { lastMoveTick, tick: tickNum });
       allEvents.get(loc).push(...events);
 
       for (const ev of events) {
