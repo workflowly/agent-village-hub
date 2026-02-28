@@ -38,13 +38,13 @@ const identityManager = require('../lib/identity-manager');
 
 // --- Config ---
 const PORT = parseInt(process.env.VILLAGE_PORT || '7001', 10);
-const TICK_INTERVAL_MS = parseInt(process.env.VILLAGE_TICK_INTERVAL || '300000', 10); // 5 minutes
+const TICK_INTERVAL_MS = parseInt(process.env.VILLAGE_TICK_INTERVAL || '60000', 10); // 1 minute
 const TICKS_PER_PHASE = parseInt(process.env.VILLAGE_TICKS_PER_PHASE || '4', 10);
 const SCENE_HISTORY_CAP = parseInt(process.env.VILLAGE_SCENE_HISTORY_CAP || '10', 10);
 const VILLAGE_SECRET = process.env.VILLAGE_SECRET || '';
 const VILLAGE_DAILY_COST_CAP = parseFloat(process.env.VILLAGE_DAILY_COST_CAP || '2'); // $/bot/day
 const MAX_PUBLIC_LOG_DEPTH = parseInt(process.env.VILLAGE_MAX_LOG_DEPTH || '20', 10);
-const SCENE_TIMEOUT_MS = 60_000;
+const SCENE_TIMEOUT_MS = 45_000;
 const EMPTY_CLEAR_TICKS = 3;
 
 const STATE_FILE = join(__dirname, 'state.json');
@@ -63,6 +63,7 @@ let state = {
 };
 let paused = false;
 let tickInProgress = false;
+let nextTickAt = 0;
 let startTime = Date.now();
 
 // --- Observer SSE connections ---
@@ -354,18 +355,14 @@ async function tick() {
 
       state.emptyTicks[loc] = 0;
 
-      // Sequential processing — conscious decision for MVP (3-5 bots).
-      // Per ggbot.md consensus: ship sequential, measure real tick times,
-      // optimize to parallel if >3min ticks observed.
-      // Randomize bot order to prevent first-mover bias
-      const shuffled = botsAtLoc.sort(() => Math.random() - 0.5);
-
       // Enforce public log depth limit per location
       if (state.publicLogs[loc].length > MAX_PUBLIC_LOG_DEPTH) {
         state.publicLogs[loc] = state.publicLogs[loc].slice(-MAX_PUBLIC_LOG_DEPTH);
       }
 
-      for (const botName of shuffled) {
+      // Build scenes from a snapshot — all bots see the same state
+      const sceneRequests = [];
+      for (const botName of botsAtLoc) {
         if (!participants.has(botName)) continue;
 
         // Cost cap enforcement: skip bot if daily village cost exceeds cap
@@ -377,7 +374,6 @@ async function tick() {
         }
 
         const { port } = participants.get(botName);
-
         const othersHere = botsAtLoc.filter(b => b !== botName);
         const pendingWhispers = state.whispers[botName] || [];
         const conversationId = `village:${loc}:tick-${tickNum}`;
@@ -392,14 +388,24 @@ async function tick() {
           botDisplayNames: displayNames,
           publicLog: state.publicLogs[loc],
           whispers: pendingWhispers,
-          movements: [], // movements from this tick are in the log already
+          movements: [],
           sceneHistoryCap: SCENE_HISTORY_CAP,
         });
 
-        botsSent++;
-        const response = await sendScene(botName, port, conversationId, scene);
+        sceneRequests.push({ botName, port, conversationId, scene });
+      }
 
-        // Clear consumed whispers
+      // Send all scenes in parallel — all bots act on the same snapshot
+      const results = await Promise.all(
+        sceneRequests.map(async ({ botName, port, conversationId, scene }) => {
+          botsSent++;
+          const response = await sendScene(botName, port, conversationId, scene);
+          return { botName, response };
+        })
+      );
+
+      // Process all responses after everyone has responded
+      for (const { botName, response } of results) {
         delete state.whispers[botName];
 
         if (!response || !response.actions) {
@@ -411,12 +417,10 @@ async function tick() {
         const events = processActions(botName, response.actions, loc, state);
         allEvents.get(loc).push(...events);
 
-        // Count actions
         for (const ev of events) {
           if (actionCounts[ev.action] !== undefined) actionCounts[ev.action]++;
         }
 
-        // Broadcast each event to observers
         for (const ev of events) {
           broadcastEvent({
             type: 'action',
@@ -480,6 +484,7 @@ async function tick() {
     );
 
     // Broadcast tick summary to observers
+    nextTickAt = Date.now() + TICK_INTERVAL_MS;
     broadcastEvent({
       type: 'tick',
       tick: tickNum,
@@ -488,6 +493,8 @@ async function tick() {
       botsTotal: botsSent,
       actions: actionCounts,
       duration,
+      nextTickAt,
+      tickIntervalMs: TICK_INTERVAL_MS,
       locations: Object.fromEntries(
         ALL_LOCATIONS.map(l => [l, state.locations[l].map(b => ({
           name: b, displayName: displayNames[b] || b,
@@ -665,6 +672,8 @@ const server = createServer(async (req, res) => {
       tick: state.clock.tick,
       phase: state.clock.phase,
       paused,
+      nextTickAt,
+      tickIntervalMs: TICK_INTERVAL_MS,
       locations: Object.fromEntries(
         ALL_LOCATIONS.map(l => [l, state.locations[l] || []])
       ),
@@ -723,6 +732,7 @@ let tickTimer = null;
 
 function startGameLoop() {
   // Run first tick after a short delay
+  nextTickAt = Date.now() + 5000;
   setTimeout(() => tick(), 5000);
   tickTimer = setInterval(() => tick(), TICK_INTERVAL_MS);
 }
