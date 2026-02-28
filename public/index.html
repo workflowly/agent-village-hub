@@ -422,15 +422,21 @@ function onEvent(d) {
     case 'tick':
       tick=d.tick; phase=d.phase;
       if (d.locations) {
+        const allBots = new Set();
         for (const loc of LOC_IDS) {
           const bots = d.locations[loc]||[];
           locBots[loc] = bots.map(b=>typeof b==='string'?b:(b.name||b));
           bots.forEach(b => {
             const nm = typeof b==='string'?b:(b.name||b);
             const dn = typeof b==='string'?b:(b.displayName||b.name||b);
+            allBots.add(nm);
             const sp = mkSprite(nm, dn, loc);
             if (sp.loc !== loc) teleportSprite(nm, loc);
           });
+        }
+        // Remove sprites for bots no longer in any location
+        for (const nm of Object.keys(sprites)) {
+          if (!allBots.has(nm)) { removeBubble(nm); delete sprites[nm]; }
         }
       }
       updateBar();
