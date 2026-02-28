@@ -81,7 +81,7 @@ let locBots = {}; LOC_IDS.forEach(l => locBots[l] = []);
 let sprites = {};
 let bubbleDom = {};
 let tick = 0, phase = '', paused = false, online = false;
-let nextTickAt = 0, tickIntervalMs = 60000;
+let nextTickAt = 0, tickIntervalMs = 60000, villageTime = '';
 let logHtml = [];
 let frame = 0;
 
@@ -364,7 +364,8 @@ function updateBar() {
   const se = document.getElementById('st');
   const remaining = nextTickAt ? nextTickAt - Date.now() : 0;
   const cd = remaining > 0 ? ` \u00b7 next ${fmtCountdown(remaining)}` : '';
-  te.textContent = tick > 0 ? `Tick ${tick}${phase ? ' \u00b7 '+phase[0].toUpperCase()+phase.slice(1) : ''}${cd}` : '\u2014';
+  const vt = villageTime ? `${villageTime} \u00b7 ` : '';
+  te.textContent = tick > 0 ? `${vt}${phase ? phase[0].toUpperCase()+phase.slice(1) : ''} \u00b7 Tick ${tick}${cd}` : '\u2014';
   if (!online) { se.textContent='Disconnected'; se.className='st-off'; }
   else if (paused) { se.textContent='Paused'; se.className='st-pause'; }
   else { se.textContent='Running'; se.className='st-run'; }
@@ -379,6 +380,7 @@ function onEvent(d) {
       tick=d.tick; phase=d.phase; paused=d.paused; online=true;
       if (d.nextTickAt) nextTickAt=d.nextTickAt;
       if (d.tickIntervalMs) tickIntervalMs=d.tickIntervalMs;
+      if (d.villageTime) villageTime=d.villageTime;
       for (const loc of LOC_IDS) {
         const bots = d.locations[loc]||[];
         locBots[loc] = bots.map(b => typeof b==='string'?b:(b.name||b));
@@ -432,6 +434,7 @@ function onEvent(d) {
       tick=d.tick; phase=d.phase;
       if (d.nextTickAt) nextTickAt=d.nextTickAt;
       if (d.tickIntervalMs) tickIntervalMs=d.tickIntervalMs;
+      if (d.villageTime) villageTime=d.villageTime;
       if (d.locations) {
         const allBots = new Set();
         for (const loc of LOC_IDS) {

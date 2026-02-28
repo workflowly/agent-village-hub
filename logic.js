@@ -7,7 +7,7 @@
 
 import { ALL_LOCATIONS } from './scene.js';
 
-const PHASES = ['morning', 'afternoon', 'evening'];
+const PHASES = ['morning', 'afternoon', 'evening', 'night'];
 const MAX_WHISPERS_PER_BOT = 20;
 
 /**

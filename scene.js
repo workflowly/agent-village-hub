@@ -15,10 +15,27 @@ const LOCATION_NAMES = {
   'sunset-lounge': 'Sunset Lounge',
 };
 
+const VILLAGE_TIMEZONE = 'America/Los_Angeles';
+
+function getVillageTime() {
+  const now = new Date();
+  const fmt = (opts) => new Intl.DateTimeFormat('en-US', { timeZone: VILLAGE_TIMEZONE, ...opts }).format(now);
+  const hour = parseInt(fmt({ hour: 'numeric', hour12: false }), 10);
+  const timeStr = fmt({ hour: 'numeric', minute: '2-digit', hour12: true });
+  const dayStr = fmt({ weekday: 'long' });
+  let phase;
+  if (hour >= 5 && hour < 12) phase = 'morning';
+  else if (hour >= 12 && hour < 17) phase = 'afternoon';
+  else if (hour >= 17 && hour < 21) phase = 'evening';
+  else phase = 'night';
+  return { phase, timeStr, dayStr, hour };
+}
+
 const PHASE_DESCRIPTIONS = {
   morning: "It's morning in the village. The day is just beginning.",
   afternoon: "It's afternoon in the village. The day is in full swing.",
   evening: "It's evening in the village. The day is winding down.",
+  night: "It's nighttime in the village. The world is quiet and still.",
 };
 
 const ALL_LOCATIONS = Object.keys(LOCATION_NAMES);
@@ -55,8 +72,9 @@ export function buildScene({
 }) {
   const lines = [];
 
-  // Phase + location
-  lines.push(PHASE_DESCRIPTIONS[phase] || PHASE_DESCRIPTIONS.morning);
+  // Time + phase + location
+  const vt = getVillageTime();
+  lines.push(`${PHASE_DESCRIPTIONS[vt.phase] || PHASE_DESCRIPTIONS.morning} It's ${vt.dayStr}, ${vt.timeStr}.`);
   lines.push(`You are at **${LOCATION_NAMES[location] || location}**.`);
   lines.push('');
 
@@ -129,4 +147,4 @@ export function buildScene({
   return lines.join('\n');
 }
 
-export { LOCATION_NAMES, ALL_LOCATIONS, PHASE_DESCRIPTIONS };
+export { LOCATION_NAMES, ALL_LOCATIONS, PHASE_DESCRIPTIONS, VILLAGE_TIMEZONE, getVillageTime };

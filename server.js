@@ -15,7 +15,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
-import { buildScene, LOCATION_NAMES, ALL_LOCATIONS } from './scene.js';
+import { buildScene, LOCATION_NAMES, ALL_LOCATIONS, getVillageTime } from './scene.js';
 import { appendVillageMemory, buildMemoryEntry } from './memory.js';
 import {
   processActions,
@@ -318,7 +318,9 @@ async function tick() {
   try {
     advanceClock();
     const tickNum = state.clock.tick;
-    const phase = state.clock.phase;
+    const vt = getVillageTime();
+    const phase = vt.phase;
+    state.clock.phase = phase;
 
     // Build display name lookup from participants Map
     const displayNames = {};
@@ -487,6 +489,7 @@ async function tick() {
       type: 'tick',
       tick: tickNum,
       phase,
+      villageTime: vt.timeStr,
       bots: botsResponded,
       botsTotal: botsSent,
       actions: actionCounts,
@@ -665,10 +668,12 @@ const server = createServer(async (req, res) => {
     observers.add(observer);
 
     // Send initial state
+    const initVt = getVillageTime();
     const initData = JSON.stringify({
       type: 'init',
       tick: state.clock.tick,
-      phase: state.clock.phase,
+      phase: initVt.phase,
+      villageTime: initVt.timeStr,
       paused,
       nextTickAt,
       tickIntervalMs: TICK_INTERVAL_MS,
