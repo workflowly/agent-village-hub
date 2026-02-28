@@ -183,4 +183,57 @@ export function findDepartedBots(participantNames, state) {
   return departed;
 }
 
+/**
+ * Read a bot's daily cost from usage.json.
+ *
+ * @param {string} botName
+ * @param {string} usageFilePath - Path to usage.json
+ * @param {function} readFileFn - Async file reader (for testability)
+ * @returns {Promise<number>} Daily cost in dollars
+ */
+export async function readBotDailyCost(botName, usageFilePath, readFileFn) {
+  try {
+    const raw = await readFileFn(usageFilePath, 'utf-8');
+    const usage = JSON.parse(raw);
+    const botUsage = usage[botName];
+    if (!botUsage) return 0;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const lastUpdated = botUsage.lastUpdated || '';
+    if (!lastUpdated.startsWith(today)) return 0;
+
+    return botUsage.dailyCost || 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Validate observer auth from request cookies against admin tokens.
+ *
+ * @param {string} cookieHeader - Raw Cookie header string
+ * @param {object} tokens - Parsed admin-tokens.json
+ * @returns {string|null} Authenticated bot name, or null
+ */
+export function validateObserverAuth(cookieHeader, tokens) {
+  if (!cookieHeader || !tokens) return null;
+
+  const cookies = Object.fromEntries(
+    cookieHeader.split(';').map(c => c.trim().split('=')).filter(p => p.length === 2)
+  );
+
+  for (const [key, value] of Object.entries(cookies)) {
+    if (!key.startsWith('as_')) continue;
+    const botName = key.slice(3);
+    const botTokens = tokens[botName];
+    if (!botTokens) continue;
+
+    if (botTokens.session === value && botTokens.sessionExpiresAt > Date.now()) {
+      return botName;
+    }
+  }
+
+  return null;
+}
+
 export { PHASES };

@@ -25,6 +25,8 @@ import {
   shouldSkipForCost,
   findNewBots,
   findDepartedBots,
+  readBotDailyCost as readBotDailyCostImpl,
+  validateObserverAuth as validateObserverAuthImpl,
 } from './logic.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -131,22 +133,8 @@ async function saveState() {
 
 // --- Cost tracking ---
 
-async function readBotDailyCost(botName) {
-  try {
-    const raw = await readFile(USAGE_FILE, 'utf-8');
-    const usage = JSON.parse(raw);
-    const botUsage = usage[botName];
-    if (!botUsage) return 0;
-
-    // Check if usage was updated today
-    const today = new Date().toISOString().slice(0, 10);
-    const lastUpdated = botUsage.lastUpdated || '';
-    if (!lastUpdated.startsWith(today)) return 0;
-
-    return botUsage.dailyCost || 0;
-  } catch {
-    return 0;
-  }
+function readBotDailyCost(botName) {
+  return readBotDailyCostImpl(botName, USAGE_FILE, readFile);
 }
 
 // --- Participant discovery ---
@@ -495,28 +483,12 @@ async function tick() {
 // --- Auth helper ---
 
 async function validateObserverAuth(req) {
-  // Check for any as_* cookie that has a valid admin session
   const cookieHeader = req.headers.cookie || '';
-  const cookies = Object.fromEntries(
-    cookieHeader.split(';').map(c => c.trim().split('=')).filter(p => p.length === 2)
-  );
-
   try {
     const tokensRaw = await readFile(ADMIN_TOKENS_FILE, 'utf-8');
     const tokens = JSON.parse(tokensRaw);
-
-    for (const [key, value] of Object.entries(cookies)) {
-      if (!key.startsWith('as_')) continue;
-      const botName = key.slice(3);
-      const botTokens = tokens[botName];
-      if (!botTokens) continue;
-
-      if (botTokens.session === value && botTokens.sessionExpiresAt > Date.now()) {
-        return botName;
-      }
-    }
+    return validateObserverAuthImpl(cookieHeader, tokens);
   } catch { /* no tokens file */ }
-
   return null;
 }
 
