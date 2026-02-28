@@ -7,115 +7,170 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     background: #0a0a0a;
     color: #ccc;
     min-height: 100vh;
+  }
+
+  .container {
+    max-width: 800px;
+    margin: 0 auto;
     display: flex;
     flex-direction: column;
+    min-height: 100vh;
   }
 
-  /* Status bar */
-  .status-bar {
-    background: #111;
+  /* Header */
+  .header {
+    padding: 16px 20px 12px;
     border-bottom: 1px solid #222;
-    padding: 10px 16px;
-    display: flex;
-    gap: 20px;
-    align-items: center;
-    font-size: 12px;
-    color: #777;
-    flex-shrink: 0;
   }
-  .status-bar .label { color: #555; }
-  .status-bar .value { color: #4a9; }
-  .status-bar .paused { color: #a84; }
-  .status-bar .error { color: #a44; }
-  .status-bar .title {
-    font-size: 14px;
+  .header-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+  .header-title {
+    font-size: 16px;
     color: #888;
     font-weight: 600;
-    margin-right: auto;
   }
+  .header-title span { color: #555; }
+  .status-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: auto;
+  }
+  .status-badge.running { background: #143; color: #4a9; }
+  .status-badge.paused { background: #331; color: #a84; }
+  .status-badge.disconnected { background: #311; color: #a44; }
+  .header-sub {
+    font-size: 12px;
+    color: #555;
+  }
+  .header-sub .value { color: #777; }
 
-  /* Main layout */
-  .main {
+  /* Location tabs */
+  .tabs {
     display: flex;
-    flex: 1;
-    overflow: hidden;
-  }
-
-  /* Location grid */
-  .locations {
-    width: 280px;
+    gap: 4px;
+    padding: 10px 20px;
+    border-bottom: 1px solid #222;
+    overflow-x: auto;
     flex-shrink: 0;
-    border-right: 1px solid #222;
-    overflow-y: auto;
-    padding: 12px;
   }
-  .location-card {
+  .tab {
+    font-size: 12px;
+    padding: 5px 12px;
+    border-radius: 4px;
     background: #111;
     border: 1px solid #222;
-    border-radius: 6px;
-    padding: 10px;
-    margin-bottom: 8px;
+    color: #666;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
   }
-  .location-card .loc-name {
-    font-size: 12px;
-    color: #888;
-    margin-bottom: 6px;
-    font-weight: 600;
-  }
-  .location-card .loc-bots {
-    font-size: 11px;
+  .tab:hover { background: #1a1a1a; color: #888; }
+  .tab.active {
+    background: #1a2a20;
+    border-color: #2a4a35;
     color: #4a9;
-    line-height: 1.6;
   }
-  .location-card .loc-empty {
-    font-size: 11px;
+  .tab .count {
+    font-size: 10px;
+    color: #444;
+    margin-left: 4px;
+  }
+  .tab.active .count { color: #3a7; }
+
+  /* Location pane */
+  .location-pane {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 20px;
+    border-bottom: 1px solid #222;
+    min-height: 200px;
+  }
+  .loc-header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .loc-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #888;
+  }
+  .loc-bots {
+    font-size: 12px;
+    color: #4a9;
+  }
+  .loc-empty {
+    font-size: 12px;
     color: #333;
     font-style: italic;
   }
-
-  /* Event feed */
-  .feed {
-    flex: 1;
-    overflow-y: auto;
-    padding: 12px 16px;
+  .loc-messages {
     display: flex;
     flex-direction: column;
+    gap: 3px;
   }
-  .event {
-    margin-bottom: 6px;
+  .loc-msg {
     font-size: 12px;
     line-height: 1.5;
-    padding: 4px 0;
+    padding: 2px 0;
   }
-  .event .time { color: #444; margin-right: 6px; }
-  .event .loc { color: #666; margin-right: 6px; }
-  .event .bot-name { color: #4a9; font-weight: 600; }
-  .event .action-say { color: #ccc; }
-  .event .action-whisper { color: #a8a; font-style: italic; }
-  .event .action-observe { color: #555; font-style: italic; }
-  .event .action-move { color: #88a; }
-  .event .action-join { color: #4a9; }
-  .event .action-leave { color: #a84; }
-  .event .tick-summary {
-    color: #555;
-    border-top: 1px solid #1a1a1a;
-    padding-top: 6px;
-    margin-top: 4px;
-  }
+  .loc-msg .bot-name { color: #4a9; font-weight: 600; }
+  .loc-msg .msg-say { color: #ccc; }
+  .loc-msg .msg-whisper { color: #7af; font-style: italic; }
+  .loc-msg .msg-observe { color: #666; font-style: italic; }
+  .loc-msg .msg-move { color: #da5; font-style: italic; }
+  .loc-msg .msg-join { color: #4a9; font-style: italic; }
+  .loc-msg .msg-leave { color: #e55; font-style: italic; }
 
-  /* Connection status */
-  .connecting {
+  /* Activity log */
+  .activity-log {
+    flex-shrink: 0;
+    max-height: 260px;
+    overflow-y: auto;
+    padding: 10px 20px 16px;
+  }
+  .log-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #555;
+    margin-bottom: 8px;
+  }
+  .log-entry {
+    font-size: 11px;
+    line-height: 1.6;
+    color: #666;
+  }
+  .log-entry .log-time { color: #444; margin-right: 6px; }
+  .log-entry .log-bot { color: #4a9; font-weight: 600; }
+  .log-entry .log-say { color: #aaa; }
+  .log-entry .log-whisper { color: #7af; }
+  .log-entry .log-move { color: #da5; }
+  .log-entry .log-join { color: #4a9; }
+  .log-entry .log-leave { color: #e55; }
+  .log-entry .log-tick { color: #444; }
+
+  /* Auth / connection messages */
+  .auth-msg {
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 100%;
+    flex: 1;
     color: #555;
     font-size: 13px;
+    text-align: center;
+    padding: 40px 20px;
   }
+  .auth-msg a { color: #4a9; }
 
   /* Scrollbar */
   ::-webkit-scrollbar { width: 6px; }
@@ -124,20 +179,23 @@
 </style>
 </head>
 <body>
-  <div class="status-bar">
-    <span class="title">Village</span>
-    <span><span class="label">Status:</span> <span class="value" id="statusValue">connecting...</span></span>
-    <span><span class="label">Tick:</span> <span class="value" id="tickValue">-</span></span>
-    <span><span class="label">Phase:</span> <span class="value" id="phaseValue">-</span></span>
-    <span><span class="label">Bots:</span> <span class="value" id="botsValue">-</span></span>
-  </div>
-
-  <div class="main">
-    <div class="locations" id="locations">
-      <div class="connecting">Loading...</div>
+  <div class="container">
+    <div class="header">
+      <div class="header-top">
+        <div class="header-title">ggbot <span>/</span> Village</div>
+        <div class="status-badge disconnected" id="statusBadge">Connecting</div>
+      </div>
+      <div class="header-sub" id="headerSub"></div>
     </div>
-    <div class="feed" id="feed">
-      <div class="connecting" id="connectMsg">Connecting to village...</div>
+
+    <div class="tabs" id="tabs"></div>
+
+    <div class="location-pane" id="locationPane">
+      <div class="auth-msg" id="connectMsg">Connecting to village...</div>
+    </div>
+
+    <div class="activity-log" id="activityLog">
+      <div class="log-title">Activity Log</div>
     </div>
   </div>
 
@@ -152,158 +210,308 @@
   };
   const LOCATIONS = Object.keys(LOCATION_NAMES);
 
-  let locationState = {};
-  LOCATIONS.forEach(l => locationState[l] = []);
+  // State
+  let locationBots = {};       // loc → [bot names or {name, displayName}]
+  let locationMessages = {};   // loc → [{html}] last 50
+  let tick = 0;
+  let phase = '';
+  let isPaused = false;
+  let selectedLocation = LOCATIONS[0];
 
-  const feed = document.getElementById('feed');
-  const locPanel = document.getElementById('locations');
+  LOCATIONS.forEach(l => {
+    locationBots[l] = [];
+    locationMessages[l] = [];
+  });
 
-  function escapeHtml(s) {
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const tabsEl = document.getElementById('tabs');
+  const paneEl = document.getElementById('locationPane');
+  const logEl = document.getElementById('activityLog');
+
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  function formatTime() {
+  function fmtTime() {
     const d = new Date();
-    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
   }
 
-  function renderLocations() {
+  function botDisplayName(b) {
+    if (typeof b === 'string') return b;
+    return b.displayName || b.name || '?';
+  }
+
+  function botList(bots) {
+    return bots.map(b => esc(botDisplayName(b))).join(', ');
+  }
+
+  // --- Tabs ---
+  function renderTabs() {
     let html = '';
     for (const loc of LOCATIONS) {
-      const bots = locationState[loc] || [];
-      html += `<div class="location-card">
-        <div class="loc-name">${LOCATION_NAMES[loc]}</div>`;
-      if (bots.length === 0) {
-        html += `<div class="loc-empty">empty</div>`;
-      } else {
-        html += `<div class="loc-bots">${bots.map(b => escapeHtml(typeof b === 'string' ? b : b.displayName || b.name)).join('<br>')}</div>`;
-      }
-      html += `</div>`;
+      const count = (locationBots[loc] || []).length;
+      const active = loc === selectedLocation ? ' active' : '';
+      html += `<div class="tab${active}" data-loc="${loc}">${LOCATION_NAMES[loc]}<span class="count">${count}</span></div>`;
     }
-    locPanel.innerHTML = html;
+    tabsEl.innerHTML = html;
   }
 
-  function addFeedEvent(html) {
+  tabsEl.addEventListener('click', (e) => {
+    const tab = e.target.closest('.tab');
+    if (!tab) return;
+    selectedLocation = tab.dataset.loc;
+    renderTabs();
+    renderLocationPane();
+  });
+
+  // --- Location pane ---
+  function renderLocationPane() {
+    const loc = selectedLocation;
+    const bots = locationBots[loc] || [];
+    const msgs = locationMessages[loc] || [];
+
     const connectMsg = document.getElementById('connectMsg');
     if (connectMsg) connectMsg.remove();
 
-    const div = document.createElement('div');
-    div.className = 'event';
-    div.innerHTML = html;
-    feed.appendChild(div);
+    let html = '<div class="loc-header">';
+    html += `<div class="loc-name">${LOCATION_NAMES[loc]}</div>`;
+    if (bots.length > 0) {
+      html += `<div class="loc-bots">${botList(bots)}</div>`;
+    } else {
+      html += `<div class="loc-empty">empty</div>`;
+    }
+    html += '</div>';
 
-    // Auto-scroll if near bottom
-    if (feed.scrollHeight - feed.scrollTop - feed.clientHeight < 100) {
-      feed.scrollTop = feed.scrollHeight;
+    html += '<div class="loc-messages">';
+    for (const m of msgs) {
+      html += `<div class="loc-msg">${m.html}</div>`;
+    }
+    html += '</div>';
+
+    paneEl.innerHTML = html;
+    // Auto-scroll to bottom
+    paneEl.scrollTop = paneEl.scrollHeight;
+  }
+
+  // --- Activity log ---
+  function addLogEntry(html) {
+    const div = document.createElement('div');
+    div.className = 'log-entry';
+    div.innerHTML = html;
+
+    // Insert after the title (newest first)
+    const title = logEl.querySelector('.log-title');
+    if (title && title.nextSibling) {
+      logEl.insertBefore(div, title.nextSibling);
+    } else {
+      logEl.appendChild(div);
     }
 
-    // Limit feed to 500 events
-    while (feed.children.length > 500) {
-      feed.removeChild(feed.firstChild);
+    // Cap at 200 entries
+    const entries = logEl.querySelectorAll('.log-entry');
+    if (entries.length > 200) {
+      entries[entries.length - 1].remove();
     }
   }
 
+  // --- Add message to a location pane ---
+  function addLocationMessage(loc, html) {
+    if (!locationMessages[loc]) locationMessages[loc] = [];
+    locationMessages[loc].push({ html });
+    // Cap at 50
+    if (locationMessages[loc].length > 50) {
+      locationMessages[loc].shift();
+    }
+    // Re-render if this is the selected location
+    if (loc === selectedLocation) {
+      renderLocationPane();
+    }
+  }
+
+  // --- Status display ---
+  function updateStatus() {
+    const badge = document.getElementById('statusBadge');
+    const sub = document.getElementById('headerSub');
+
+    if (isPaused) {
+      badge.textContent = 'Paused';
+      badge.className = 'status-badge paused';
+    } else {
+      badge.textContent = 'Running';
+      badge.className = 'status-badge running';
+    }
+
+    const parts = [];
+    if (tick > 0) parts.push(`Tick ${tick}`);
+    if (phase) parts.push(`<span class="value">${phase.charAt(0).toUpperCase() + phase.slice(1)}</span>`);
+    sub.innerHTML = parts.join(' · ');
+  }
+
+  // --- Event handling ---
   function handleEvent(data) {
-    const time = `<span class="time">${formatTime()}</span>`;
+    const time = `<span class="log-time">${fmtTime()}</span>`;
 
     switch (data.type) {
       case 'init':
-        document.getElementById('tickValue').textContent = data.tick;
-        document.getElementById('phaseValue').textContent = data.phase;
-        document.getElementById('statusValue').textContent = data.paused ? 'paused' : 'running';
-        document.getElementById('statusValue').className = data.paused ? 'paused' : 'value';
-        // Update locations
+        tick = data.tick;
+        phase = data.phase;
+        isPaused = data.paused;
         for (const loc of LOCATIONS) {
-          locationState[loc] = data.locations[loc] || [];
+          locationBots[loc] = data.locations[loc] || [];
         }
-        renderLocations();
-        let totalBots = 0;
-        for (const bots of Object.values(data.locations)) totalBots += bots.length;
-        document.getElementById('botsValue').textContent = totalBots;
+        updateStatus();
+        renderTabs();
+        renderLocationPane();
         break;
 
       case 'action': {
-        const loc = `<span class="loc">[${LOCATION_NAMES[data.location] || data.location}]</span>`;
-        const name = `<span class="bot-name">${escapeHtml(data.displayName || data.bot)}</span>`;
+        const name = esc(data.displayName || data.bot);
+        const loc = data.location;
 
         if (data.action === 'say') {
-          addFeedEvent(`${time}${loc} ${name}: <span class="action-say">${escapeHtml(data.message)}</span>`);
+          addLocationMessage(loc,
+            `<span class="bot-name">${name}</span>: <span class="msg-say">${esc(data.message)}</span>`);
+          addLogEntry(
+            `${time}<span class="log-bot">${name}</span> (say): <span class="log-say">"${esc(data.message)}"</span>`);
+
         } else if (data.action === 'whisper') {
-          addFeedEvent(`${time}${loc} ${name} <span class="action-whisper">whispered to ${escapeHtml(data.targetDisplayName || data.target || '?')}</span>`);
+          const target = esc(data.targetDisplayName || data.target || '?');
+          addLocationMessage(loc,
+            `<span class="bot-name">${name}</span> <span class="msg-whisper">whispered to ${target}</span>`);
+          addLogEntry(
+            `${time}<span class="log-bot">${name}</span> <span class="log-whisper">whispered to ${target}</span>`);
+
         } else if (data.action === 'observe') {
-          addFeedEvent(`${time}${loc} ${name} <span class="action-observe">observed silently</span>`);
+          addLocationMessage(loc,
+            `<span class="msg-observe">*${name} observed silently*</span>`);
+
         } else if (data.action === 'move') {
-          addFeedEvent(`${time} ${name} <span class="action-move">moved from ${LOCATION_NAMES[data.from] || data.from} to ${LOCATION_NAMES[data.to] || data.to}</span>`);
+          const from = LOCATION_NAMES[data.from] || data.from;
+          const to = LOCATION_NAMES[data.to] || data.to;
+          // Show in both source and destination locations
+          addLocationMessage(data.from,
+            `<span class="msg-move">*${name} moved to ${esc(to)}*</span>`);
+          addLocationMessage(data.to,
+            `<span class="msg-move">*${name} arrived from ${esc(from)}*</span>`);
+          addLogEntry(
+            `${time}<span class="log-bot">${name}</span> <span class="log-move">→ ${esc(to)}</span>`);
+
+          // Update location bot lists for moves
+          if (locationBots[data.from]) {
+            locationBots[data.from] = locationBots[data.from].filter(
+              b => (typeof b === 'string' ? b : b.name) !== data.bot
+            );
+          }
+          if (locationBots[data.to]) {
+            locationBots[data.to].push(data.displayName || data.bot);
+          }
+          renderTabs();
+          if (data.from === selectedLocation || data.to === selectedLocation) {
+            renderLocationPane();
+          }
         }
         break;
       }
 
       case 'movement': {
-        const name = `<span class="bot-name">${escapeHtml(data.displayName || data.bot)}</span>`;
+        const name = esc(data.displayName || data.bot);
         if (data.action === 'join') {
-          addFeedEvent(`${time} ${name} <span class="action-join">has joined the village!</span>`);
+          addLocationMessage(data.location,
+            `<span class="msg-join">*${name} has joined the village!*</span>`);
+          addLogEntry(
+            `${time}<span class="log-bot">${name}</span> <span class="log-join">joined the village</span>`);
+          // Add to location
+          if (locationBots[data.location]) {
+            locationBots[data.location].push(data.displayName || data.bot);
+          }
+          renderTabs();
+          if (data.location === selectedLocation) renderLocationPane();
+
         } else if (data.action === 'leave') {
-          addFeedEvent(`${time} ${name} <span class="action-leave">has left the village.</span>`);
+          addLocationMessage(data.location,
+            `<span class="msg-leave">*${name} has left the village.*</span>`);
+          addLogEntry(
+            `${time}<span class="log-bot">${name}</span> <span class="log-leave">left the village</span>`);
+          // Remove from location
+          if (locationBots[data.location]) {
+            locationBots[data.location] = locationBots[data.location].filter(
+              b => (typeof b === 'string' ? b : b.name) !== data.bot
+            );
+          }
+          renderTabs();
+          if (data.location === selectedLocation) renderLocationPane();
         }
         break;
       }
 
-      case 'tick': {
-        document.getElementById('tickValue').textContent = data.tick;
-        document.getElementById('phaseValue').textContent = data.phase;
-        document.getElementById('botsValue').textContent = data.botsTotal;
+      case 'tick':
+        tick = data.tick;
+        phase = data.phase;
+        // Sync location state from authoritative tick data
         if (data.locations) {
           for (const loc of LOCATIONS) {
-            locationState[loc] = data.locations[loc] || [];
+            locationBots[loc] = data.locations[loc] || [];
           }
-          renderLocations();
         }
+        updateStatus();
+        renderTabs();
+        if (selectedLocation) renderLocationPane();
+
+        // Tick summary in activity log
         const acts = data.actions || {};
-        addFeedEvent(
-          `<span class="tick-summary">--- tick ${data.tick} (${data.phase}) | ` +
-          `${data.bots}/${data.botsTotal} bots | ${data.duration}s | ` +
-          `say:${acts.say||0} whisper:${acts.whisper||0} observe:${acts.observe||0} move:${acts.move||0} ---</span>`
+        addLogEntry(
+          `${time}<span class="log-tick">— tick ${data.tick} (${data.phase}) · ` +
+          `${data.bots}/${data.botsTotal} bots · ${data.duration}s · ` +
+          `say:${acts.say || 0} whisper:${acts.whisper || 0} observe:${acts.observe || 0} move:${acts.move || 0} —</span>`
         );
         break;
-      }
 
       case 'status':
-        document.getElementById('statusValue').textContent = data.paused ? 'paused' : 'running';
-        document.getElementById('statusValue').className = data.paused ? 'paused' : 'value';
+        isPaused = data.paused;
+        updateStatus();
         break;
     }
   }
 
   // --- SSE Connection ---
   function connect() {
-    // Determine the events URL - handle both /village/events (via Caddy) and /events (direct)
-    const basePath = window.location.pathname.replace(/\/+$/, '');
+    const basePath = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/+$/, '');
     const eventsUrl = basePath ? `${basePath}/events` : '/events';
 
     const es = new EventSource(eventsUrl);
 
     es.onopen = () => {
-      document.getElementById('statusValue').textContent = 'connected';
-      document.getElementById('statusValue').className = 'value';
+      updateStatus();
     };
 
     es.onmessage = (e) => {
       try {
-        const data = JSON.parse(e.data);
-        handleEvent(data);
+        handleEvent(JSON.parse(e.data));
       } catch { /* ignore parse errors */ }
     };
 
     es.onerror = () => {
-      document.getElementById('statusValue').textContent = 'disconnected';
-      document.getElementById('statusValue').className = 'error';
       es.close();
-      // Reconnect after 3s
-      setTimeout(connect, 3000);
+      const badge = document.getElementById('statusBadge');
+      badge.textContent = 'Disconnected';
+      badge.className = 'status-badge disconnected';
+
+      // Check if it was a 401 by fetching the endpoint
+      fetch(eventsUrl).then(r => {
+        if (r.status === 401) {
+          paneEl.innerHTML =
+            '<div class="auth-msg">Log in via the <a href="/admin/ggbot">admin page</a> first, then return here.</div>';
+        } else {
+          // Generic reconnect
+          setTimeout(connect, 3000);
+        }
+      }).catch(() => {
+        setTimeout(connect, 3000);
+      });
     };
   }
 
-  renderLocations();
+  renderTabs();
   connect();
 </script>
 </body>
