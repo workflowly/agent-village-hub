@@ -340,13 +340,15 @@ async function tick() {
     let botsSkippedCost = 0;
     let errors = 0;
 
+    // Build all scene requests across all locations from a single snapshot
+    const allSceneRequests = [];
+
     for (const loc of ALL_LOCATIONS) {
       const botsAtLoc = [...state.locations[loc]];
       allEvents.set(loc, []);
 
       if (botsAtLoc.length === 0) {
         state.emptyTicks[loc] = (state.emptyTicks[loc] || 0) + 1;
-        // Clear stale logs after N empty ticks
         if (state.emptyTicks[loc] >= EMPTY_CLEAR_TICKS && state.publicLogs[loc].length > 0) {
           state.publicLogs[loc] = [];
         }
@@ -355,17 +357,13 @@ async function tick() {
 
       state.emptyTicks[loc] = 0;
 
-      // Enforce public log depth limit per location
       if (state.publicLogs[loc].length > MAX_PUBLIC_LOG_DEPTH) {
         state.publicLogs[loc] = state.publicLogs[loc].slice(-MAX_PUBLIC_LOG_DEPTH);
       }
 
-      // Build scenes from a snapshot — all bots see the same state
-      const sceneRequests = [];
       for (const botName of botsAtLoc) {
         if (!participants.has(botName)) continue;
 
-        // Cost cap enforcement: skip bot if daily village cost exceeds cap
         const botCost = dailyCosts.get(botName) || 0;
         if (VILLAGE_DAILY_COST_CAP > 0 && botCost >= VILLAGE_DAILY_COST_CAP) {
           console.log(`[village] ${botName} skipped — daily cost $${botCost.toFixed(4)} exceeds cap $${VILLAGE_DAILY_COST_CAP}`);
@@ -392,47 +390,47 @@ async function tick() {
           sceneHistoryCap: SCENE_HISTORY_CAP,
         });
 
-        sceneRequests.push({ botName, port, conversationId, scene });
+        allSceneRequests.push({ botName, port, conversationId, scene, loc });
+      }
+    }
+
+    // Send all scenes across all locations in parallel
+    const allResults = await Promise.all(
+      allSceneRequests.map(async ({ botName, port, conversationId, scene, loc }) => {
+        botsSent++;
+        const response = await sendScene(botName, port, conversationId, scene);
+        return { botName, response, loc };
+      })
+    );
+
+    // Process all responses after everyone has responded
+    for (const { botName, response, loc } of allResults) {
+      delete state.whispers[botName];
+
+      if (!response || !response.actions) {
+        errors++;
+        continue;
       }
 
-      // Send all scenes in parallel — all bots act on the same snapshot
-      const results = await Promise.all(
-        sceneRequests.map(async ({ botName, port, conversationId, scene }) => {
-          botsSent++;
-          const response = await sendScene(botName, port, conversationId, scene);
-          return { botName, response };
-        })
-      );
+      botsResponded++;
+      const events = processActions(botName, response.actions, loc, state);
+      allEvents.get(loc).push(...events);
 
-      // Process all responses after everyone has responded
-      for (const { botName, response } of results) {
-        delete state.whispers[botName];
+      for (const ev of events) {
+        if (actionCounts[ev.action] !== undefined) actionCounts[ev.action]++;
+      }
 
-        if (!response || !response.actions) {
-          errors++;
-          continue;
-        }
-
-        botsResponded++;
-        const events = processActions(botName, response.actions, loc, state);
-        allEvents.get(loc).push(...events);
-
-        for (const ev of events) {
-          if (actionCounts[ev.action] !== undefined) actionCounts[ev.action]++;
-        }
-
-        for (const ev of events) {
-          broadcastEvent({
-            type: 'action',
-            tick: tickNum,
-            phase,
-            location: loc,
-            locationName: LOCATION_NAMES[loc],
-            bot: botName,
-            displayName: displayNames[botName],
-            ...ev,
-          });
-        }
+      for (const ev of events) {
+        broadcastEvent({
+          type: 'action',
+          tick: tickNum,
+          phase,
+          location: loc,
+          locationName: LOCATION_NAMES[loc],
+          bot: botName,
+          displayName: displayNames[botName],
+          ...ev,
+        });
       }
     }
 
