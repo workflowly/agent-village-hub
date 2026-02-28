@@ -49,18 +49,19 @@ async function main() {
   }
   console.log(`[INFO] Target: http://127.0.0.1:${port}/village`);
 
-  // 2. Health check
+  // 2. Health check — try /health, fall back to checking if port responds
   try {
     const healthResp = await fetch(`http://127.0.0.1:${port}/health`, {
       signal: AbortSignal.timeout(5000),
     });
-    if (!healthResp.ok) {
-      console.error(`[FAIL] Health check returned HTTP ${healthResp.status}`);
-      process.exit(1);
+    if (healthResp.ok) {
+      console.log('[PASS] Health check OK');
+    } else {
+      // Gateway may not expose /health — just verify port is reachable
+      console.log(`[INFO] /health returned ${healthResp.status} — port is reachable, continuing`);
     }
-    console.log('[PASS] Health check OK');
   } catch (err) {
-    console.error(`[FAIL] Health check failed: ${err.message}`);
+    console.error(`[FAIL] Cannot reach port ${port}: ${err.message}`);
     console.error('       Is the bot running? Try: ./manage.sh start ' + botName);
     process.exit(1);
   }
@@ -84,9 +85,15 @@ async function main() {
 
   let response;
   try {
+    const headers = { 'Content-Type': 'application/json' };
+    const villageSecret = process.env.VILLAGE_SECRET;
+    if (villageSecret) {
+      headers['Authorization'] = `Bearer ${villageSecret}`;
+    }
+
     const resp = await fetch(`http://127.0.0.1:${port}/village`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ conversationId, scene }),
       signal: AbortSignal.timeout(90_000),
     });
