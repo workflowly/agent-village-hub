@@ -242,21 +242,24 @@ function drawSprite(s) {
 
 function updateSprite(s) {
   s.mt--;
-  if (s.mt <= 0) {
+  if (s.mt <= 0 && !s.traveling) {
     const L = LOCS[s.loc];
     if (L) { s.tx = L.x+10+Math.random()*(L.w-20); s.ty = L.y+16+Math.random()*(L.h-22); }
     s.mt = 80 + Math.random() * 160;
   }
   const dx=s.tx-s.x, dy=s.ty-s.y, d=Math.sqrt(dx*dx+dy*dy);
-  if (d > 0.5) { s.x += dx/d*0.25; s.y += dy/d*0.25; s.f++; }
+  const speed = s.traveling ? 1.5 : 0.25;
+  if (d > 0.5) { s.x += dx/d*speed; s.y += dy/d*speed; s.f++; }
+  else if (s.traveling) { s.traveling = false; }
 }
 
-function teleportSprite(name, toLoc) {
+function animateMove(name, toLoc) {
   const s = sprites[name]; if (!s) return;
   const L = LOCS[toLoc]; if (!L) return;
   s.loc = toLoc;
-  s.x = s.tx = L.x + L.w/2;
-  s.y = s.ty = L.y + L.h/2;
+  s.tx = L.x + L.w/2;
+  s.ty = L.y + L.h/2;
+  s.traveling = true;
   s.mt = 30;
 }
 
@@ -408,7 +411,7 @@ function onEvent(d) {
         addLog(`${t} <span class="o">${esc(nm)} observed silently</span>`);
       } else if (d.action==='move') {
         const tn = LNAMES[d.to]||d.to;
-        teleportSprite(d.bot, d.to);
+        animateMove(d.bot, d.to);
         if (locBots[d.from]) locBots[d.from] = locBots[d.from].filter(b=>b!==d.bot);
         if (locBots[d.to] && !locBots[d.to].includes(d.bot)) locBots[d.to].push(d.bot);
         addLog(`${t} <span class="b">${esc(nm)}</span> <span class="m">\u2192 ${esc(tn)}</span>`);
@@ -445,7 +448,7 @@ function onEvent(d) {
             const dn = typeof b==='string'?b:(b.displayName||b.name||b);
             allBots.add(nm);
             const sp = mkSprite(nm, dn, loc);
-            if (sp.loc !== loc) teleportSprite(nm, loc);
+            if (sp.loc !== loc) animateMove(nm, loc);
           });
         }
         // Remove sprites for bots no longer in any location
