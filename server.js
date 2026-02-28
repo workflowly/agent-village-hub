@@ -726,10 +726,19 @@ const server = createServer(async (req, res) => {
       nextTickAt,
       tickIntervalMs: TICK_INTERVAL_MS,
       locations: Object.fromEntries(
-        ALL_LOCATIONS.map(l => [l, state.locations[l] || []])
+        ALL_LOCATIONS.map(l => [l, (state.locations[l] || []).map(b => ({
+          name: b, displayName: participants.get(b)?.displayName || b,
+        }))])
       ),
       relationships: state.relationships,
       emotions: state.emotions,
+      publicLogs: Object.fromEntries(
+        ALL_LOCATIONS.filter(l => (state.publicLogs[l] || []).length > 0)
+          .map(l => [l, state.publicLogs[l].map(e => ({
+            ...e,
+            displayName: participants.get(e.bot)?.displayName || e.bot,
+          }))])
+      ),
     });
     res.write(`data: ${initData}\n\n`);
 

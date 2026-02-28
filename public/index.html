@@ -455,6 +455,18 @@ function onEvent(d) {
       updateBar();
       renderRels();
       renderMoods();
+      // Replay historical chat logs
+      if (d.publicLogs) {
+        const entries = [];
+        for (const [, logs] of Object.entries(d.publicLogs)) {
+          for (const e of logs) {
+            const nm = e.displayName||e.bot;
+            if (e.action==='say') entries.push(`<span class="b">${esc(nm)}</span>: <span class="s">"${esc(e.message)}"</span>`);
+            else if (e.action==='whisper') entries.push(`<span class="b">${esc(nm)}</span> <span class="w">whispered</span>`);
+          }
+        }
+        for (const html of entries) addLog(html);
+      }
       break;
 
     case 'action': {
