@@ -7,7 +7,8 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%;overflow:hidden;background:#111}
-#game{display:flex;flex-direction:column;height:100vh}
+#game{display:flex;flex-direction:row;height:100vh}
+#left{flex:1;display:flex;flex-direction:column;min-width:0}
 #map-wrap{flex:1;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;background:#1a2a1a}
 canvas{image-rendering:pixelated;image-rendering:crisp-edges}
 .bubble{position:absolute;background:#fff;color:#222;font:12px/1.3 -apple-system,'Segoe UI',sans-serif;padding:5px 8px;border-radius:8px;max-width:220px;pointer-events:none;z-index:10;box-shadow:0 2px 12px rgba(0,0,0,.4);transform:translate(-12px,-100%);transition:opacity .8s;word-wrap:break-word}
@@ -19,40 +20,57 @@ canvas{image-rendering:pixelated;image-rendering:crisp-edges}
 #bar{height:26px;background:#0d0d0d;border-top:1px solid #1a1a1a;display:flex;align-items:center;padding:0 14px;font:11px/1 -apple-system,'Segoe UI',sans-serif;color:#444;gap:10px;flex-shrink:0}
 #bar .lbl{color:#4a9;font-weight:700}
 .st-run{color:#4a9}.st-pause{color:#a84}.st-off{color:#a44}
-#log{height:120px;overflow-y:auto;background:#0a0a0a;padding:8px 14px;flex-shrink:0;border-top:1px solid #1a1a1a}
-.le{font:11px/1.6 -apple-system,'Segoe UI',sans-serif;color:#555}
-.le .t{color:#333}.le .b{color:#4a9;font-weight:600}.le .s{color:#999}
-.le .w{color:#7af;font-style:italic}.le .m{color:#da5}
-.le .j{color:#4a9}.le .l{color:#e55}.le .o{color:#555;font-style:italic}.le .k{color:#333}
-#rels{background:#0d0d0d;border-top:1px solid #1a1a1a;padding:4px 14px;font:11px/1.4 -apple-system,'Segoe UI',sans-serif;color:#555;display:none;flex-shrink:0;flex-wrap:wrap;gap:4px 12px}
+#chat{width:280px;flex-shrink:0;display:flex;flex-direction:column;background:#0a0a0a;border-left:1px solid #1a1a1a}
+#chat-header{flex-shrink:0;border-bottom:1px solid #1a1a1a}
+#rels{padding:4px 10px;font:11px/1.4 -apple-system,'Segoe UI',sans-serif;color:#555;display:none;flex-wrap:wrap;gap:3px 8px}
 #rels.show{display:flex}
 .rel{transition:background .6s}
 .rel.highlight{background:rgba(255,215,0,.15)}
 .rel-acq{color:#777}.rel-friend{color:#4a9}.rel-good{color:#5cb85c}.rel-best{color:#daa520}
-#moods{background:#0d0d0d;border-top:1px solid #1a1a1a;padding:4px 14px;font:11px/1.4 -apple-system,'Segoe UI',sans-serif;color:#555;display:none;flex-shrink:0;flex-wrap:wrap;gap:4px 12px}
+#moods{padding:4px 10px;font:11px/1.4 -apple-system,'Segoe UI',sans-serif;color:#555;display:none;flex-wrap:wrap;gap:3px 8px;border-top:1px solid #1a1a1a}
 #moods.show{display:flex}
 .mood-pos{color:#6a9a6a}.mood-neg{color:#888}
+#log{flex:1;overflow-y:auto;padding:6px 10px}
+#load-more{text-align:center;padding:4px;font:10px -apple-system,sans-serif;color:#333;display:none}
+#load-more.show{display:block}
+.le{font:11px/1.6 -apple-system,'Segoe UI',sans-serif;color:#555}
+.le .t{color:#333}.le .b{color:#4a9;font-weight:600}.le .s{color:#999}
+.le .w{color:#7af;font-style:italic}.le .m{color:#da5}
+.le .j{color:#4a9}.le .l{color:#e55}.le .o{color:#555;font-style:italic}.le .k{color:#333}
+.tick-sep{border:0;border-top:1px solid #1a1a1a;margin:4px 0}
 #auth{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.7);color:#777;font:14px -apple-system,sans-serif;z-index:20}
 #auth a{color:#4a9}
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-track{background:#0a0a0a}
 ::-webkit-scrollbar-thumb{background:#1a1a1a;border-radius:2px}
+@media(max-width:700px){
+  #game{flex-direction:column}
+  #left{flex:1}
+  #chat{width:100%;height:45vh;border-left:0;border-top:1px solid #1a1a1a}
+}
 </style>
 </head>
 <body>
 <div id="game">
-  <div id="map-wrap">
-    <canvas id="c"></canvas>
-    <div id="auth">Log in via any <a href="/admin/">bot admin page</a> first, then return here.</div>
+  <div id="left">
+    <div id="map-wrap">
+      <canvas id="c"></canvas>
+      <div id="auth">Log in via any <a href="/admin/">bot admin page</a> first, then return here.</div>
+    </div>
+    <div id="bar">
+      <span class="lbl">Village</span>
+      <span id="tick">&mdash;</span>
+      <span id="st" class="st-off">Connecting</span>
+    </div>
   </div>
-  <div id="bar">
-    <span class="lbl">Village</span>
-    <span id="tick">&mdash;</span>
-    <span id="st" class="st-off">Connecting</span>
+  <div id="chat">
+    <div id="chat-header">
+      <div id="rels"></div>
+      <div id="moods"></div>
+    </div>
+    <div id="load-more">Loading older...</div>
+    <div id="log"></div>
   </div>
-  <div id="rels"></div>
-  <div id="moods"></div>
-  <div id="log"></div>
 </div>
 <script>
 (() => {
@@ -94,11 +112,19 @@ let tick = 0, phase = '', paused = false, online = false;
 let nextTickAt = 0, tickIntervalMs = 60000, villageTime = '';
 let relationships = {};
 let emotions = {};
-let logHtml = [];
 let frame = 0;
 
+// --- Lazy loading state ---
+let oldestTick = Infinity;
+let loadingMore = false;
+let hasMore = true;
+let basePath = '';
+
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function hm() { return new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false}); }
+function hm(ts) {
+  const d = ts ? new Date(ts) : new Date();
+  return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});
+}
 
 // ========== PRE-RENDER MAP ==========
 let bgCanvas;
@@ -222,7 +248,7 @@ function mkSprite(name, display, loc) {
   const color = BCOLORS[ci++ % BCOLORS.length];
   const px = L.x + 12 + Math.random() * (L.w - 24);
   const py = L.y + 16 + Math.random() * (L.h - 24);
-  sprites[name] = { x:px, y:py, tx:px, ty:py, color, loc, dn:display||name, f:0, mt:60+Math.random()*100 };
+  sprites[name] = { x:px, y:py, tx:px, ty:py, color, loc, dn:display||name, f:0, mt:120+Math.random()*200 };
   return sprites[name];
 }
 
@@ -257,11 +283,10 @@ function updateSprite(s) {
   if (s.mt <= 0 && !s.traveling) {
     const L = LOCS[s.loc];
     if (L) { s.tx = L.x+10+Math.random()*(L.w-20); s.ty = L.y+16+Math.random()*(L.h-22); }
-    s.mt = 80 + Math.random() * 160;
+    s.mt = 120 + Math.random() * 200;
   }
   const dx=s.tx-s.x, dy=s.ty-s.y, d=Math.sqrt(dx*dx+dy*dy);
-  const speed = s.traveling ? 1.5 : 0.25;
-  if (d > 0.5) { s.x += dx/d*speed; s.y += dy/d*speed; s.f++; }
+  if (d > 0.5) { s.x += dx/d*0.5; s.y += dy/d*0.5; s.f++; }
   else if (s.traveling) { s.traveling = false; }
 }
 
@@ -272,7 +297,7 @@ function animateMove(name, toLoc) {
   s.tx = L.x + L.w/2;
   s.ty = L.y + L.h/2;
   s.traveling = true;
-  s.mt = 30;
+  s.mt = 90;
 }
 
 // ========== ANIMATED EFFECTS ==========
@@ -331,7 +356,7 @@ function phaseTint() {
 function showBubble(botName, text, isWhisper) {
   removeBubble(botName);
   const s = sprites[botName]; if (!s) return;
-  const txt = text.length > 80 ? text.slice(0,80)+'…' : text;
+  const txt = text.length > 80 ? text.slice(0,80)+'\u2026' : text;
   const el = document.createElement('div');
   el.className = 'bubble' + (isWhisper ? ' whisper' : '');
   el.innerHTML = `<span class="bn" style="color:${s.color}">${esc(s.dn)}</span>${esc(txt)}`;
@@ -357,17 +382,142 @@ function positionBubbles() {
   }
 }
 
-// ========== CHAT LOG ==========
-function addLog(html) {
-  logHtml.unshift(html);
-  if (logHtml.length > 150) logHtml.pop();
+// ========== CHAT LOG (newest at bottom) ==========
+function addLog(html, prepend) {
   const el = document.getElementById('log');
   const div = document.createElement('div');
   div.className = 'le';
   div.innerHTML = html;
-  el.insertBefore(div, el.firstChild);
-  while (el.children.length > 150) el.lastChild.remove();
+  if (prepend) {
+    // Prepend (for historical events loaded at top)
+    const firstChild = el.firstChild;
+    el.insertBefore(div, firstChild);
+  } else {
+    // Append (for new real-time events)
+    el.appendChild(div);
+    // Auto-scroll to bottom if near bottom
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+    if (atBottom) el.scrollTop = el.scrollHeight;
+  }
+  while (el.children.length > 500) {
+    if (prepend) el.lastChild.remove();
+    else el.firstChild.remove();
+  }
 }
+
+function addTickSep(prepend) {
+  const el = document.getElementById('log');
+  const hr = document.createElement('hr');
+  hr.className = 'tick-sep';
+  if (prepend) {
+    el.insertBefore(hr, el.firstChild);
+  } else {
+    el.appendChild(hr);
+  }
+}
+
+// ========== CONVERT EVENT TO LOG HTML ==========
+function eventToHtml(d) {
+  const t = `<span class="t">${hm(d._ts)}</span>`;
+  switch (d.type) {
+    case 'action': {
+      const nm = d.displayName||d.bot;
+      if (d.action==='say') return `${t} <span class="b">${esc(nm)}</span>: <span class="s">"${esc(d.message)}"</span>`;
+      if (d.action==='whisper') {
+        const tgt = d.targetDisplayName || d.target || '?';
+        return `${t} <span class="b">${esc(nm)}</span> <span class="w">whispered to ${esc(tgt)}</span>`;
+      }
+      if (d.action==='observe') return `${t} <span class="o">${esc(nm)} observed silently</span>`;
+      if (d.action==='move') {
+        const tn = LNAMES[d.to]||d.to;
+        return `${t} <span class="b">${esc(nm)}</span> <span class="m">\u2192 ${esc(tn)}</span>`;
+      }
+      return null;
+    }
+    case 'movement': {
+      const nm = d.displayName||d.bot;
+      if (d.action==='join') return `${t} <span class="b">${esc(nm)}</span> <span class="j">joined the village</span>`;
+      if (d.action==='leave') return `${t} <span class="b">${esc(nm)}</span> <span class="l">left the village</span>`;
+      return null;
+    }
+    case 'tick': {
+      const a=d.actions||{};
+      return `${t} <span class="k">\u2014 tick ${d.tick} \u00b7 ${d.phase} \u00b7 ${d.bots}/${d.botsTotal} bots \u00b7 say:${a.say||0} whisper:${a.whisper||0} move:${a.move||0} \u2014</span>`;
+    }
+    case 'relationship': {
+      const verb = d.label ? `became ${d.label}s` : 'are no longer close';
+      return `${t} <span class="b">${esc(d.fromDisplay)}</span> \u2665 <span class="b">${esc(d.toDisplay)}</span> <span class="j">\u2014 ${esc(verb)}</span>`;
+    }
+    case 'emotion': {
+      if (d.emotion === 'neutral') return null;
+      const nm = d.displayName || d.bot;
+      const MOOD_EMOJI = { happy:'\u{1F60A}', content:'\u{1F60C}', excited:'\u{1F929}', lonely:'\u{1F614}', bored:'\u{1F610}' };
+      const emoji = MOOD_EMOJI[d.emotion] || '';
+      return `${t} ${emoji} <span class="b">${esc(nm)}</span> <span class="j">is feeling ${esc(d.emotion)}</span>`;
+    }
+    default: return null;
+  }
+}
+
+// ========== LAZY LOADING ==========
+async function loadHistory(initial) {
+  if (loadingMore || !hasMore) return;
+  loadingMore = true;
+  const loader = document.getElementById('load-more');
+  loader.classList.add('show');
+
+  try {
+    let url = `${basePath}/api/logs?limit=50`;
+    if (oldestTick < Infinity) url += `&before=${oldestTick}`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(resp.status);
+    const data = await resp.json();
+    hasMore = data.hasMore;
+
+    if (data.events.length > 0) {
+      const logEl = document.getElementById('log');
+      const prevScrollHeight = logEl.scrollHeight;
+
+      // Track tick changes for separator lines
+      let lastTick = null;
+      for (let i = data.events.length - 1; i >= 0; i--) {
+        const ev = data.events[i];
+        if (ev.tick !== undefined && ev.tick < oldestTick) oldestTick = ev.tick;
+
+        // Add tick separator when tick changes
+        if (ev.type === 'tick' && lastTick !== null && lastTick !== ev.tick) {
+          addTickSep(true);
+        }
+        lastTick = ev.tick;
+
+        const html = eventToHtml(ev);
+        if (html) addLog(html, true);
+      }
+
+      if (initial) {
+        // Scroll to bottom on initial load
+        logEl.scrollTop = logEl.scrollHeight;
+      } else {
+        // Maintain scroll position after prepending
+        logEl.scrollTop = logEl.scrollHeight - prevScrollHeight;
+      }
+    }
+  } catch (err) {
+    // Silently fail — logs endpoint may not have data yet
+  } finally {
+    loadingMore = false;
+    const loader = document.getElementById('load-more');
+    loader.classList.toggle('show', hasMore);
+  }
+}
+
+// Scroll-to-top triggers loading older events
+document.getElementById('log').addEventListener('scroll', () => {
+  const el = document.getElementById('log');
+  if (el.scrollTop < 30 && hasMore && !loadingMore) {
+    loadHistory(false);
+  }
+});
 
 // ========== STATUS BAR ==========
 function fmtCountdown(ms) {
@@ -432,6 +582,8 @@ function renderMoods() {
 }
 
 // ========== SSE EVENTS ==========
+let lastLogTick = null;
+
 function onEvent(d) {
   const t = `<span class="t">${hm()}</span>`;
 
@@ -455,18 +607,8 @@ function onEvent(d) {
       updateBar();
       renderRels();
       renderMoods();
-      // Replay historical chat logs
-      if (d.publicLogs) {
-        const entries = [];
-        for (const [, logs] of Object.entries(d.publicLogs)) {
-          for (const e of logs) {
-            const nm = e.displayName||e.bot;
-            if (e.action==='say') entries.push(`<span class="b">${esc(nm)}</span>: <span class="s">"${esc(e.message)}"</span>`);
-            else if (e.action==='whisper') entries.push(`<span class="b">${esc(nm)}</span> <span class="w">whispered</span>`);
-          }
-        }
-        for (const html of entries) addLog(html);
-      }
+      // Load history from disk instead of publicLogs
+      loadHistory(true);
       break;
 
     case 'action': {
@@ -532,6 +674,7 @@ function onEvent(d) {
         }
       }
       updateBar();
+      addTickSep(false);
       const a=d.actions||{};
       addLog(`${t} <span class="k">\u2014 tick ${d.tick} \u00b7 ${d.phase} \u00b7 ${d.bots}/${d.botsTotal} bots \u00b7 say:${a.say||0} whisper:${a.whisper||0} move:${a.move||0} \u2014</span>`);
       break;
@@ -568,8 +711,8 @@ function onEvent(d) {
 
 // ========== SSE CONNECTION ==========
 function connect() {
-  const bp = location.pathname.replace(/\/index\.html$/, '').replace(/\/+$/, '');
-  const url = bp ? `${bp}/events` : '/events';
+  basePath = location.pathname.replace(/\/index\.html$/, '').replace(/\/+$/, '');
+  const url = basePath ? `${basePath}/events` : '/events';
   const es = new EventSource(url);
   es.onopen = () => { online=true; updateBar(); document.getElementById('auth').style.display='none'; };
   es.onmessage = (e) => { try { onEvent(JSON.parse(e.data)); } catch {} };
