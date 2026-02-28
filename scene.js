@@ -184,7 +184,7 @@ export function buildScene({
   lines.push('- **village_say**：对这里所有人说话');
   lines.push('- **village_whisper**：对某人说悄悄话');
   lines.push('- **village_observe**：安静观察，不说话');
-  lines.push('- **village_memory_search**：搜索你的村庄记忆，回忆之前的对话和事件');
+  lines.push('- **village_memory_search**：搜索你的村庄记忆（每轮先用这个回忆相关的过去经历，不占动作数）');
   if (canMove) {
     lines.push('- **village_move**：去别的地方（选了move就不能同时做其他动作）');
     lines.push('');
