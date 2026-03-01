@@ -5,8 +5,8 @@
   "version": 1,
 
   "world": {
-    "width": 64,
-    "height": 64,
+    "width": 32,
+    "height": 32,
     "seed": 42,
     "terrain": {
       "plains":   { "moveCost": 1, "visibilityMod": 0,  "char": "." },

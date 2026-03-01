@@ -115,10 +115,10 @@ canvas{image-rendering:pixelated;image-rendering:crisp-edges;cursor:crosshair}
 <script>
 (() => {
 // ========== CONSTANTS ==========
-const GRID_W = 64, GRID_H = 64;
-const TILE = 8;
-const CW = GRID_W * TILE; // 512
-const CH = GRID_H * TILE; // 512
+let GRID_W = 32, GRID_H = 32;
+let TILE = 8;
+let CW = GRID_W * TILE;
+let CH = GRID_H * TILE;
 
 const TERRAIN_COLORS = {
   '.': '#9ccc65', // plains
@@ -234,39 +234,35 @@ function prerenderTerrain() {
         tc.fillRect(x * TILE, y * TILE, TILE, TILE);
       }
 
-      // Terrain-specific detail
+      // Terrain-specific detail (scaled to tile size)
+      const tx = x * TILE, ty = y * TILE;
+      const s = TILE / 8; // scale factor (1 at 8px, 2 at 16px)
       if (ch === 'T') {
-        // Tree detail: small darker patch
         tc.fillStyle = 'rgba(0,0,0,0.15)';
-        tc.fillRect(x * TILE + 2, y * TILE + 1, 4, 5);
+        tc.fillRect(tx + 2*s, ty + 1*s, 4*s, 5*s);
         tc.fillStyle = '#2e7d32';
-        tc.fillRect(x * TILE + 3, y * TILE + 2, 3, 3);
-        // Trunk
+        tc.fillRect(tx + 3*s, ty + 2*s, 3*s, 3*s);
         tc.fillStyle = '#5d4037';
-        tc.fillRect(x * TILE + 4, y * TILE + 5, 1, 2);
+        tc.fillRect(tx + 4*s, ty + 5*s, 1*s, 2*s);
       } else if (ch === '^') {
-        // Mountain peak
         tc.fillStyle = '#8d6e63';
-        tc.fillRect(x * TILE + 2, y * TILE + 1, 4, 3);
+        tc.fillRect(tx + 2*s, ty + 1*s, 4*s, 3*s);
         tc.fillStyle = '#bcaaa4';
-        tc.fillRect(x * TILE + 3, y * TILE, 2, 2);
+        tc.fillRect(tx + 3*s, ty + 0, 2*s, 2*s);
       } else if (ch === '~') {
-        // Water shimmer lines
         tc.fillStyle = 'rgba(255,255,255,0.12)';
         const wy = (x + y) % 3;
-        tc.fillRect(x * TILE + 1, y * TILE + wy * 2 + 1, 4, 1);
+        tc.fillRect(tx + 1*s, ty + wy * 2*s + 1*s, 4*s, 1*s);
       } else if (ch === 'O') {
-        // Cave opening
         tc.fillStyle = '#424242';
-        tc.fillRect(x * TILE + 1, y * TILE + 1, 6, 6);
+        tc.fillRect(tx + 1*s, ty + 1*s, 6*s, 6*s);
         tc.fillStyle = '#333';
-        tc.fillRect(x * TILE + 2, y * TILE + 2, 4, 4);
+        tc.fillRect(tx + 2*s, ty + 2*s, 4*s, 4*s);
       } else if (ch === '#') {
-        // Ruins structure lines
         tc.fillStyle = '#bdbdbd';
-        tc.fillRect(x * TILE + 1, y * TILE + 1, 1, 5);
-        tc.fillRect(x * TILE + 5, y * TILE + 2, 1, 4);
-        tc.fillRect(x * TILE + 1, y * TILE + 1, 5, 1);
+        tc.fillRect(tx + 1*s, ty + 1*s, 1*s, 5*s);
+        tc.fillRect(tx + 5*s, ty + 2*s, 1*s, 4*s);
+        tc.fillRect(tx + 1*s, ty + 1*s, 5*s, 1*s);
       }
 
       // Grid lines (subtle)
@@ -276,13 +272,14 @@ function prerenderTerrain() {
     }
   }
 
-  // Resource tile overlays (yellow dots)
+  // Resource tile overlays (yellow dots, scaled)
+  const rs = TILE / 8;
   for (const key of resourceTiles) {
     const [rx, ry] = key.split(',').map(Number);
     tc.fillStyle = '#fdd835';
-    tc.fillRect(rx * TILE + 3, ry * TILE + 3, 2, 2);
+    tc.fillRect(rx * TILE + 3*rs, ry * TILE + 3*rs, 2*rs, 2*rs);
     tc.fillStyle = 'rgba(253,216,53,0.3)';
-    tc.fillRect(rx * TILE + 2, ry * TILE + 2, 4, 4);
+    tc.fillRect(rx * TILE + 2*rs, ry * TILE + 2*rs, 4*rs, 4*rs);
   }
 }
 
@@ -293,26 +290,26 @@ function drawBot(bot, bx, by) {
   const alive = bot.alive !== false;
   const px = bx * TILE + TILE / 2;
   const py = by * TILE + TILE / 2;
+  const s = TILE / 8; // scale factor
 
   // Selection ring
   if (isSelected) {
     const pulse = Math.sin(frame * 0.08) * 0.3 + 0.7;
     cx.strokeStyle = `rgba(255,255,255,${pulse})`;
-    cx.lineWidth = 1;
+    cx.lineWidth = s;
     cx.beginPath();
-    cx.arc(px, py, 6, 0, Math.PI * 2);
+    cx.arc(px, py, 6*s, 0, Math.PI * 2);
     cx.stroke();
   }
 
   if (!alive) {
-    // Dead bot: X marker
     cx.strokeStyle = '#555';
-    cx.lineWidth = 1;
+    cx.lineWidth = s;
     cx.beginPath();
-    cx.moveTo(px - 3, py - 3);
-    cx.lineTo(px + 3, py + 3);
-    cx.moveTo(px + 3, py - 3);
-    cx.lineTo(px - 3, py + 3);
+    cx.moveTo(px - 3*s, py - 3*s);
+    cx.lineTo(px + 3*s, py + 3*s);
+    cx.moveTo(px + 3*s, py - 3*s);
+    cx.lineTo(px - 3*s, py + 3*s);
     cx.stroke();
     return;
   }
@@ -320,30 +317,30 @@ function drawBot(bot, bx, by) {
   // Shadow
   cx.fillStyle = 'rgba(0,0,0,0.3)';
   cx.beginPath();
-  cx.ellipse(px, py + 4, 3, 1.5, 0, 0, Math.PI * 2);
+  cx.ellipse(px, py + 4*s, 3*s, 1.5*s, 0, 0, Math.PI * 2);
   cx.fill();
 
   // Body circle
   cx.fillStyle = color;
   cx.beginPath();
-  cx.arc(px, py, 3, 0, Math.PI * 2);
+  cx.arc(px, py, 3*s, 0, Math.PI * 2);
   cx.fill();
 
   // Outline
   cx.strokeStyle = 'rgba(0,0,0,0.4)';
-  cx.lineWidth = 0.5;
+  cx.lineWidth = 0.5*s;
   cx.beginPath();
-  cx.arc(px, py, 3, 0, Math.PI * 2);
+  cx.arc(px, py, 3*s, 0, Math.PI * 2);
   cx.stroke();
 
   // HP indicator (small bar above)
   if (bot.health !== undefined) {
     const maxHp = bot.maxHealth || 100;
     const hpRatio = Math.max(0, bot.health / maxHp);
-    const barW = 8;
-    const barH = 1;
+    const barW = TILE;
+    const barH = Math.max(1, s);
     const barX = px - barW / 2;
-    const barY = py - 6;
+    const barY = py - 6*s;
     cx.fillStyle = '#333';
     cx.fillRect(barX, barY, barW, barH);
     cx.fillStyle = hpRatio > 0.5 ? '#4caf50' : hpRatio > 0.25 ? '#ff9800' : '#f44336';
@@ -352,13 +349,14 @@ function drawBot(bot, bx, by) {
 
   // Name label
   const name = bot.displayName || bot._id;
-  cx.font = '5px Courier New';
+  const fontSize = Math.max(5, Math.round(5*s));
+  cx.font = fontSize + 'px Courier New';
   cx.textAlign = 'center';
   const tw = cx.measureText(name).width;
   cx.fillStyle = 'rgba(0,0,0,0.6)';
-  cx.fillRect(px - tw / 2 - 1, py + 5, tw + 2, 7);
+  cx.fillRect(px - tw / 2 - 1, py + 5*s, tw + 2, fontSize + 2);
   cx.fillStyle = isSelected ? '#fff' : '#ccc';
-  cx.fillText(name, px, py + 11);
+  cx.fillText(name, px, py + 5*s + fontSize);
   cx.textAlign = 'left';
 }
 
@@ -429,8 +427,9 @@ function render() {
           if (sx > -TILE && sx < CW && sy > -TILE && sy < CH) {
             if ((frame + x * 3 + y * 7) % 30 < 8) {
               cx.fillStyle = 'rgba(255,255,255,0.08)';
-              const ox = (frame + x * 5) % 6;
-              cx.fillRect(sx + ox, sy + 3, 2, 1);
+              const ws = TILE / 8;
+              const ox = (frame + x * 5) % Math.ceil(6 * ws);
+              cx.fillRect(sx + ox, sy + 3 * ws, Math.max(1, 2 * ws), Math.max(1, ws));
             }
           }
         }
@@ -741,6 +740,14 @@ function processInit(d) {
   if (d.world) {
     worldW = d.world.width || GRID_W;
     worldH = d.world.height || GRID_H;
+    GRID_W = worldW;
+    GRID_H = worldH;
+    TILE = Math.max(4, Math.floor(512 / Math.max(GRID_W, GRID_H)));
+    CW = GRID_W * TILE;
+    CH = GRID_H * TILE;
+    cv.width = CW;
+    cv.height = CH;
+    resize();
   }
 
   // Parse terrain
@@ -1045,7 +1052,7 @@ function connect() {
 
 // ========== KEYBOARD CONTROLS ==========
 document.addEventListener('keydown', (e) => {
-  const step = 16;
+  const step = TILE * 2;
   switch (e.key) {
     case 'ArrowUp':
     case 'w':
