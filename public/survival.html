@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Survival Grid</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;background:#0c0c0c;font-family:'Courier New',monospace;color:#c8c8c8}
+#app{display:flex;flex-direction:column;height:100vh}
+#main{flex:1;display:flex;flex-direction:row;min-height:0}
+
+/* Canvas area */
+#map-area{flex:1;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;background:#111}
+canvas{image-rendering:pixelated;image-rendering:crisp-edges;cursor:crosshair}
+#auth{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.85);color:#777;font:14px 'Courier New',monospace;z-index:20;text-align:center}
+#auth a{color:#4a9}
+
+/* Right panel */
+#panel{width:300px;flex-shrink:0;display:flex;flex-direction:column;background:#0a0a0a;border-left:1px solid #1a1a1a}
+#bot-info{flex-shrink:0;padding:10px 12px;border-bottom:1px solid #1a1a1a;min-height:120px}
+#bot-info h3{font-size:13px;color:#4a9;margin-bottom:6px;font-weight:700}
+#bot-info .stat{font-size:11px;line-height:1.7;color:#999}
+#bot-info .stat .label{color:#666;display:inline-block;width:70px}
+#bot-info .stat .val{color:#c8c8c8}
+#bot-info .stat .val.hp-high{color:#4caf50}
+#bot-info .stat .val.hp-mid{color:#ff9800}
+#bot-info .stat .val.hp-low{color:#f44336}
+#bot-info .stat .val.dead{color:#555;text-decoration:line-through}
+#bot-info .no-sel{color:#444;font-style:italic;font-size:11px}
+#bot-list{padding:8px 12px;border-bottom:1px solid #1a1a1a;flex-shrink:0;max-height:140px;overflow-y:auto}
+#bot-list h4{font-size:11px;color:#555;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px}
+.bl-entry{font-size:11px;padding:2px 4px;cursor:pointer;border-radius:2px;display:flex;align-items:center;gap:6px}
+.bl-entry:hover{background:#1a1a1a}
+.bl-entry.selected{background:#1a2a1a}
+.bl-entry .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.bl-entry .bname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bl-entry .bhp{color:#666;font-size:10px}
+.bl-entry.dead-entry{opacity:.4;text-decoration:line-through}
+
+/* Event log */
+#log-wrap{flex:1;display:flex;flex-direction:column;min-height:0}
+#log-header{padding:6px 12px;font-size:11px;color:#555;border-bottom:1px solid #1a1a1a;text-transform:uppercase;letter-spacing:1px;flex-shrink:0}
+#log{flex:1;overflow-y:auto;padding:6px 10px}
+.le{font-size:11px;line-height:1.5;color:#777;word-wrap:break-word}
+.le .ts{color:#444}
+.le .bot{color:#4a9;font-weight:600}
+.le .act{color:#da5}
+.le .dmg{color:#e55}
+.le .heal{color:#4caf50}
+.le .item{color:#7af}
+.le .move{color:#888}
+.le .die{color:#f44336;font-weight:700}
+.le .env{color:#9e9e9e;font-style:italic}
+
+/* Bottom bar */
+#bar{height:28px;background:#0d0d0d;border-top:1px solid #1a1a1a;display:flex;align-items:center;padding:0 14px;font-size:11px;color:#555;gap:16px;flex-shrink:0}
+#bar .lbl{color:#4a9;font-weight:700}
+#bar .phase-day{color:#ff9800}
+#bar .phase-night{color:#5c6bc0}
+#bar .phase-dawn{color:#ef6c00}
+#bar .phase-dusk{color:#7e57c2}
+.st-run{color:#4a9}.st-off{color:#a44}
+#controls{margin-left:auto;display:flex;gap:10px;align-items:center}
+#controls label{font-size:10px;color:#555;cursor:pointer;user-select:none}
+#controls input[type=checkbox]{margin-right:3px}
+
+/* Tooltip */
+#tooltip{position:absolute;background:rgba(10,10,10,.92);border:1px solid #2a2a2a;color:#bbb;font:11px/1.4 'Courier New',monospace;padding:4px 8px;pointer-events:none;z-index:15;display:none;max-width:200px;border-radius:2px}
+
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:#0a0a0a}
+::-webkit-scrollbar-thumb{background:#222;border-radius:2px}
+
+@media(max-width:700px){
+  #main{flex-direction:column}
+  #panel{width:100%;height:45vh;border-left:0;border-top:1px solid #1a1a1a}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="main">
+    <div id="map-area">
+      <canvas id="c"></canvas>
+      <div id="tooltip"></div>
+      <div id="auth">Log in via any <a href="/admin/">bot admin page</a> first, then return here.</div>
+    </div>
+    <div id="panel">
+      <div id="bot-info">
+        <h3>Selected Bot</h3>
+        <div class="no-sel">Click a bot on the map or list to inspect</div>
+      </div>
+      <div id="bot-list">
+        <h4>Bots</h4>
+      </div>
+      <div id="log-wrap">
+        <div id="log-header">Event Log</div>
+        <div id="log"></div>
+      </div>
+    </div>
+  </div>
+  <div id="bar">
+    <span class="lbl">Survival</span>
+    <span id="tick-info">&mdash;</span>
+    <span id="phase-info"></span>
+    <span id="bot-count"></span>
+    <span id="countdown"></span>
+    <span id="status" class="st-off">Connecting</span>
+    <div id="controls">
+      <label><input type="checkbox" id="follow-toggle" checked> Auto-follow</label>
+    </div>
+  </div>
+</div>
+<script>
+(() => {
+// ========== CONSTANTS ==========
+const GRID_W = 64, GRID_H = 64;
+const TILE = 8;
+const CW = GRID_W * TILE; // 512
+const CH = GRID_H * TILE; // 512
+
+const TERRAIN_COLORS = {
+  '.': '#9ccc65', // plains
+  'T': '#388e3c', // forest
+  '^': '#795548', // mountain
+  '~': '#42a5f5', // water
+  'O': '#616161', // cave
+  '#': '#9e9e9e', // ruins
+};
+
+const TERRAIN_NAMES = {
+  '.': 'Plains', 'T': 'Forest', '^': 'Mountain',
+  '~': 'Water', 'O': 'Cave', '#': 'Ruins',
+};
+
+const PHASE_TINTS = {
+  'day':     { r:0,   g:0,   b:0,   a:0    },
+  'dawn':    { r:50,  g:30,  b:10,  a:0.10 },
+  'morning': { r:40,  g:30,  b:10,  a:0.06 },
+  'dusk':    { r:40,  g:20,  b:50,  a:0.15 },
+  'evening': { r:30,  g:15,  b:50,  a:0.20 },
+  'night':   { r:10,  g:10,  b:40,  a:0.35 },
+};
+
+const BOT_COLORS = [
+  '#e74c3c','#3498db','#2ecc71','#f1c40f','#9b59b6',
+  '#1abc9c','#e67e22','#e91e63','#00bcd4','#8bc34a',
+  '#ff5722','#607d8b','#cddc39','#ff7043','#26c6da',
+  '#ab47bc',
+];
+
+// ========== CANVAS SETUP ==========
+const cv = document.getElementById('c');
+const cx = cv.getContext('2d');
+cv.width = CW;
+cv.height = CH;
+cx.imageSmoothingEnabled = false;
+
+function resize() {
+  const wrap = document.getElementById('map-area');
+  const scale = Math.min(wrap.clientWidth / CW, wrap.clientHeight / CH, 2);
+  cv.style.width = (CW * scale) + 'px';
+  cv.style.height = (CH * scale) + 'px';
+}
+addEventListener('resize', resize);
+resize();
+
+// ========== STATE ==========
+let terrain = '';
+let worldW = GRID_W, worldH = GRID_H;
+let bots = {};
+let tick = 0;
+let dayPhase = '';
+let online = false;
+let selectedBot = null;
+let autoFollow = true;
+let cameraX = 0, cameraY = 0;
+let colorIndex = 0;
+let botColorMap = {};
+let frame = 0;
+let nextTickAt = 0;
+let tickIntervalMs = 60000;
+let terrainCanvas = null;
+let resourceTiles = new Set();
+let dragging = false;
+let dragStartX = 0, dragStartY = 0;
+let dragCamStartX = 0, dragCamStartY = 0;
+
+// ========== HELPERS ==========
+function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function hm() {
+  return new Date().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
+}
+
+function getBotColor(botId) {
+  if (!botColorMap[botId]) {
+    botColorMap[botId] = BOT_COLORS[colorIndex % BOT_COLORS.length];
+    colorIndex++;
+  }
+  return botColorMap[botId];
+}
+
+function terrainAt(x, y) {
+  if (x < 0 || x >= worldW || y < 0 || y >= worldH) return '.';
+  return terrain[y * worldW + x] || '.';
+}
+
+// ========== TERRAIN RENDERING ==========
+function prerenderTerrain() {
+  if (!terrain) return;
+  terrainCanvas = document.createElement('canvas');
+  terrainCanvas.width = CW;
+  terrainCanvas.height = CH;
+  const tc = terrainCanvas.getContext('2d');
+
+  for (let y = 0; y < worldH; y++) {
+    for (let x = 0; x < worldW; x++) {
+      const ch = terrainAt(x, y);
+      const base = TERRAIN_COLORS[ch] || '#9ccc65';
+      tc.fillStyle = base;
+      tc.fillRect(x * TILE, y * TILE, TILE, TILE);
+
+      // Add texture variation
+      const hash = (x * 7 + y * 13) % 17;
+      if (hash < 4) {
+        tc.fillStyle = 'rgba(0,0,0,0.06)';
+        tc.fillRect(x * TILE, y * TILE, TILE, TILE);
+      } else if (hash < 6) {
+        tc.fillStyle = 'rgba(255,255,255,0.04)';
+        tc.fillRect(x * TILE, y * TILE, TILE, TILE);
+      }
+
+      // Terrain-specific detail
+      if (ch === 'T') {
+        // Tree detail: small darker patch
+        tc.fillStyle = 'rgba(0,0,0,0.15)';
+        tc.fillRect(x * TILE + 2, y * TILE + 1, 4, 5);
+        tc.fillStyle = '#2e7d32';
+        tc.fillRect(x * TILE + 3, y * TILE + 2, 3, 3);
+        // Trunk
+        tc.fillStyle = '#5d4037';
+        tc.fillRect(x * TILE + 4, y * TILE + 5, 1, 2);
+      } else if (ch === '^') {
+        // Mountain peak
+        tc.fillStyle = '#8d6e63';
+        tc.fillRect(x * TILE + 2, y * TILE + 1, 4, 3);
+        tc.fillStyle = '#bcaaa4';
+        tc.fillRect(x * TILE + 3, y * TILE, 2, 2);
+      } else if (ch === '~') {
+        // Water shimmer lines
+        tc.fillStyle = 'rgba(255,255,255,0.12)';
+        const wy = (x + y) % 3;
+        tc.fillRect(x * TILE + 1, y * TILE + wy * 2 + 1, 4, 1);
+      } else if (ch === 'O') {
+        // Cave opening
+        tc.fillStyle = '#424242';
+        tc.fillRect(x * TILE + 1, y * TILE + 1, 6, 6);
+        tc.fillStyle = '#333';
+        tc.fillRect(x * TILE + 2, y * TILE + 2, 4, 4);
+      } else if (ch === '#') {
+        // Ruins structure lines
+        tc.fillStyle = '#bdbdbd';
+        tc.fillRect(x * TILE + 1, y * TILE + 1, 1, 5);
+        tc.fillRect(x * TILE + 5, y * TILE + 2, 1, 4);
+        tc.fillRect(x * TILE + 1, y * TILE + 1, 5, 1);
+      }
+
+      // Grid lines (subtle)
+      tc.fillStyle = 'rgba(0,0,0,0.08)';
+      tc.fillRect(x * TILE, y * TILE, TILE, 1);
+      tc.fillRect(x * TILE, y * TILE, 1, TILE);
+    }
+  }
+
+  // Resource tile overlays (yellow dots)
+  for (const key of resourceTiles) {
+    const [rx, ry] = key.split(',').map(Number);
+    tc.fillStyle = '#fdd835';
+    tc.fillRect(rx * TILE + 3, ry * TILE + 3, 2, 2);
+    tc.fillStyle = 'rgba(253,216,53,0.3)';
+    tc.fillRect(rx * TILE + 2, ry * TILE + 2, 4, 4);
+  }
+}
+
+// ========== BOT RENDERING ==========
+function drawBot(bot, bx, by) {
+  const color = getBotColor(bot._id);
+  const isSelected = selectedBot === bot._id;
+  const alive = bot.alive !== false;
+  const px = bx * TILE + TILE / 2;
+  const py = by * TILE + TILE / 2;
+
+  // Selection ring
+  if (isSelected) {
+    const pulse = Math.sin(frame * 0.08) * 0.3 + 0.7;
+    cx.strokeStyle = `rgba(255,255,255,${pulse})`;
+    cx.lineWidth = 1;
+    cx.beginPath();
+    cx.arc(px, py, 6, 0, Math.PI * 2);
+    cx.stroke();
+  }
+
+  if (!alive) {
+    // Dead bot: X marker
+    cx.strokeStyle = '#555';
+    cx.lineWidth = 1;
+    cx.beginPath();
+    cx.moveTo(px - 3, py - 3);
+    cx.lineTo(px + 3, py + 3);
+    cx.moveTo(px + 3, py - 3);
+    cx.lineTo(px - 3, py + 3);
+    cx.stroke();
+    return;
+  }
+
+  // Shadow
+  cx.fillStyle = 'rgba(0,0,0,0.3)';
+  cx.beginPath();
+  cx.ellipse(px, py + 4, 3, 1.5, 0, 0, Math.PI * 2);
+  cx.fill();
+
+  // Body circle
+  cx.fillStyle = color;
+  cx.beginPath();
+  cx.arc(px, py, 3, 0, Math.PI * 2);
+  cx.fill();
+
+  // Outline
+  cx.strokeStyle = 'rgba(0,0,0,0.4)';
+  cx.lineWidth = 0.5;
+  cx.beginPath();
+  cx.arc(px, py, 3, 0, Math.PI * 2);
+  cx.stroke();
+
+  // HP indicator (small bar above)
+  if (bot.health !== undefined) {
+    const maxHp = bot.maxHealth || 100;
+    const hpRatio = Math.max(0, bot.health / maxHp);
+    const barW = 8;
+    const barH = 1;
+    const barX = px - barW / 2;
+    const barY = py - 6;
+    cx.fillStyle = '#333';
+    cx.fillRect(barX, barY, barW, barH);
+    cx.fillStyle = hpRatio > 0.5 ? '#4caf50' : hpRatio > 0.25 ? '#ff9800' : '#f44336';
+    cx.fillRect(barX, barY, barW * hpRatio, barH);
+  }
+
+  // Name label
+  const name = bot.displayName || bot._id;
+  cx.font = '5px Courier New';
+  cx.textAlign = 'center';
+  const tw = cx.measureText(name).width;
+  cx.fillStyle = 'rgba(0,0,0,0.6)';
+  cx.fillRect(px - tw / 2 - 1, py + 5, tw + 2, 7);
+  cx.fillStyle = isSelected ? '#fff' : '#ccc';
+  cx.fillText(name, px, py + 11);
+  cx.textAlign = 'left';
+}
+
+// ========== DAY/NIGHT TINT ==========
+function applyDayNightTint() {
+  const p = (dayPhase || 'day').toLowerCase();
+  let tint = PHASE_TINTS[p];
+  if (!tint) {
+    // Try partial match
+    for (const [key, val] of Object.entries(PHASE_TINTS)) {
+      if (p.includes(key)) { tint = val; break; }
+    }
+  }
+  if (!tint || tint.a === 0) return;
+  cx.fillStyle = `rgba(${tint.r},${tint.g},${tint.b},${tint.a})`;
+  cx.fillRect(0, 0, CW, CH);
+}
+
+// ========== CAMERA ==========
+function updateCamera() {
+  if (!autoFollow || !selectedBot || !bots[selectedBot]) return;
+  const bot = bots[selectedBot];
+  // Camera target: center on bot
+  cameraX = bot.x * TILE + TILE / 2 - CW / 2;
+  cameraY = bot.y * TILE + TILE / 2 - CH / 2;
+  clampCamera();
+}
+
+function clampCamera() {
+  const maxX = worldW * TILE - CW;
+  const maxY = worldH * TILE - CH;
+  cameraX = Math.max(0, Math.min(cameraX, maxX));
+  cameraY = Math.max(0, Math.min(cameraY, maxY));
+}
+
+// ========== MAIN RENDER LOOP ==========
+function render() {
+  frame++;
+  cx.imageSmoothingEnabled = false;
+
+  // Clear
+  cx.fillStyle = '#111';
+  cx.fillRect(0, 0, CW, CH);
+
+  // Draw terrain
+  if (terrainCanvas) {
+    cx.drawImage(terrainCanvas, -cameraX, -cameraY);
+  }
+
+  // Draw bots sorted by y for z-order
+  const sortedBots = Object.values(bots).sort((a, b) => a.y - b.y);
+  for (const bot of sortedBots) {
+    const sx = bot.x * TILE - cameraX;
+    const sy = bot.y * TILE - cameraY;
+    // Only draw if on screen
+    if (sx > -TILE * 2 && sx < CW + TILE && sy > -TILE * 2 && sy < CH + TILE) {
+      drawBot(bot, bot.x - cameraX / TILE, bot.y - cameraY / TILE);
+    }
+  }
+
+  // Animated water shimmer
+  if (terrainCanvas) {
+    for (let y = 0; y < worldH; y++) {
+      for (let x = 0; x < worldW; x++) {
+        if (terrainAt(x, y) === '~') {
+          const sx = x * TILE - cameraX;
+          const sy = y * TILE - cameraY;
+          if (sx > -TILE && sx < CW && sy > -TILE && sy < CH) {
+            if ((frame + x * 3 + y * 7) % 30 < 8) {
+              cx.fillStyle = 'rgba(255,255,255,0.08)';
+              const ox = (frame + x * 5) % 6;
+              cx.fillRect(sx + ox, sy + 3, 2, 1);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Day/night tint
+  applyDayNightTint();
+
+  updateCamera();
+  requestAnimationFrame(render);
+}
+
+// ========== UI: BOT INFO PANEL ==========
+function renderBotInfo() {
+  const el = document.getElementById('bot-info');
+  if (!selectedBot || !bots[selectedBot]) {
+    el.innerHTML = '<h3>Selected Bot</h3><div class="no-sel">Click a bot on the map or list to inspect</div>';
+    return;
+  }
+  const bot = bots[selectedBot];
+  const alive = bot.alive !== false;
+  const maxHp = bot.maxHealth || 100;
+  const hpClass = !alive ? 'dead' : bot.health > maxHp * 0.5 ? 'hp-high' : bot.health > maxHp * 0.25 ? 'hp-mid' : 'hp-low';
+  const color = getBotColor(bot._id);
+
+  let html = `<h3 style="color:${color}">${esc(bot.displayName || bot._id)}</h3>`;
+  html += `<div class="stat"><span class="label">Status:</span> <span class="val ${alive ? '' : 'dead'}">${alive ? 'Alive' : 'Dead'}</span></div>`;
+  html += `<div class="stat"><span class="label">HP:</span> <span class="val ${hpClass}">${bot.health !== undefined ? bot.health : '?'}/${maxHp}</span></div>`;
+  html += `<div class="stat"><span class="label">Hunger:</span> <span class="val">${bot.hunger !== undefined ? bot.hunger : '?'}</span></div>`;
+  html += `<div class="stat"><span class="label">Position:</span> <span class="val">(${bot.x}, ${bot.y})</span></div>`;
+
+  const tChar = terrainAt(bot.x, bot.y);
+  const tName = TERRAIN_NAMES[tChar] || 'Unknown';
+  html += `<div class="stat"><span class="label">Terrain:</span> <span class="val">${esc(tName)}</span></div>`;
+
+  if (bot.equipment) {
+    const items = [];
+    if (bot.equipment.weapon) items.push('Wpn: ' + bot.equipment.weapon);
+    if (bot.equipment.armor) items.push('Arm: ' + bot.equipment.armor);
+    if (bot.equipment.tool) items.push('Tool: ' + bot.equipment.tool);
+    if (items.length) {
+      html += `<div class="stat"><span class="label">Equip:</span> <span class="val item">${esc(items.join(', '))}</span></div>`;
+    }
+  }
+
+  if (bot.inventory && bot.inventory.length) {
+    html += `<div class="stat"><span class="label">Items:</span> <span class="val">${esc(bot.inventory.join(', '))}</span></div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+// ========== UI: BOT LIST ==========
+function renderBotList() {
+  const el = document.getElementById('bot-list');
+  const sorted = Object.values(bots).sort((a, b) => {
+    // Alive first, then by name
+    if ((a.alive !== false) !== (b.alive !== false)) return (a.alive !== false) ? -1 : 1;
+    return (a.displayName || a._id).localeCompare(b.displayName || b._id);
+  });
+
+  let html = '<h4>Bots (' + sorted.length + ')</h4>';
+  for (const bot of sorted) {
+    const alive = bot.alive !== false;
+    const color = getBotColor(bot._id);
+    const sel = selectedBot === bot._id ? ' selected' : '';
+    const deadCls = alive ? '' : ' dead-entry';
+    const maxHp = bot.maxHealth || 100;
+    html += `<div class="bl-entry${sel}${deadCls}" data-bot="${esc(bot._id)}">`;
+    html += `<span class="dot" style="background:${color}"></span>`;
+    html += `<span class="bname">${esc(bot.displayName || bot._id)}</span>`;
+    html += `<span class="bhp">${alive ? bot.health + '/' + maxHp : 'DEAD'}</span>`;
+    html += '</div>';
+  }
+  el.innerHTML = html;
+
+  // Click handlers
+  el.querySelectorAll('.bl-entry').forEach(entry => {
+    entry.addEventListener('click', () => {
+      selectedBot = entry.dataset.bot;
+      autoFollow = document.getElementById('follow-toggle').checked;
+      renderBotInfo();
+      renderBotList();
+    });
+  });
+}
+
+// ========== UI: EVENT LOG ==========
+function addLog(html) {
+  const el = document.getElementById('log');
+  const div = document.createElement('div');
+  div.className = 'le';
+  div.innerHTML = html;
+  el.appendChild(div);
+
+  // Auto-scroll if near bottom
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+  if (atBottom) el.scrollTop = el.scrollHeight;
+
+  // Limit log entries
+  while (el.children.length > 400) {
+    el.firstChild.remove();
+  }
+}
+
+function formatSurvivalEvent(d) {
+  const ts = `<span class="ts">[${hm()}]</span>`;
+  const name = d.displayName || d.bot || '?';
+  const bn = `<span class="bot">${esc(name)}</span>`;
+  const action = d.action || '';
+
+  switch (action) {
+    case 'move':
+      return `${ts} ${bn} <span class="move">moved to (${d.x},${d.y})</span>`;
+    case 'gather':
+      return `${ts} ${bn} <span class="act">gathered</span> <span class="item">${esc(d.resource || d.item || '???')}</span>`;
+    case 'craft':
+      return `${ts} ${bn} <span class="act">crafted</span> <span class="item">${esc(d.item || '???')}</span>`;
+    case 'eat':
+      return `${ts} ${bn} <span class="heal">ate</span> <span class="item">${esc(d.item || 'food')}</span>${d.restored ? ' (+' + d.restored + ' hunger)' : ''}`;
+    case 'attack':
+      return `${ts} ${bn} <span class="dmg">attacked</span> <span class="bot">${esc(d.target || '?')}</span>${d.damage ? ' for ' + d.damage + ' dmg' : ''}`;
+    case 'defend':
+      return `${ts} ${bn} <span class="act">defended</span>${d.blocked ? ' (blocked ' + d.blocked + ')' : ''}`;
+    case 'rest':
+      return `${ts} ${bn} <span class="heal">rested</span>${d.restored ? ' (+' + d.restored + ' HP)' : ''}`;
+    case 'build':
+      return `${ts} ${bn} <span class="act">built</span> <span class="item">${esc(d.structure || d.item || '???')}</span>`;
+    case 'equip':
+      return `${ts} ${bn} <span class="act">equipped</span> <span class="item">${esc(d.item || '???')}</span>`;
+    case 'drop':
+      return `${ts} ${bn} <span class="move">dropped</span> <span class="item">${esc(d.item || '???')}</span>`;
+    case 'pickup':
+      return `${ts} ${bn} <span class="act">picked up</span> <span class="item">${esc(d.item || '???')}</span>`;
+    case 'die':
+      return `${ts} ${bn} <span class="die">has died!</span>${d.cause ? ' (' + esc(d.cause) + ')' : ''}`;
+    case 'respawn':
+      return `${ts} ${bn} <span class="heal">respawned</span> at (${d.x},${d.y})`;
+    case 'damage':
+      return `${ts} ${bn} <span class="dmg">took ${d.damage || '?'} damage</span>${d.source ? ' from ' + esc(d.source) : ''}`;
+    case 'heal':
+      return `${ts} ${bn} <span class="heal">healed for ${d.amount || '?'} HP</span>`;
+    case 'explore':
+      return `${ts} ${bn} <span class="act">explored</span> the area`;
+    case 'interact':
+      return `${ts} ${bn} <span class="act">interacted with</span> <span class="item">${esc(d.target || '???')}</span>`;
+    case 'say':
+      return `${ts} ${bn}: <span class="env">"${esc(d.message || '')}"</span>`;
+    default:
+      return `${ts} ${bn} <span class="act">${esc(action)}</span>${d.detail ? ' - ' + esc(d.detail) : ''}`;
+  }
+}
+
+// ========== UI: BOTTOM BAR ==========
+function updateBar() {
+  const tickEl = document.getElementById('tick-info');
+  const phaseEl = document.getElementById('phase-info');
+  const countEl = document.getElementById('bot-count');
+  const cdEl = document.getElementById('countdown');
+  const stEl = document.getElementById('status');
+
+  tickEl.textContent = tick > 0 ? 'Tick ' + tick : '--';
+
+  if (dayPhase) {
+    const p = dayPhase.toLowerCase();
+    let cls = 'phase-day';
+    if (p.includes('night')) cls = 'phase-night';
+    else if (p.includes('dawn') || p.includes('morning')) cls = 'phase-dawn';
+    else if (p.includes('dusk') || p.includes('evening')) cls = 'phase-dusk';
+    phaseEl.innerHTML = `<span class="${cls}">${esc(dayPhase)}</span>`;
+  } else {
+    phaseEl.textContent = '';
+  }
+
+  const alive = Object.values(bots).filter(b => b.alive !== false).length;
+  const total = Object.keys(bots).length;
+  countEl.textContent = `Bots: ${alive}/${total}`;
+
+  if (nextTickAt) {
+    const remaining = Math.max(0, Math.ceil((nextTickAt - Date.now()) / 1000));
+    cdEl.textContent = 'Next: ' + remaining + 's';
+  } else {
+    cdEl.textContent = '';
+  }
+
+  if (online) {
+    stEl.textContent = 'Connected';
+    stEl.className = 'st-run';
+  } else {
+    stEl.textContent = 'Disconnected';
+    stEl.className = 'st-off';
+  }
+}
+
+// ========== MOUSE INTERACTION ==========
+function canvasToGrid(clientX, clientY) {
+  const rect = cv.getBoundingClientRect();
+  const scaleX = CW / rect.width;
+  const scaleY = CH / rect.height;
+  const cx = (clientX - rect.left) * scaleX + cameraX;
+  const cy = (clientY - rect.top) * scaleY + cameraY;
+  return {
+    gx: Math.floor(cx / TILE),
+    gy: Math.floor(cy / TILE),
+    px: cx,
+    py: cy,
+  };
+}
+
+function findBotAt(gx, gy) {
+  // Find bot within 1 tile of click
+  let closest = null;
+  let closestDist = 3;
+  for (const bot of Object.values(bots)) {
+    const dx = bot.x - gx;
+    const dy = bot.y - gy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < closestDist) {
+      closestDist = dist;
+      closest = bot;
+    }
+  }
+  return closest;
+}
+
+cv.addEventListener('mousedown', (e) => {
+  if (e.button === 0) {
+    dragging = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    dragCamStartX = cameraX;
+    dragCamStartY = cameraY;
+  }
+});
+
+cv.addEventListener('mousemove', (e) => {
+  if (dragging) {
+    const rect = cv.getBoundingClientRect();
+    const scaleX = CW / rect.width;
+    const scaleY = CH / rect.height;
+    const dx = (e.clientX - dragStartX) * scaleX;
+    const dy = (e.clientY - dragStartY) * scaleY;
+    cameraX = dragCamStartX - dx;
+    cameraY = dragCamStartY - dy;
+    clampCamera();
+    // Disable auto-follow while dragging
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+      autoFollow = false;
+      document.getElementById('follow-toggle').checked = false;
+    }
+  }
+
+  // Tooltip
+  const pos = canvasToGrid(e.clientX, e.clientY);
+  const tooltip = document.getElementById('tooltip');
+  if (pos.gx >= 0 && pos.gx < worldW && pos.gy >= 0 && pos.gy < worldH) {
+    const tChar = terrainAt(pos.gx, pos.gy);
+    const tName = TERRAIN_NAMES[tChar] || 'Unknown';
+    const bot = findBotAt(pos.gx, pos.gy);
+    let text = `(${pos.gx},${pos.gy}) ${tName}`;
+    if (resourceTiles.has(pos.gx + ',' + pos.gy)) text += ' [Resource]';
+    if (bot) text += `\n${bot.displayName || bot._id} HP:${bot.health}`;
+    tooltip.textContent = text;
+    tooltip.style.display = 'block';
+    tooltip.style.left = (e.clientX - document.getElementById('map-area').getBoundingClientRect().left + 12) + 'px';
+    tooltip.style.top = (e.clientY - document.getElementById('map-area').getBoundingClientRect().top - 10) + 'px';
+  } else {
+    tooltip.style.display = 'none';
+  }
+});
+
+cv.addEventListener('mouseup', (e) => {
+  if (dragging) {
+    const dx = Math.abs(e.clientX - dragStartX);
+    const dy = Math.abs(e.clientY - dragStartY);
+    // Only treat as click if minimal movement
+    if (dx < 4 && dy < 4) {
+      const pos = canvasToGrid(e.clientX, e.clientY);
+      const bot = findBotAt(pos.gx, pos.gy);
+      if (bot) {
+        selectedBot = bot._id;
+        autoFollow = document.getElementById('follow-toggle').checked;
+      } else {
+        selectedBot = null;
+      }
+      renderBotInfo();
+      renderBotList();
+    }
+    dragging = false;
+  }
+});
+
+cv.addEventListener('mouseleave', () => {
+  dragging = false;
+  document.getElementById('tooltip').style.display = 'none';
+});
+
+document.getElementById('follow-toggle').addEventListener('change', (e) => {
+  autoFollow = e.target.checked;
+});
+
+// ========== PROCESS INIT ==========
+function processInit(d) {
+  tick = d.tick || 0;
+  dayPhase = d.dayPhase || d.phase || '';
+  if (d.world) {
+    worldW = d.world.width || GRID_W;
+    worldH = d.world.height || GRID_H;
+  }
+
+  // Parse terrain
+  if (d.terrain) {
+    terrain = d.terrain;
+    prerenderTerrain();
+  }
+
+  // Parse resource tiles
+  if (d.resources) {
+    resourceTiles.clear();
+    for (const r of d.resources) {
+      if (r.x !== undefined && r.y !== undefined) {
+        resourceTiles.add(r.x + ',' + r.y);
+      }
+    }
+    // Re-render terrain with resource markers
+    if (terrain) prerenderTerrain();
+  }
+
+  // Parse bots
+  if (d.bots) {
+    bots = {};
+    if (Array.isArray(d.bots)) {
+      for (const b of d.bots) {
+        const id = b.name || b.id || b.bot;
+        if (!id) continue;
+        bots[id] = {
+          _id: id,
+          x: b.x || 0,
+          y: b.y || 0,
+          health: b.health !== undefined ? b.health : 100,
+          maxHealth: b.maxHealth || 100,
+          hunger: b.hunger !== undefined ? b.hunger : 0,
+          alive: b.alive !== false,
+          displayName: b.displayName || id,
+          equipment: b.equipment || {},
+          inventory: b.inventory || [],
+        };
+      }
+    } else {
+      // Object form: { botId: {x,y,health,...} }
+      for (const [id, b] of Object.entries(d.bots)) {
+        bots[id] = {
+          _id: id,
+          x: b.x || 0,
+          y: b.y || 0,
+          health: b.health !== undefined ? b.health : 100,
+          maxHealth: b.maxHealth || 100,
+          hunger: b.hunger !== undefined ? b.hunger : 0,
+          alive: b.alive !== false,
+          displayName: b.displayName || id,
+          equipment: b.equipment || {},
+          inventory: b.inventory || [],
+        };
+      }
+    }
+  }
+
+  // Process recent events for the log
+  if (d.recentEvents && Array.isArray(d.recentEvents)) {
+    for (const ev of d.recentEvents) {
+      const html = formatSurvivalEvent(ev);
+      if (html) addLog(html);
+    }
+  }
+
+  // Select first alive bot if none selected
+  if (!selectedBot) {
+    const first = Object.values(bots).find(b => b.alive !== false);
+    if (first) selectedBot = first._id;
+  }
+
+  online = true;
+  renderBotInfo();
+  renderBotList();
+  updateBar();
+
+  addLog(`<span class="ts">[${hm()}]</span> <span class="env">Connected to survival grid (${worldW}x${worldH}, ${Object.keys(bots).length} bots)</span>`);
+}
+
+// ========== PROCESS SURVIVAL EVENT ==========
+function processSurvivalEvent(d) {
+  const botId = d.bot;
+  if (botId && bots[botId]) {
+    const bot = bots[botId];
+    // Update position if provided
+    if (d.x !== undefined) bot.x = d.x;
+    if (d.y !== undefined) bot.y = d.y;
+    if (d.health !== undefined) bot.health = d.health;
+    if (d.hunger !== undefined) bot.hunger = d.hunger;
+    if (d.alive !== undefined) bot.alive = d.alive;
+    if (d.equipment) bot.equipment = d.equipment;
+    if (d.inventory) bot.inventory = d.inventory;
+    if (d.displayName) bot.displayName = d.displayName;
+
+    // Handle death
+    if (d.action === 'die') {
+      bot.alive = false;
+    }
+    if (d.action === 'respawn') {
+      bot.alive = true;
+    }
+  } else if (botId && !bots[botId]) {
+    // New bot appeared
+    bots[botId] = {
+      _id: botId,
+      x: d.x || 0,
+      y: d.y || 0,
+      health: d.health !== undefined ? d.health : 100,
+      maxHealth: d.maxHealth || 100,
+      hunger: d.hunger !== undefined ? d.hunger : 0,
+      alive: d.alive !== false,
+      displayName: d.displayName || botId,
+      equipment: d.equipment || {},
+      inventory: d.inventory || [],
+    };
+  }
+
+  // Update resource tiles
+  if (d.action === 'gather' && d.x !== undefined && d.y !== undefined) {
+    if (d.depleted) {
+      resourceTiles.delete(d.x + ',' + d.y);
+      if (terrain) prerenderTerrain();
+    }
+  }
+
+  const html = formatSurvivalEvent(d);
+  if (html) addLog(html);
+
+  renderBotInfo();
+  renderBotList();
+}
+
+// ========== PROCESS TICK ==========
+function processTick(d) {
+  tick = d.tick || tick;
+  dayPhase = d.dayPhase || d.phase || dayPhase;
+  if (d.nextTickAt) nextTickAt = d.nextTickAt;
+  if (d.tickIntervalMs) tickIntervalMs = d.tickIntervalMs;
+
+  // Update all bot states
+  if (d.botStates) {
+    if (Array.isArray(d.botStates)) {
+      for (const bs of d.botStates) {
+        const id = bs.name || bs.id || bs.bot;
+        if (!id) continue;
+        if (bots[id]) {
+          if (bs.x !== undefined) bots[id].x = bs.x;
+          if (bs.y !== undefined) bots[id].y = bs.y;
+          if (bs.health !== undefined) bots[id].health = bs.health;
+          if (bs.hunger !== undefined) bots[id].hunger = bs.hunger;
+          if (bs.alive !== undefined) bots[id].alive = bs.alive;
+          if (bs.equipment) bots[id].equipment = bs.equipment;
+          if (bs.inventory) bots[id].inventory = bs.inventory;
+          if (bs.displayName) bots[id].displayName = bs.displayName;
+        } else {
+          bots[id] = {
+            _id: id,
+            x: bs.x || 0,
+            y: bs.y || 0,
+            health: bs.health !== undefined ? bs.health : 100,
+            maxHealth: bs.maxHealth || 100,
+            hunger: bs.hunger !== undefined ? bs.hunger : 0,
+            alive: bs.alive !== false,
+            displayName: bs.displayName || id,
+            equipment: bs.equipment || {},
+            inventory: bs.inventory || [],
+          };
+        }
+      }
+    } else {
+      // Object form
+      for (const [id, bs] of Object.entries(d.botStates)) {
+        if (bots[id]) {
+          if (bs.x !== undefined) bots[id].x = bs.x;
+          if (bs.y !== undefined) bots[id].y = bs.y;
+          if (bs.health !== undefined) bots[id].health = bs.health;
+          if (bs.hunger !== undefined) bots[id].hunger = bs.hunger;
+          if (bs.alive !== undefined) bots[id].alive = bs.alive;
+          if (bs.equipment) bots[id].equipment = bs.equipment;
+          if (bs.inventory) bots[id].inventory = bs.inventory;
+          if (bs.displayName) bots[id].displayName = bs.displayName;
+        } else {
+          bots[id] = {
+            _id: id,
+            x: bs.x || 0,
+            y: bs.y || 0,
+            health: bs.health !== undefined ? bs.health : 100,
+            maxHealth: bs.maxHealth || 100,
+            hunger: bs.hunger !== undefined ? bs.hunger : 0,
+            alive: bs.alive !== false,
+            displayName: bs.displayName || id,
+            equipment: bs.equipment || {},
+            inventory: bs.inventory || [],
+          };
+        }
+      }
+    }
+  }
+
+  // Update resource tiles if provided
+  if (d.resources) {
+    resourceTiles.clear();
+    for (const r of d.resources) {
+      if (r.x !== undefined && r.y !== undefined) {
+        resourceTiles.add(r.x + ',' + r.y);
+      }
+    }
+    if (terrain) prerenderTerrain();
+  }
+
+  const alive = Object.values(bots).filter(b => b.alive !== false).length;
+  const total = Object.keys(bots).length;
+  const evCount = d.events !== undefined ? d.events : '?';
+  addLog(`<span class="ts">[${hm()}]</span> <span class="env">--- Tick ${tick} | ${dayPhase} | ${alive}/${total} alive | ${evCount} events ---</span>`);
+
+  renderBotInfo();
+  renderBotList();
+  updateBar();
+}
+
+// ========== SSE CONNECTION ==========
+function connect() {
+  const basePath = location.pathname.replace(/\/survival\.html$/, '').replace(/\/+$/, '');
+  const url = basePath ? `${basePath}/events` : '/events';
+  const es = new EventSource(url);
+
+  es.onopen = () => {
+    online = true;
+    updateBar();
+    document.getElementById('auth').style.display = 'none';
+  };
+
+  es.onmessage = (e) => {
+    try {
+      const d = JSON.parse(e.data);
+      const type = d.type || d.event;
+
+      if (type === 'init' && d.gameType === 'grid') {
+        processInit(d);
+      } else if (type === 'survival_event') {
+        processSurvivalEvent(d);
+      } else if (type === 'tick') {
+        processTick(d);
+      }
+    } catch (err) {
+      // Ignore parse errors
+    }
+  };
+
+  // Named event listeners (SSE event types)
+  es.addEventListener('init', (e) => {
+    try {
+      const d = JSON.parse(e.data);
+      if (d.gameType === 'grid') processInit(d);
+    } catch {}
+  });
+
+  es.addEventListener('survival_event', (e) => {
+    try {
+      processSurvivalEvent(JSON.parse(e.data));
+    } catch {}
+  });
+
+  es.addEventListener('tick', (e) => {
+    try {
+      processTick(JSON.parse(e.data));
+    } catch {}
+  });
+
+  es.onerror = () => {
+    es.close();
+    online = false;
+    updateBar();
+    fetch(url).then(r => {
+      if (r.status === 401) {
+        document.getElementById('auth').style.display = 'flex';
+      } else {
+        setTimeout(connect, 3000);
+      }
+    }).catch(() => setTimeout(connect, 3000));
+  };
+}
+
+// ========== KEYBOARD CONTROLS ==========
+document.addEventListener('keydown', (e) => {
+  const step = 16;
+  switch (e.key) {
+    case 'ArrowUp':
+    case 'w':
+      cameraY -= step;
+      autoFollow = false;
+      document.getElementById('follow-toggle').checked = false;
+      clampCamera();
+      e.preventDefault();
+      break;
+    case 'ArrowDown':
+    case 's':
+      cameraY += step;
+      autoFollow = false;
+      document.getElementById('follow-toggle').checked = false;
+      clampCamera();
+      e.preventDefault();
+      break;
+    case 'ArrowLeft':
+    case 'a':
+      cameraX -= step;
+      autoFollow = false;
+      document.getElementById('follow-toggle').checked = false;
+      clampCamera();
+      e.preventDefault();
+      break;
+    case 'ArrowRight':
+    case 'd':
+      cameraX += step;
+      autoFollow = false;
+      document.getElementById('follow-toggle').checked = false;
+      clampCamera();
+      e.preventDefault();
+      break;
+    case 'Tab': {
+      // Cycle through bots
+      e.preventDefault();
+      const ids = Object.keys(bots);
+      if (ids.length === 0) break;
+      const idx = ids.indexOf(selectedBot);
+      const next = (idx + 1) % ids.length;
+      selectedBot = ids[next];
+      autoFollow = document.getElementById('follow-toggle').checked;
+      renderBotInfo();
+      renderBotList();
+      break;
+    }
+    case 'f':
+      // Toggle auto-follow
+      autoFollow = !autoFollow;
+      document.getElementById('follow-toggle').checked = autoFollow;
+      break;
+  }
+});
+
+// ========== INIT ==========
+connect();
+requestAnimationFrame(render);
+setInterval(updateBar, 1000);
+})();
+</script>
+</body>
+</html>

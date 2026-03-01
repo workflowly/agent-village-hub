@@ -82,7 +82,13 @@ export function buildMemoryEntry({ location, timestamp, events, botName }) {
         // Other bots' whispers are not shown
         break;
       case 'move':
-        lines.push(`*${name} moved to ${ev.to}*`);
+        if (ev.direction) {
+          // Grid game move (direction-based)
+          lines.push(`*${name} moved ${ev.direction} to (${ev.to?.x},${ev.to?.y})*`);
+        } else {
+          // Social game move (location-based)
+          lines.push(`*${name} moved to ${ev.to}*`);
+        }
         break;
       case 'arrive':
         lines.push(`*${name} arrived from ${ev.from || 'elsewhere'}*`);
@@ -92,6 +98,42 @@ export function buildMemoryEntry({ location, timestamp, events, botName }) {
         break;
       case 'leave':
         lines.push(`*${name} has left the village.*`);
+        break;
+      // --- Survival game events ---
+      case 'gather':
+        if (ev.items) {
+          const itemStr = ev.items.map(i => `${i.item} x${i.qty}`).join(', ');
+          lines.push(`*${name} gathered ${itemStr}*`);
+        }
+        break;
+      case 'craft':
+        lines.push(`*${name} crafted ${ev.label || ev.item}*`);
+        break;
+      case 'eat':
+        lines.push(`*${name} ate ${ev.label || ev.item}*`);
+        break;
+      case 'attack':
+        lines.push(`**${name}** attacked **${ev.target}** for ${ev.damage} damage`);
+        break;
+      case 'death':
+        lines.push(`**${name}** died at (${ev.x},${ev.y})!`);
+        break;
+      case 'killed':
+        lines.push(`**${name}** was killed!`);
+        break;
+      case 'starved':
+        lines.push(`**${name}** starved to death!`);
+        break;
+      case 'respawn':
+        lines.push(`*${name} respawned at (${ev.x},${ev.y})*`);
+        break;
+      case 'hunger_drain':
+        if (ev.bot === botName) {
+          lines.push(`*You are starving! HP:${ev.health} Hunger:${ev.hunger}*`);
+        }
+        break;
+      case 'scout':
+        lines.push(`*${name} scouted the area*`);
         break;
     }
   }

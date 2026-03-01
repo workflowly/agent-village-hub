@@ -1,0 +1,104 @@
+{
+  "id": "survival",
+  "type": "grid",
+  "name": "Survival Grid",
+  "version": 1,
+
+  "world": {
+    "width": 64,
+    "height": 64,
+    "seed": 42,
+    "terrain": {
+      "plains":   { "moveCost": 1, "visibilityMod": 0,  "char": "." },
+      "forest":   { "moveCost": 2, "visibilityMod": -1, "char": "T" },
+      "mountain": { "moveCost": 3, "visibilityMod": 2,  "char": "^" },
+      "water":    { "moveCost": -1, "visibilityMod": 0,  "char": "~" },
+      "cave":     { "moveCost": 2, "visibilityMod": -2, "char": "O" },
+      "ruins":    { "moveCost": 1, "visibilityMod": 0,  "char": "#" }
+    },
+    "resourceSpawns": {
+      "forest":   [{ "item": "wood", "chance": 0.3 }, { "item": "berry", "chance": 0.1 }],
+      "mountain": [{ "item": "stone", "chance": 0.3 }, { "item": "iron_ore", "chance": 0.1 }],
+      "cave":     [{ "item": "iron_ore", "chance": 0.2 }],
+      "ruins":    [{ "item": "scrap_metal", "chance": 0.15 }],
+      "plains":   [{ "item": "berry", "chance": 0.1 }]
+    },
+    "respawnInterval": 20,
+    "respawnChance": 0.3
+  },
+
+  "dayNight": {
+    "cycleTicks": 24,
+    "phases": {
+      "dawn":  { "startTick": 0,  "visibilityBase": 5 },
+      "day":   { "startTick": 4,  "visibilityBase": 7 },
+      "dusk":  { "startTick": 18, "visibilityBase": 5 },
+      "night": { "startTick": 22, "visibilityBase": 3 }
+    }
+  },
+
+  "survival": {
+    "hungerPerTick": 3,
+    "hungerDrainThreshold": 80,
+    "healthDrainRate": 5,
+    "maxHealth": 100,
+    "maxHunger": 100,
+    "respawnHealth": 50,
+    "respawnHunger": 30,
+    "inventorySlots": 20
+  },
+
+  "combat": {
+    "unarmedDamage": 5
+  },
+
+  "items": {
+    "wood":           { "type": "resource", "weight": 2, "label": "Wood" },
+    "stone":          { "type": "resource", "weight": 3, "label": "Stone" },
+    "iron_ore":       { "type": "resource", "weight": 4, "label": "Iron Ore" },
+    "scrap_metal":    { "type": "resource", "weight": 3, "label": "Scrap Metal" },
+    "berry":          { "type": "food",     "weight": 1, "label": "Berry", "hungerRestore": 10 },
+    "wooden_pickaxe": { "type": "tool",     "weight": 3, "label": "Wooden Pickaxe", "gatherBonus": 1 },
+    "stone_pickaxe":  { "type": "tool",     "weight": 4, "label": "Stone Pickaxe", "gatherBonus": 2 },
+    "wooden_sword":   { "type": "weapon",   "weight": 3, "label": "Wooden Sword", "damage": 10 },
+    "stone_sword":    { "type": "weapon",   "weight": 4, "label": "Stone Sword", "damage": 15 },
+    "iron_sword":     { "type": "weapon",   "weight": 5, "label": "Iron Sword", "damage": 25 },
+    "wooden_shield":  { "type": "armor",    "weight": 4, "label": "Wooden Shield", "defense": 3 },
+    "iron_armor":     { "type": "armor",    "weight": 8, "label": "Iron Armor", "defense": 10 }
+  },
+
+  "recipes": [
+    { "inputs": ["wood", "wood"],                 "output": "wooden_pickaxe" },
+    { "inputs": ["wood", "wood", "stone"],        "output": "wooden_sword" },
+    { "inputs": ["wood", "stone", "stone"],       "output": "stone_pickaxe" },
+    { "inputs": ["stone", "stone", "wood"],       "output": "stone_sword" },
+    { "inputs": ["iron_ore", "iron_ore", "wood"], "output": "iron_sword" },
+    { "inputs": ["wood", "wood", "wood"],         "output": "wooden_shield" },
+    { "inputs": ["iron_ore", "iron_ore", "iron_ore", "scrap_metal"], "output": "iron_armor" }
+  ],
+
+  "actions": {
+    "move":    { "exclusive": true },
+    "gather":  { "exclusive": false },
+    "craft":   { "exclusive": false },
+    "eat":     { "exclusive": false },
+    "attack":  { "exclusive": true },
+    "say":     { "exclusive": false },
+    "scout":   { "exclusive": true }
+  },
+
+  "sceneLabels": {
+    "statusHeader": "== STATUS ==",
+    "mapHeader": "== MAP ==",
+    "inventoryHeader": "== INVENTORY ==",
+    "nearbyHeader": "== NEARBY ==",
+    "recentHeader": "== RECENT EVENTS ==",
+    "actionsHeader": "== ACTIONS ==",
+    "guidanceHeader": "== GUIDANCE ==",
+    "noNearby": "No other survivors visible.",
+    "noRecent": "Nothing notable happened recently.",
+    "emptyInventory": "Your inventory is empty.",
+    "mapLegend": "Legend: * = you, B = other bot, @ = resource, . = plains, T = forest, ^ = mountain, ~ = water, O = cave, # = ruins, (space) = fog",
+    "behaviorGuidance": "You are a survivor in a harsh world. Stay alive: eat to stave off hunger, gather resources, craft tools and weapons. Speak briefly if you encounter others — trust is earned, not given. Fight if threatened. Explore the unknown. Use directions (N/S/E/W/NE/NW/SE/SW) to move."
+  }
+}
