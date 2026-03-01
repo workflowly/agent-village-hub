@@ -56,10 +56,13 @@ function loadToken() {
 }
 
 /**
- * Check if a bot's village.md needs summarization.
+ * Check if a bot's memory file needs summarization.
+ * @param {string} botName
+ * @param {object} [opts]
+ * @param {string} [opts.filename='village.md']
  */
-export async function needsSummarization(botName) {
-  const filePath = join(paths.memoryDir(botName), 'village.md');
+export async function needsSummarization(botName, { filename = 'village.md' } = {}) {
+  const filePath = join(paths.memoryDir(botName), filename);
   try {
     const st = await stat(filePath);
     return st.size >= SIZE_THRESHOLD;
@@ -69,10 +72,13 @@ export async function needsSummarization(botName) {
 }
 
 /**
- * Summarize a bot's village.md if it exceeds the size threshold.
+ * Summarize a bot's memory file if it exceeds the size threshold.
  * Returns true if summarization was performed, false if skipped.
+ * @param {string} botName
+ * @param {object} [opts]
+ * @param {string} [opts.filename='village.md']
  */
-export async function summarizeVillageMemory(botName) {
+export async function summarizeVillageMemory(botName, { filename = 'village.md' } = {}) {
   // Frequency guard
   const lastTime = lastSummarizedAt.get(botName) || 0;
   if (Date.now() - lastTime < MIN_INTERVAL_MS) return false;
@@ -81,7 +87,7 @@ export async function summarizeVillageMemory(botName) {
   const token = loadToken();
   if (!token) return false;
 
-  const filePath = join(paths.memoryDir(botName), 'village.md');
+  const filePath = join(paths.memoryDir(botName), filename);
   let content;
   try {
     content = await readFile(filePath, 'utf-8');

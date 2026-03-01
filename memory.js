@@ -18,10 +18,12 @@ const paths = require('../lib/paths');
  *
  * @param {string} botName - System name of the bot
  * @param {string} entry - Formatted memory entry (markdown)
+ * @param {object} [opts]
+ * @param {string} [opts.filename='village.md'] - Memory filename (e.g. 'survival.md')
  */
-export async function appendVillageMemory(botName, entry) {
+export async function appendVillageMemory(botName, entry, { filename = 'village.md' } = {}) {
   const memDir = paths.memoryDir(botName);
-  const filePath = join(memDir, 'village.md');
+  const filePath = join(memDir, filename);
 
   // Ensure memory directory exists
   try {

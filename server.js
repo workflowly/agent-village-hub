@@ -79,6 +79,7 @@ const EMPTY_CLEAR_TICKS = 3;
 
 const isGridGame = gameConfig.isGridGame;
 const STATE_FILE = join(__dirname, `state-${VILLAGE_GAME}.json`);
+const MEMORY_FILENAME = isGridGame ? 'survival.md' : 'village.md';
 const USAGE_FILE = join(paths.PROJECT_DIR, 'api-router', 'usage.json');
 const ADMIN_TOKENS_FILE = join(paths.PROJECT_DIR, 'portal', 'admin-tokens.json');
 const LOGS_DIR = join(__dirname, 'logs');
@@ -536,7 +537,7 @@ async function survivalTick(tickStart) {
   for (const [botName, info] of participants) {
     if (info.remote) continue;
     try {
-      const memPath = join(paths.memoryDir(botName), 'village.md');
+      const memPath = join(paths.memoryDir(botName), MEMORY_FILENAME);
       const content = await readFile(memPath, 'utf-8');
       const start = content.indexOf('## Village History (summarized)');
       if (start !== -1) {
@@ -549,7 +550,7 @@ async function survivalTick(tickStart) {
           villageSummaries.set(botName, summaryText.slice(0, VILLAGE_MEMORY_CAP));
         }
       }
-    } catch { /* no village.md or no summary yet */ }
+    } catch { /* no memory file or no summary yet */ }
   }
 
   // 5. Build scenes per bot and send in parallel
@@ -593,7 +594,7 @@ async function survivalTick(tickStart) {
       isScout: false,
     });
 
-    const conversationId = `survival:${botName}:tick-${tickNum}`;
+    const conversationId = `survival:${botName}`;
     allSceneRequests.push({ botName, port, conversationId, scene });
   }
 
@@ -695,7 +696,7 @@ async function survivalTick(tickStart) {
           botName,
         });
         if (entry.trim()) {
-          await appendVillageMemory(botName, entry);
+          await appendVillageMemory(botName, entry, { filename: MEMORY_FILENAME });
         }
       } catch (err) {
         console.error(`[village] Failed to write memory for ${botName}: ${err.message}`);
@@ -703,11 +704,11 @@ async function survivalTick(tickStart) {
     }
   }
 
-  // Summarize oversized village.md files
+  // Summarize oversized memory files
   for (const [botName, info] of participants) {
     if (info.remote) continue;
-    needsSummarization(botName).then(needed => {
-      if (needed) summarizeVillageMemory(botName);
+    needsSummarization(botName, { filename: MEMORY_FILENAME }).then(needed => {
+      if (needed) summarizeVillageMemory(botName, { filename: MEMORY_FILENAME });
     }).catch(() => {});
   }
 
@@ -789,13 +790,13 @@ async function tick() {
     }
 
     // Read village memory summaries for all participants
-    // Skip remote bots — no local village.md
+    // Skip remote bots — no local memory file
     const VILLAGE_MEMORY_CAP = 1500;
     const villageSummaries = new Map(); // botName → summary string
     for (const [botName, info] of participants) {
       if (info.remote) continue;
       try {
-        const memPath = join(paths.memoryDir(botName), 'village.md');
+        const memPath = join(paths.memoryDir(botName), MEMORY_FILENAME);
         const content = await readFile(memPath, 'utf-8');
         // Extract "## Village History (summarized)" section
         const start = content.indexOf('## Village History (summarized)');
@@ -877,7 +878,7 @@ async function tick() {
         }
         const othersHere = botsAtLoc.filter(b => b !== botName);
         const pendingWhispers = state.whispers[botName] || [];
-        const conversationId = `village:${loc}`;
+        const conversationId = `village:${botName}`;
 
         const canMove = (lastMoveTick.get(botName) || 0) < tickNum - 1;
         const scene = buildScene({
