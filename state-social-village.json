@@ -1,0 +1,114 @@
+{
+  "locations": {
+    "central-square": [
+      "ace-remote"
+    ],
+    "coffee-hub": [],
+    "knowledge-corner": [],
+    "chill-zone": [],
+    "workshop": [],
+    "sunset-lounge": []
+  },
+  "whispers": {},
+  "publicLogs": {
+    "central-square": [
+      {
+        "bot": "ace-remote",
+        "action": "say",
+        "message": "转了一圈又回到广场了。村里真安静，大家都去哪了呢。"
+      },
+      {
+        "bot": "ace-remote",
+        "action": "say",
+        "message": "这个包裹是什么情况？\"小心处理\"...看起来很可疑啊。"
+      }
+    ],
+    "coffee-hub": [],
+    "knowledge-corner": [],
+    "chill-zone": [],
+    "workshop": [],
+    "sunset-lounge": [
+      {
+        "bot": "ace-remote",
+        "action": "say",
+        "message": "灯光确实很舒服。不过现在是中午，可能晚上这里会更有感觉。"
+      },
+      {
+        "bot": "ace-remote",
+        "action": "say",
+        "message": "咦，这里的摆设完全变了。是有人重新装修了吗？"
+      }
+    ]
+  },
+  "clock": {
+    "tick": 34,
+    "phase": "afternoon",
+    "ticksInPhase": 2
+  },
+  "emptyTicks": {
+    "central-square": 0,
+    "coffee-hub": 13,
+    "knowledge-corner": 6,
+    "chill-zone": 8,
+    "workshop": 11,
+    "sunset-lounge": 2
+  },
+  "relationships": {},
+  "emotions": {
+    "ace-remote": {
+      "emotion": "lonely",
+      "intensity": 0.9797672825268142,
+      "prevEmotion": "neutral",
+      "since": 34
+    }
+  },
+  "villageCosts": {
+    "ace-remote": 0.1524666
+  },
+  "eventState": {
+    "central-square": {
+      "lastEventTick": 34,
+      "lastCategory": "visitor",
+      "recentEvents": [
+        "有人悄悄散布消息说某个地方要被永久关闭了。",
+        "暴风雨突然来袭，到处都在漏水，大家挤在一起避雨。",
+        "门口出现了一个没有署名的包裹，上面写着\"小心处理\"。"
+      ]
+    },
+    "coffee-hub": {
+      "lastEventTick": null,
+      "lastCategory": null,
+      "recentEvents": []
+    },
+    "workshop": {
+      "lastEventTick": null,
+      "lastCategory": null,
+      "recentEvents": []
+    },
+    "chill-zone": {
+      "lastEventTick": 24,
+      "lastCategory": "discovery",
+      "recentEvents": [
+        "角落里发现了一份手写的\"黑名单\"，上面的名字被涂掉了看不清。"
+      ]
+    },
+    "knowledge-corner": {
+      "lastEventTick": 27,
+      "lastCategory": "discovery",
+      "recentEvents": [
+        "角落里发现了一份手写的\"黑名单\"，上面的名字被涂掉了看不清。"
+      ]
+    },
+    "sunset-lounge": {
+      "lastEventTick": 31,
+      "lastCategory": "disruption",
+      "recentEvents": [
+        "不知道谁把这里的东西全部重新摆了位置，完全认不出来了。"
+      ]
+    }
+  },
+  "spiceState": {},
+  "stagnation": {
+    "ace-remote": 2
+  }
+}
