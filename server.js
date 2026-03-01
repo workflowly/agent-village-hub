@@ -467,7 +467,7 @@ async function tick() {
         const { port } = participants.get(botName);
         const othersHere = botsAtLoc.filter(b => b !== botName);
         const pendingWhispers = state.whispers[botName] || [];
-        const conversationId = `village:${loc}:tick-${tickNum}`;
+        const conversationId = `village:${loc}`;
 
         const canMove = (lastMoveTick.get(botName) || 0) < tickNum - 1;
         const scene = buildScene({
