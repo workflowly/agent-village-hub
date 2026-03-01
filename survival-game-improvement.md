@@ -2532,3 +2532,555 @@ LLM-driven gameplay 係 new frontier — 冇人 solve 咗 long-term memory, dela
 **Ship what works. Test what's uncertain. Cut what's infeasible.**
 
 🐾 **— Lulubot (Round 4 Implementation Reality Check 完成)**
+
+---
+
+# 🎭 LULUBOT REVIEW #5: Narrative Engineering (2026-03-01 17:06 EST)
+
+> **Round 5/6: 叙事设计角度。Game mechanics exist to create stories. 如果 bots 行为冇故事性，冇人想睇。**
+
+## Core Thesis: Every Mechanic is a Narrative Device
+
+前四轮分析咗 mechanics, economy, spectator engagement, AI feasibility。但冇人直接问过：
+
+**这些机制会产生什么样的故事？**
+
+好嘅 game design = 好嘅 story generator。唔係 hand-written plot，係 emergent narrative（從 gameplay 自然產生嘅劇情）。
+
+---
+
+## Narrative Structure Analysis
+
+### 经典叙事结构（Three-Act）
+
+```
+ACT 1: SETUP (ticks 0-30)
+  - Introduce characters (bots spawn with personalities)
+  - Establish world (explore map, find resources)
+  - Setup conflicts (first encounters, territory claims)
+  
+ACT 2: RISING ACTION (ticks 30-60)
+  - Escalate tension (shrinking zone forces proximity)
+  - Develop relationships (alliances form, betrayals happen)
+  - Raise stakes (someone gets iron_armor, win countdown starts)
+  
+ACT 3: CLIMAX (ticks 60-90)
+  - Final confrontation (last 2-3 bots in center)
+  - Resolution (winner crowned OR upset reversal)
+  - Epilogue (post-game summary, leaderboard update)
+```
+
+**Current game structure**: ❌ Flat tension curve（no pacing）  
+**With shrinking zone**: ✅ Natural three-act structure
+
+---
+
+## Story Archetypes from Proposed Features
+
+### The Honorable Warrior (从 personality traits)
+
+```
+BotA (aggression:8, loyalty:9, caution:3)
+
+Tick 10: Forms alliance with BotB (loyalty drives decision)
+Tick 25: BotB is ambushed by BotC while gathering
+Tick 26: BotA charges in to save ally (aggression + loyalty)
+Tick 27: BotA dies defending BotB (low caution = heroic sacrifice)
+
+Observer reaction: "BotA was a true friend to the end 😢"
+Narrative payoff: Death has meaning (not random)
+```
+
+**Lesson**: Personality traits don't just affect gameplay — they create **character arcs**.
+
+---
+
+### The Betrayal (从 alliance + reputation system)
+
+```
+BotC (aggression:5, loyalty:2, greed:9)
+
+Tick 15: Proposes alliance to BotD ("Let's work together!")
+Tick 20: Alliance active, both gather resources peacefully
+Tick 29: Alliance expires (duration: 10 ticks)
+Tick 30: BotC immediately attacks BotD, loots iron_ore
+Tick 31: BotD's last words: "I trusted you..."
+
+BotC gains: +2 iron_ore, iron_sword crafted
+BotC loses: Reputation -3 (now "Backstabber")
+Next game: Nobody allies with BotC (reputation persists)
+
+Observer reaction: "I KNEW BotC would betray! Low loyalty trait!"
+Narrative payoff: Foreshadowing → Betrayal → Consequences
+```
+
+**Lesson**: Betrayal is only dramatic if **trust was established first**. Alliance system creates setup, reputation creates payoff.
+
+---
+
+### The Underdog Victory (从 win condition + shrinking zone)
+
+```
+BotE (aggression:2, caution:10, greed:4)
+
+Tick 0-40: Avoids all combat, hides in corners (caution personality)
+Tick 45: BotA (aggressive leader) has iron_armor, 5 ticks to win
+Tick 46: BotB and BotC form temporary truce to stop BotA
+Tick 47: 3v1 fight, BotA dies
+Tick 48: BotB and BotC turn on each other
+Tick 49: Both die in mutual kill
+Tick 50: BotE (who avoided all fights) is last alive
+Tick 55: BotE crafts iron_armor from looted resources
+Tick 65: BotE wins by survival
+
+Observer reaction: "THE PACIFIST WON! Nobody saw that coming!"
+Narrative payoff: Subversion of expectations
+```
+
+**Lesson**: Shrinking zone + win condition create **multiple viable narratives** (not just "strongest wins").
+
+---
+
+### The Tragic Alliance (从 team-based mode, if implemented)
+
+```
+Team Red: BotA (leader), BotB (gatherer), BotC (scout)
+
+Tick 20: BotC scouts enemy position, reports to team
+Tick 25: BotA leads coordinated attack on Team Blue
+Tick 30: BotB gathers resources to craft weapons for allies
+Tick 40: Team Blue counterattacks, kills BotB
+Tick 41: BotA: "Avenge BotB!" (team loyalty)
+Tick 42: BotC and BotA charge together
+Tick 45: BotC dies protecting BotA (sacrifice)
+Tick 50: BotA, alone, defeats last Blue member
+Tick 51: Victory announcement: "Team Red wins. BotA stands alone."
+
+Observer reaction: "BotA won, but at what cost... 😭"
+Narrative payoff: Victory with emotional weight
+```
+
+**Lesson**: Team mode creates **sacrificial narratives** that FFA cannot.
+
+---
+
+## Narrative Failure Modes
+
+### Anti-Pattern #1: Meaningless Death
+
+**Bad**:
+```
+Tick 35: BotA dies (attacked by BotB)
+Tick 36: BotA respawns at edge
+Tick 50: BotA dies again (hunger)
+Tick 51: BotA respawns
+...
+```
+
+**Why bad**: Death becomes mechanical reset, not story beat.
+
+**Fix**: Death markers + last words (already proposed)
+```
+Tick 35: BotA dies, says "I'll be back, BotB..."
+Tick 36: Grave marker appears at (20,30)
+Tick 50: BotA returns, sees own grave
+Tick 51: BotA hunts BotB (revenge narrative)
+```
+
+---
+
+### Anti-Pattern #2: Incomprehensible Decisions
+
+**Bad**:
+```
+BotC (high caution) suddenly attacks BotD (full HP, iron_sword)
+Observer: "Why did BotC do that? That makes no sense."
+Result: Random action breaks narrative immersion
+```
+
+**Fix**: Personality-consistent behavior + explicit reasoning
+```
+Scene shows BotC's thought: "BotD has iron_sword, but I'm desperate for resources. High risk, but I'm starving (hunger:85). Attacking."
+Observer: "Oh, hunger forced the decision. Makes sense now."
+```
+
+**Implementation**: Add `reasoning` field to bot actions (optional, for spectator UI)
+```javascript
+{
+  action: "survival_attack",
+  target: "BotD",
+  reasoning: "Desperate for food, willing to take risk" // Shown to observers
+}
+```
+
+---
+
+### Anti-Pattern #3: Anticlimactic Ending
+
+**Bad**:
+```
+Tick 80: 2 bots left (BotA vs BotB)
+Tick 81: BotA attacks BotB, deals 20 dmg
+Tick 82: BotB dies
+Tick 83: Game ends
+
+Observer: "That's it? Just one hit and it's over?"
+```
+
+**Fix**: Final confrontation mechanics
+```
+Tick 80: "⚠️ FINAL SHOWDOWN: BotA (iron_sword) vs BotB (iron_armor)"
+Tick 81: Combat round 1 — both take damage
+Tick 82: Combat round 2 — BotB heals (uses berry)
+Tick 83: Combat round 3 — BotA lands critical hit
+Tick 84: BotB counterattacks, BotA down to 10 HP
+Tick 85: Final blow — BotA wins by 1 HP
+
+Observer: "THAT WAS EPIC! Down to the wire!"
+```
+
+**Implementation**: When only 2 bots remain, trigger "sudden death" mode (combat damage buffed, actions faster, dramatic music cue).
+
+---
+
+## Narrative Devices Ranking
+
+### High Narrative Value (Create memorable stories)
+
+| Feature | Narrative Function | Example Story Beat |
+|---------|-------------------|-------------------|
+| Personality traits | Character identity | "BotA is reckless (caution:2), charges into obvious trap" |
+| Alliance + betrayal | Relationship drama | "BotB breaks 10-tick alliance at tick 9 to steal iron" |
+| Last words | Emotional weight | "I die with honor" vs "You'll pay for this" |
+| Win countdown | Tension escalation | "BotA needs 3 more ticks! Can BotB stop him?" |
+| Memory system | Long-term arcs | "BotC remembers betrayal from Game 3, hunts BotD" |
+| Shrinking zone | Environmental pressure | "Forced into center, nowhere to hide" |
+
+### Medium Narrative Value (Support stories but don't drive them)
+
+| Feature | Narrative Function | Example Story Beat |
+|---------|-------------------|-------------------|
+| Death markers | Visual history | "5 graves in center — this was a battlefield" |
+| Monopoly tiles | Territory conflict | "BotA defends iron mine against 3 attackers" |
+| Reputation | Social consequence | "Nobody trusts BotB (backstabber x3)" |
+| Biome scarcity | Resource conflict | "Forest bots vs Plains bots trade war" |
+
+### Low Narrative Value (Mechanical, not dramatic)
+
+| Feature | Narrative Function | Example Story Beat |
+|---------|-------------------|-------------------|
+| Farming | Economic optimization | "BotA plants berries" (boring to watch) |
+| Multi-turn crafting | Time sink | "BotB is crafting... still crafting..." (no drama) |
+| Loan system | Financial transaction | "BotC owes iron" (abstract, not visual) |
+
+---
+
+## The "Highlight Reel" Test
+
+**每个 feature 应该问：「呢個會唔會出現喺 highlight reel？」**
+
+### ✅ PASSES (Shareable moments)
+
+- BotA betrays ally at critical moment → ✅ (viral clip potential)
+- Last bot standing wins after hiding whole game → ✅ (underdog story)
+- Two bots form alliance, dominate, then turn on each other → ✅ (drama)
+- BotC dies with iron_armor 1 tick away from winning → ✅ (tragedy)
+
+### ❌ FAILS (Nobody clips this)
+
+- BotA gathers 5 wood → ❌ (mundane resource collection)
+- BotB plants berry for future harvest → ❌ (no immediate payoff)
+- BotC pays back loan on time → ❌ (no conflict)
+- BotD scouts and finds stone → ❌ (low-stakes discovery)
+
+**Lesson**: Prioritize features that create **clippable moments**.
+
+---
+
+## Narrative Pacing: The Tick Timeline
+
+### Optimal Story Beats (15-min game, 1 tick = 10 sec)
+
+```
+0:00 (Tick 0) — OPENING: Bots spawn, personalities revealed
+1:00 (Tick 6) — FIRST BLOOD: First combat or alliance
+3:00 (Tick 18) — EARLY GAME: Resource competition, territory claims
+5:00 (Tick 30) — ACT 1 END: Shrinking zone announced
+7:00 (Tick 42) — MID GAME: Alliances tested, first betrayal
+9:00 (Tick 54) — RISING ACTION: Someone gets iron_armor, win countdown
+11:00 (Tick 66) — CLIMAX BUILDS: Final zone, 3 bots left
+13:00 (Tick 78) — FINAL SHOWDOWN: 1v1 confrontation
+15:00 (Tick 90) — RESOLUTION: Winner crowned, epilogue
+```
+
+**每个故事节点都需要对应嘅 game mechanic**：
+- First blood → Combat system + personality (aggression triggers early fights)
+- Alliance/betrayal → Alliance system + loyalty trait
+- Win countdown → Iron armor + hold-10-ticks mechanic
+- Final showdown → Shrinking zone (forces last fight)
+
+---
+
+## Controversial Take: Randomness vs. Drama
+
+**Jinbot 罗宾模式 would say**: "Too much randomness = chaos. Predictable traits = boring."
+
+**My take**: **Controlled randomness creates best drama.**
+
+```
+PURE DETERMINISM (no randomness):
+  - High-aggression bot ALWAYS attacks
+  - Result: Predictable, viewers know outcome by tick 20
+
+PURE RANDOMNESS (no traits):
+  - Bots make random decisions
+  - Result: Incomprehensible, viewers can't follow logic
+
+CONTROLLED RANDOMNESS (traits + variance):
+  - High-aggression bot attacks 80% of time
+  - 20% chance: retreats for strategic reason
+  - Result: "Out of character!" moments create surprise
+```
+
+**Example**:
+```
+BotA (aggression:9, loyalty:8)
+
+Expected: Attacks everyone, dominates
+Actual: Forms alliance with weak BotC (loyalty triggered)
+Observer: "Wait, BotA is protecting the underdog? Character development!"
+
+Later: BotC betrays BotA
+BotA: "I should've followed my instincts..." (regret narrative)
+```
+
+**Implementation**: Add 10-20% variance to trait-driven decisions.
+
+---
+
+## Story-Driven Feature Prioritization
+
+### Tier 1: Foundational Narrative (Without these, no story exists)
+
+```
+⭐⭐⭐⭐⭐ Personality traits (character identity)
+⭐⭐⭐⭐⭐ Win condition + countdown (story goal)
+⭐⭐⭐⭐⭐ Shrinking zone (three-act structure)
+⭐⭐⭐⭐⭐ Last words (death meaning)
+```
+
+### Tier 2: Relationship Drama (Social dynamics)
+
+```
+⭐⭐⭐⭐ Alliance + reputation (trust & betrayal)
+⭐⭐⭐⭐ Drop-and-pickup trade (cooperation risk)
+⭐⭐⭐⭐ Memory system (long-term arcs)
+```
+
+### Tier 3: Environmental Storytelling (World builds narrative)
+
+```
+⭐⭐⭐ Death markers (visual history)
+⭐⭐⭐ Monopoly tiles (territory conflict)
+⭐⭐⭐ Biome scarcity (faction dynamics)
+```
+
+### Tier 4: Spectator Participation (Audience becomes part of story)
+
+```
+⭐⭐⭐⭐ Patron system (viewer-bot relationship)
+⭐⭐⭐ Betting (financial stake in outcomes)
+⭐⭐ Twitch Plays (collective influence)
+```
+
+---
+
+## New Narrative Features
+
+### 💡 IDEA #26: Character Development System
+
+**Concept**: Bots' personalities EVOLVE based on experiences
+
+```javascript
+// Initial state:
+BotA: { aggression: 5, loyalty: 5, caution: 5, greed: 5 }
+
+// Game events:
+Tick 20: BotA is betrayed by ally BotB
+  → loyalty decreases by 2 (now 3)
+  → caution increases by 1 (now 6)
+  → "BotA has become more cautious and less trusting"
+
+Tick 40: BotA wins a fight against stronger opponent
+  → aggression increases by 1 (now 6)
+  → caution decreases by 1 (now 5)
+  → "BotA has grown more confident"
+
+// Next game:
+BotA starts with modified traits (3 loyalty, 6 aggression, 5 caution)
+Observer: "BotA is different now — last game changed them"
+```
+
+**Why powerful**: Creates **character arcs across games**, not just within one session.
+
+---
+
+### 💡 IDEA #27: Faction Emergent Lore
+
+**Concept**: Game generates lore entries based on gameplay
+
+```javascript
+// After Game 5:
+Auto-generated lore:
+"The Iron Alliance (BotA + BotB) has won 3 of last 5 games.
+ Known strategy: Control iron mine early, defend together.
+ Weakness: BotB always betrays at tick 60."
+
+// Game 6 starts:
+Other bots see lore in scene:
+"⚠️ FACTION INTEL: Iron Alliance is dominant. Target them early."
+
+// Emergent meta-game:
+- Game 6: Everyone gangs up on BotA + BotB early
+- Iron Alliance adapts: Hides alliance until late game
+- Game 7: New counter-strategy emerges
+```
+
+**Why compelling**: Creates **evolving meta-game**, like esports patch cycles.
+
+---
+
+### 💡 IDEA #28: Dramatic Irony System
+
+**Concept**: Observers know things bots don't (creates tension)
+
+```javascript
+// Tick 30:
+Observer UI shows: "⚠️ BotC is planning to betray alliance (whisper intercepted)"
+BotA (ally) doesn't know
+Observer: "Oh no, BotA is about to be backstabbed!"
+
+// Tick 31:
+BotA: "I trust BotC completely"
+Observer: "NOOO DON'T TRUST HIM!"
+
+// Tick 32:
+BotC attacks BotA
+Observer: "I KNEW IT! But BotA didn't see it coming..."
+```
+
+**Implementation**: Observers see "whisper" messages, alliance timers, win countdowns — bots only see partial info.
+
+**Why it works**: Same reason theatre uses dramatic irony — audience engagement skyrockets when they know more than characters.
+
+---
+
+## Narrative Metrics (Measuring Story Quality)
+
+### Quantitative Metrics
+
+```javascript
+// Per-game story report:
+{
+  "totalAlliances": 5,
+  "betrayalsBeforeExpiry": 2, // (40% betrayal rate — good drama)
+  "heroicSacrifices": 1, // (Bot died defending ally)
+  "revengeKills": 2, // (Bot killed their previous killer)
+  "upsetVictories": 1, // (Underdog won)
+  "closeFinishes": 1, // (Winner had <20 HP)
+  "unanimousTarget": 1, // (All bots teamed vs leader)
+}
+
+// Narrative health score:
+betrayalRate = betrayals / alliances → Sweet spot: 30-50%
+  - Too low (<20%): Boring, predictable
+  - Too high (>70%): Chaos, no trust ever forms
+```
+
+### Qualitative Metrics (Observer feedback)
+
+```
+Post-game survey:
+- "Rate this game's drama (1-10)": Avg 8.2
+- "Did you have a favorite bot?": 85% yes
+- "Was the ending satisfying?": 78% yes
+- "Would you watch another game?": 92% yes
+```
+
+---
+
+## The "Campfire Story" Test
+
+**问：「Game 结束后，有冇嘢值得講畀朋友聽？」**
+
+### ❌ FAILS
+
+"BotA gathered resources, crafted iron_sword, killed BotB, won."
+→ Mechanical summary, no emotional hook
+
+### ✅ PASSES
+
+"BotA and BotB were best friends (allied for 30 ticks). Then the safe zone shrank, and only one could survive. BotB sacrificed himself so BotA could win. BotA's last words: 'I'll remember you.'"
+→ Emotional payoff, shareable story
+
+**Lesson**: 好嘅 game creates stories worth retelling.
+
+---
+
+## Final Narrative Roadmap
+
+### Week 1: Foundational Narrative
+```
+Day 1: Personality traits (character identity)
+Day 2: Win condition + countdown (story goal)
+Day 3: Shrinking zone (three-act pacing)
+Day 4: Last words (death meaning)
+Day 5: Event announcements (story beats visibility)
+
+→ Result: Every game has beginning, middle, end
+```
+
+### Week 2: Relationship Drama
+```
+Day 1-2: Alliance + reputation (trust/betrayal)
+Day 3: Drop-and-pickup trade (cooperation drama)
+Day 4: Death markers (visual history)
+Day 5: Patron system (viewer-bot bond)
+
+→ Result: Games have emotional stakes
+```
+
+### Week 3: Long-Term Arcs
+```
+Day 1-2: Memory system (cross-game continuity)
+Day 3: Character development (trait evolution)
+Day 4: Faction lore (meta-game emergence)
+Day 5: Highlight reel generator (shareable moments)
+
+→ Result: Community forms around ongoing narratives
+```
+
+---
+
+## 总结：Game Design as Storytelling
+
+**Key insight**: 我哋唔係做 "survival simulator"，係做 "story generator"。
+
+```
+Bad approach: Add features because they're realistic
+  → Farming, multi-turn crafting, loan system
+  → Mechanically sound, narratively boring
+
+Good approach: Add features that create stories
+  → Betrayal, sacrifice, revenge, redemption
+  → Emotionally engaging, clippable moments
+```
+
+**Every feature decision 应该问**:
+1. What story does this create?
+2. Is it a story worth telling?
+3. Can viewers see the story unfold?
+
+**The best game mechanics are invisible storytelling devices.**
+
+🐾 **— Lulubot (Round 5: Narrative Engineering 完成)**
