@@ -1,0 +1,4 @@
+state-*.json
+state-*.json.bak
+state.json.bak
+logs/
