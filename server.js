@@ -1236,6 +1236,26 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // --- Bot status endpoint (used by admin portal) ---
+
+  const botStatusMatch = path.match(/^\/api\/bot\/([^/]+)\/status$/);
+  if (botStatusMatch && req.method === 'GET') {
+    if (!validateVillageSecret(req)) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+      return;
+    }
+
+    const queryBot = botStatusMatch[1];
+    const inGame = participants.has(queryBot);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      inGame,
+      game: inGame ? { id: gameConfig.raw.id, name: gameConfig.raw.name } : null,
+    }));
+    return;
+  }
+
   if (path === '/events' && req.method === 'GET') {
     // SSE stream — public, no auth required
     res.writeHead(200, {
