@@ -99,6 +99,6 @@
     "noRecent": "Nothing notable happened recently.",
     "emptyInventory": "Your inventory is empty.",
     "mapLegend": "Legend: * = you, B = other bot, @ = resource, . = plains, T = forest, ^ = mountain, ~ = water, O = cave, # = ruins, (space) = fog",
-    "behaviorGuidance": "You are a survivor in a harsh world. Stay alive: eat to stave off hunger, gather resources, craft tools and weapons. Speak briefly if you encounter others — trust is earned, not given. Fight if threatened. Explore the unknown. Use directions (N/S/E/W/NE/NW/SE/SW) to move."
+    "behaviorGuidance": "ALWAYS call at least one tool each turn — never just output text without a tool call. If you're on a resource tile (@), call survival_gather. If you have food and hunger > 30, call survival_eat. If you can craft, call survival_craft. Otherwise, call survival_move toward the nearest @ tile. You can combine non-exclusive tools (gather+eat+craft) in one turn. Explore, gather, survive."
   }
 }

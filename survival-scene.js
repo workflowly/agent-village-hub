@@ -120,6 +120,28 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
   lines.push(labels.mapLegend);
   lines.push('');
 
+  // == CURRENT TILE ==
+  const tileKey = `${botState.x},${botState.y}`;
+  const currentTile = worldState.tileData[tileKey];
+  const terrainIdx = botState.y * gameConfig.raw.world.width + botState.x;
+  const terrainChar = worldState.terrain[terrainIdx] || '.';
+  const charToType = {};
+  for (const [type, cfg] of Object.entries(gameConfig.raw.world.terrain)) {
+    charToType[cfg.char] = type;
+  }
+  const terrainType = charToType[terrainChar] || 'unknown';
+  lines.push('== CURRENT TILE ==');
+  if (currentTile?.resources?.length > 0) {
+    const resList = currentTile.resources.map(r => {
+      const label = gameConfig.raw.items[r.item]?.label || r.item;
+      return `${label} x${r.qty}`;
+    }).join(', ');
+    lines.push(`Terrain: ${terrainType} | Resources here: ${resList} ← use survival_gather to collect!`);
+  } else {
+    lines.push(`Terrain: ${terrainType} | No resources on this tile.`);
+  }
+  lines.push('');
+
   // == INVENTORY ==
   lines.push(labels.inventoryHeader);
   if (Object.keys(botState.inventory).length === 0 && !botState.equipment.weapon && !botState.equipment.armor && !botState.equipment.tool) {
@@ -166,30 +188,49 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
 
   // == ACTIONS ==
   lines.push(labels.actionsHeader);
-  lines.push('Available actions (choose one or more, exclusive actions use your whole turn):');
+  lines.push('You get up to 3 actions per turn. Call each tool once to act.');
+  lines.push('EXCLUSIVE actions (move/attack/scout) take your whole turn — no other actions allowed.');
+  lines.push('NON-EXCLUSIVE actions (gather/eat/craft/say) can be combined freely.');
   lines.push('');
-  lines.push('  survival_move { direction: "N|S|E|W|NE|NW|SE|SW" } — Move one tile (exclusive)');
+
+  // Contextual suggestions
+  const suggestions = [];
+  if (currentTile?.resources?.length > 0) {
+    suggestions.push('→ You are on a resource tile! Call survival_gather to collect.');
+  }
+  const foodItems = Object.entries(botState.inventory).filter(([item]) => gameConfig.raw.items[item]?.type === 'food');
+  if (botState.hunger >= 30 && foodItems.length > 0) {
+    suggestions.push(`→ Hunger is ${botState.hunger}/100. Call survival_eat to eat: ${foodItems.map(([item]) => item).join(', ')}`);
+  } else if (botState.hunger >= 30 && foodItems.length === 0) {
+    suggestions.push(`→ Hunger is ${botState.hunger}/100 and you have no food! Find resource tiles (@) to gather berries.`);
+  }
+  const craftable = getCraftableRecipes(botState.inventory, gameConfig);
+  if (craftable.length > 0) {
+    suggestions.push(`→ You can craft: ${craftable.map(r => r.output).join(', ')}`);
+  }
+  if (suggestions.length > 0) {
+    lines.push(...suggestions);
+    lines.push('');
+  }
+
+  lines.push('  survival_move { direction: "N|S|E|W|NE|NW|SE|SW" } — Move one tile [EXCLUSIVE]');
   lines.push('  survival_gather {} — Gather resources from current tile');
   lines.push('  survival_eat { item: "berry" } — Eat food to reduce hunger');
 
-  // Show craftable recipes
-  const craftable = getCraftableRecipes(botState.inventory, gameConfig);
   if (craftable.length > 0) {
-    lines.push('  survival_craft { item: "<output>" } — Craft an item. Available recipes:');
+    lines.push('  survival_craft { item: "<output>" } — Craft an item:');
     for (const r of craftable) {
       const label = gameConfig.raw.items[r.output]?.label || r.output;
       lines.push(`    ${r.output} (${label}): ${r.inputs.join(' + ')}`);
     }
-  } else {
-    lines.push('  survival_craft { item: "<output>" } — Craft an item (no recipes available with current materials)');
   }
 
   if (nearbyBots.length > 0) {
-    lines.push('  survival_attack { target: "<bot_name>" } — Attack adjacent bot (exclusive, within 1 tile)');
+    lines.push('  survival_attack { target: "<bot_name>" } — Attack adjacent bot [EXCLUSIVE]');
   }
 
   lines.push('  survival_say { message: "..." } — Say something to nearby survivors');
-  lines.push('  survival_scout {} — Scout the area for extended visibility (exclusive)');
+  lines.push('  survival_scout {} — Scout area for extended visibility [EXCLUSIVE]');
   lines.push('');
 
   // == GUIDANCE ==
