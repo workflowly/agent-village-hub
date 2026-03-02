@@ -208,6 +208,7 @@ canvas{image-rendering:pixelated;image-rendering:crisp-edges;cursor:crosshair}
     <span id="status" class="st-off">Connecting</span>
     <div id="controls">
       <label><input type="checkbox" id="follow-toggle" checked> Auto-follow</label>
+      <label><input type="checkbox" id="fog-toggle"> Fog (v)</label>
     </div>
   </div>
 </div>
@@ -320,6 +321,7 @@ let dipAlliances = {};
 let dipProposals = {};
 let dipBetrayals = [];
 let bountyBot = null;
+let showFog = false;
 
 // PIXI-specific state
 let terrainSprite = null;
@@ -1424,8 +1426,8 @@ app.ticker.add(() => {
   // Day/night tint
   applyDayNightTint();
 
-  // Fog-of-war overlay for selected bot
-  if (selectedBot && bots[selectedBot]?.seenTiles?.size > 0) {
+  // Fog-of-war overlay for selected bot (toggle with 'v' key or checkbox)
+  if (showFog && selectedBot && bots[selectedBot]?.seenTiles?.size > 20) {
     const seen = bots[selectedBot].seenTiles;
     cx.fillStyle = 'rgba(0,0,0,0.6)';
     for (let y = 0; y < worldH; y++) {
@@ -2056,6 +2058,10 @@ document.getElementById('follow-toggle').addEventListener('change', (e) => {
   autoFollow = e.target.checked;
 });
 
+document.getElementById('fog-toggle').addEventListener('change', (e) => {
+  showFog = e.target.checked;
+});
+
 // ========== PROCESS INIT ==========
 function processInit(d) {
   tick = d.tick || 0;
@@ -2539,6 +2545,10 @@ document.addEventListener('keydown', (e) => {
     case 'f':
       autoFollow = !autoFollow;
       document.getElementById('follow-toggle').checked = autoFollow;
+      break;
+    case 'v':
+      showFog = !showFog;
+      document.getElementById('fog-toggle').checked = showFog;
       break;
   }
 });
