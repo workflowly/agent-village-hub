@@ -69,7 +69,7 @@ export function findPath(fromX, fromY, toX, toY, terrain, width, height, terrain
   if (fromX === toX && fromY === toY) return [];
   if (!isPassable(toX, toY, terrain, width, height, terrainConfig)) return [];
 
-  const MAX_NODES = 100;
+  const MAX_NODES = 500;
   const key = (x, y) => y * width + x;
 
   // Min-heap using array (simple for small grids)
@@ -162,7 +162,7 @@ export function findPath(fromX, fromY, toX, toY, terrain, width, height, terrain
  * @returns {{x, y}|null}
  */
 export function findNearestResource(botX, botY, targetItem, tileData, terrain, width, height, terrainConfig, fallbackItem) {
-  const MAX_SEARCH = 200;
+  const MAX_SEARCH = 500;
   const visited = new Set();
   const queue = [{ x: botX, y: botY }];
   visited.add(botY * width + botX);
@@ -204,7 +204,7 @@ export function findNearestResource(botX, botY, targetItem, tileData, terrain, w
 // --- Find nearest food resource on the map ---
 
 function findNearestFood(botX, botY, tileData, terrain, width, height, terrainConfig, itemsConfig) {
-  const MAX_SEARCH = 200;
+  const MAX_SEARCH = 500;
   const visited = new Set();
   const queue = [{ x: botX, y: botY }];
   visited.add(botY * width + botX);
