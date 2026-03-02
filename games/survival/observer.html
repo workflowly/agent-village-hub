@@ -1424,6 +1424,19 @@ app.ticker.add(() => {
   // Day/night tint
   applyDayNightTint();
 
+  // Fog-of-war overlay for selected bot
+  if (selectedBot && bots[selectedBot]?.seenTiles?.size > 0) {
+    const seen = bots[selectedBot].seenTiles;
+    cx.fillStyle = 'rgba(0,0,0,0.6)';
+    for (let y = 0; y < worldH; y++) {
+      for (let x = 0; x < worldW; x++) {
+        if (!seen.has(`${x},${y}`)) {
+          cx.fillRect(x * TILE - cameraX, y * TILE - cameraY, TILE, TILE);
+        }
+      }
+    }
+  }
+
   // Camera
   updateCamera();
 
@@ -2052,9 +2065,9 @@ function processInit(d) {
     worldH = d.world.height || GRID_H;
     GRID_W = worldW;
     GRID_H = worldH;
-    TILE = Math.max(4, Math.floor(512 / Math.max(GRID_W, GRID_H)));
-    CW = GRID_W * TILE;
-    CH = GRID_H * TILE;
+    TILE = Math.max(4, Math.floor(1024 / Math.max(GRID_W, GRID_H)));
+    CW = Math.min(GRID_W * TILE, 512);
+    CH = Math.min(GRID_H * TILE, 512);
     app.renderer.resize(CW, CH);
     resize();
     resetPixiWorld();
@@ -2099,6 +2112,7 @@ function processInit(d) {
       }
     } else {
       for (const [id, b] of Object.entries(d.bots)) {
+        const seenSet = new Set(b.seenTiles || []);
         bots[id] = {
           _id: id,
           x: b.x || 0,
@@ -2110,6 +2124,7 @@ function processInit(d) {
           displayName: b.displayName || id,
           equipment: b.equipment || {},
           inventory: b.inventory || [],
+          seenTiles: seenSet,
         };
       }
     }
@@ -2362,10 +2377,22 @@ function processTick(d) {
 // ========== PROCESS FAST TICK (autopilot position updates) ==========
 function processFastTick(d) {
   if (!d.positions) return;
+  const VIS = 5;
   for (const [id, pos] of Object.entries(d.positions)) {
     if (bots[id]) {
       bots[id].x = pos.x;
       bots[id].y = pos.y;
+      // Expand fog-of-war
+      if (!bots[id].seenTiles) bots[id].seenTiles = new Set();
+      for (let dy = -VIS; dy <= VIS; dy++) {
+        for (let dx = -VIS; dx <= VIS; dx++) {
+          if (dx*dx + dy*dy > VIS*VIS) continue;
+          const vx = pos.x + dx, vy = pos.y + dy;
+          if (vx >= 0 && vx < worldW && vy >= 0 && vy < worldH) {
+            bots[id].seenTiles.add(`${vx},${vy}`);
+          }
+        }
+      }
     }
   }
 }

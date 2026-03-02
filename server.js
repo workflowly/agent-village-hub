@@ -762,6 +762,7 @@ const server = createServer(async (req, res) => {
             x: bs.x, y: bs.y, health: bs.health, hunger: bs.hunger, alive: bs.alive,
             equipment: bs.equipment, inventory: bs.inventory,
             displayName: participants.get(name)?.displayName || name,
+            seenTiles: bs.seenTiles ? Object.keys(bs.seenTiles) : [],
           }])
         ),
         resources: Object.keys(state.tileData)

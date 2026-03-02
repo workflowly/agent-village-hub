@@ -332,7 +332,7 @@ export async function survivalTick(ctx) {
     botState._currentTick = tickNum;
 
     const { events: evts, pendingAttacks: atks } = processSurvivalActions(
-      botName, response.actions, botState, state, gameConfig
+      botName, response.actions, botState, state, gameConfig, displayNames
     );
     actionEvents.push(...evts);
     pendingAttacks.push(...atks);
@@ -416,7 +416,7 @@ export async function survivalTick(ctx) {
     if (!state.diplomacy.betrayals) state.diplomacy.betrayals = [];
 
     const sayEvents = allEvents.filter(ev => ev.action === 'say');
-    const allianceEvents = processAllianceActions(sayEvents, state.diplomacy, state.bots, tickNum, gameConfig.raw.diplomacy);
+    const allianceEvents = processAllianceActions(sayEvents, state.diplomacy, state.bots, tickNum, gameConfig.raw.diplomacy, displayNames);
     allEvents.push(...allianceEvents);
 
     // Alliance proximity bonus
@@ -453,7 +453,8 @@ export async function survivalTick(ctx) {
         const dist = Math.sqrt(Math.pow(botState.x - ev.x, 2) + Math.pow(botState.y - ev.y, 2));
         return dist <= 10;
       }
-      return ev.action === 'say' || ev.action === 'death' || ev.action === 'respawn';
+      // Death/respawn are global knowledge; say is proximity-only (handled by x,y check above)
+      return ev.action === 'death' || ev.action === 'respawn';
     });
 
     if (botEvents.length > 0) {
@@ -515,6 +516,7 @@ export async function survivalTick(ctx) {
         equipment: bs.equipment, inventory: bs.inventory,
         displayName: displayNames[name] || name,
         directive: bs.directive || null,
+        seenTileCount: bs.seenTiles ? Object.keys(bs.seenTiles).length : 0,
       }])
     ),
     resourceChanges: (depletedTiles.length > 0 || respawnedCoords.length > 0)

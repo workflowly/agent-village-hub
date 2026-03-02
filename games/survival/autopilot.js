@@ -65,9 +65,11 @@ function countInventory(inventory) {
  * @param {object} terrainConfig - { plains: { moveCost, char }, ... }
  * @returns {Array<{x,y}>} path from start to goal (exclusive of start), empty if no path
  */
-export function findPath(fromX, fromY, toX, toY, terrain, width, height, terrainConfig) {
+export function findPath(fromX, fromY, toX, toY, terrain, width, height, terrainConfig, seenTiles) {
   if (fromX === toX && fromY === toY) return [];
   if (!isPassable(toX, toY, terrain, width, height, terrainConfig)) return [];
+  // If fog-of-war active, destination must be seen
+  if (seenTiles && !seenTiles[`${toX},${toY}`]) return [];
 
   const MAX_NODES = 500;
   const key = (x, y) => y * width + x;
@@ -118,11 +120,12 @@ export function findPath(fromX, fromY, toX, toY, terrain, width, height, terrain
       return path;
     }
 
-    // Expand neighbors (8 directions)
+    // Expand neighbors (8 directions) — only through seen tiles if fog-of-war active
     for (const dir of Object.values(DIRECTIONS)) {
       const nx = current.x + dir.dx;
       const ny = current.y + dir.dy;
       if (!isPassable(nx, ny, terrain, width, height, terrainConfig)) continue;
+      if (seenTiles && !seenTiles[`${nx},${ny}`]) continue;
 
       const nk = key(nx, ny);
       if (closed.has(nk)) continue;
@@ -161,7 +164,7 @@ export function findPath(fromX, fromY, toX, toY, terrain, width, height, terrain
  * @param {string} [fallbackItem] - optional fallback if targetItem not found
  * @returns {{x, y}|null}
  */
-export function findNearestResource(botX, botY, targetItem, tileData, terrain, width, height, terrainConfig, fallbackItem) {
+export function findNearestResource(botX, botY, targetItem, tileData, terrain, width, height, terrainConfig, fallbackItem, seenTiles) {
   const MAX_SEARCH = 500;
   const visited = new Set();
   const queue = [{ x: botX, y: botY }];
@@ -174,25 +177,28 @@ export function findNearestResource(botX, botY, targetItem, tileData, terrain, w
     const { x, y } = queue.shift();
     searched++;
 
-    // Check if tile has target resource
+    // Check if tile has target resource (only if seen)
     const key = `${x},${y}`;
-    const tile = tileData[key];
-    if (tile?.resources?.length > 0) {
-      if (tile.resources.some(r => r.item === targetItem)) {
-        return { x, y };
-      }
-      if (fallbackItem && !fallbackResult && tile.resources.some(r => r.item === fallbackItem)) {
-        fallbackResult = { x, y };
+    if (!seenTiles || seenTiles[key]) {
+      const tile = tileData[key];
+      if (tile?.resources?.length > 0) {
+        if (tile.resources.some(r => r.item === targetItem)) {
+          return { x, y };
+        }
+        if (fallbackItem && !fallbackResult && tile.resources.some(r => r.item === fallbackItem)) {
+          fallbackResult = { x, y };
+        }
       }
     }
 
-    // Expand neighbors
+    // Expand neighbors — only through seen tiles
     for (const dir of Object.values(DIRECTIONS)) {
       const nx = x + dir.dx;
       const ny = y + dir.dy;
       const nk = ny * width + nx;
       if (visited.has(nk)) continue;
       if (!isPassable(nx, ny, terrain, width, height, terrainConfig)) continue;
+      if (seenTiles && !seenTiles[`${nx},${ny}`]) continue;
       visited.add(nk);
       queue.push({ x: nx, y: ny });
     }
@@ -203,7 +209,7 @@ export function findNearestResource(botX, botY, targetItem, tileData, terrain, w
 
 // --- Find nearest food resource on the map ---
 
-function findNearestFood(botX, botY, tileData, terrain, width, height, terrainConfig, itemsConfig) {
+function findNearestFood(botX, botY, tileData, terrain, width, height, terrainConfig, itemsConfig, seenTiles) {
   const MAX_SEARCH = 500;
   const visited = new Set();
   const queue = [{ x: botX, y: botY }];
@@ -215,10 +221,12 @@ function findNearestFood(botX, botY, tileData, terrain, width, height, terrainCo
     searched++;
 
     const key = `${x},${y}`;
-    const tile = tileData[key];
-    if (tile?.resources?.length > 0) {
-      if (tile.resources.some(r => itemsConfig[r.item]?.type === 'food')) {
-        return { x, y };
+    if (!seenTiles || seenTiles[key]) {
+      const tile = tileData[key];
+      if (tile?.resources?.length > 0) {
+        if (tile.resources.some(r => itemsConfig[r.item]?.type === 'food')) {
+          return { x, y };
+        }
       }
     }
 
@@ -228,6 +236,7 @@ function findNearestFood(botX, botY, tileData, terrain, width, height, terrainCo
       const nk = ny * width + nx;
       if (visited.has(nk)) continue;
       if (!isPassable(nx, ny, terrain, width, height, terrainConfig)) continue;
+      if (seenTiles && !seenTiles[`${nx},${ny}`]) continue;
       visited.add(nk);
       queue.push({ x: nx, y: ny });
     }
@@ -342,10 +351,10 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
       const target = directive.target || 'wood';
       if (!botState.path || botState.path.length === 0 || botState.pathIdx >= botState.path.length) {
         const dest = findNearestResource(botState.x, botState.y, target, worldState.tileData,
-          worldState.terrain, width, height, terrainConfig, directive.fallback);
+          worldState.terrain, width, height, terrainConfig, directive.fallback, botState.seenTiles);
         if (dest) {
           botState.path = findPath(botState.x, botState.y, dest.x, dest.y,
-            worldState.terrain, width, height, terrainConfig);
+            worldState.terrain, width, height, terrainConfig, botState.seenTiles);
           botState.pathIdx = 0;
         } else {
           botState.path = null;
@@ -406,7 +415,7 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
         // Pathfind toward target
         if (!botState.path || botState.path.length === 0 || botState.pathIdx >= botState.path.length) {
           botState.path = findPath(botState.x, botState.y, targetBot.x, targetBot.y,
-            worldState.terrain, width, height, terrainConfig);
+            worldState.terrain, width, height, terrainConfig, botState.seenTiles);
           botState.pathIdx = 0;
         }
 
@@ -492,10 +501,10 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
       // Pathfind to nearest tile with missing ingredient
       if (!botState.path || botState.path.length === 0 || botState.pathIdx >= botState.path.length) {
         const dest = findNearestResource(botState.x, botState.y, missingItem, worldState.tileData,
-          worldState.terrain, width, height, terrainConfig);
+          worldState.terrain, width, height, terrainConfig, null, botState.seenTiles);
         if (dest) {
           botState.path = findPath(botState.x, botState.y, dest.x, dest.y,
-            worldState.terrain, width, height, terrainConfig);
+            worldState.terrain, width, height, terrainConfig, botState.seenTiles);
           botState.pathIdx = 0;
         }
       }
@@ -536,10 +545,10 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
       // Pathfind to food
       if (!botState.path || botState.path.length === 0 || botState.pathIdx >= botState.path.length) {
         const dest = findNearestFood(botState.x, botState.y, worldState.tileData,
-          worldState.terrain, width, height, terrainConfig, itemsConfig);
+          worldState.terrain, width, height, terrainConfig, itemsConfig, botState.seenTiles);
         if (dest) {
           botState.path = findPath(botState.x, botState.y, dest.x, dest.y,
-            worldState.terrain, width, height, terrainConfig);
+            worldState.terrain, width, height, terrainConfig, botState.seenTiles);
           botState.pathIdx = 0;
         }
       }
@@ -623,7 +632,7 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
 
       if (!botState.path || botState.path.length === 0 || botState.pathIdx >= botState.path.length) {
         botState.path = findPath(botState.x, botState.y, gotoX, gotoY,
-          worldState.terrain, width, height, terrainConfig);
+          worldState.terrain, width, height, terrainConfig, botState.seenTiles);
         botState.pathIdx = 0;
       }
 
@@ -715,6 +724,21 @@ export function runFastTick(state, gameConfig) {
         damageDealt: 0,
         damageTaken: 0,
       };
+    }
+
+    // Update fog-of-war: mark tiles within visibility radius as seen
+    if (!botState.seenTiles) botState.seenTiles = {};
+    const visRadius = 5; // base visibility
+    const width = gameConfig.raw.world.width;
+    const height = gameConfig.raw.world.height;
+    for (let dy = -visRadius; dy <= visRadius; dy++) {
+      for (let dx = -visRadius; dx <= visRadius; dx++) {
+        if (dx * dx + dy * dy > visRadius * visRadius) continue;
+        const vx = botState.x + dx, vy = botState.y + dy;
+        if (vx >= 0 && vx < width && vy >= 0 && vy < height) {
+          botState.seenTiles[`${vx},${vy}`] = 1;
+        }
+      }
     }
 
     const { events, pendingAttacks } = stepAutopilot(botName, botState, state, gameConfig);
