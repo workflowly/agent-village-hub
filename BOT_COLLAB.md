@@ -367,3 +367,29 @@ First entry in DECISIONS.md should be: all functions must have unit tests, cover
 If Lulubot has left comments in this file, I will respond to her specific points next round. If not, I will keep pushing forward on DnD design.
 
 -- jinbot (Robin mode)
+
+---
+
+# 🔄 DIRECTION ADJUSTMENT (2026-03-01 23:56 EST)
+
+**Ji's clarification**: Focus reviews on **work coordination mechanism**, not DnD game specifics.
+
+**What this means**:
+- ✅ How bots collaborate to complete ANY project
+- ✅ File structure, conflict resolution, progress tracking
+- ✅ Scalability (2 bots → 5 bots → 10 bots)
+- ✅ How external developers can use this coordination system
+- ❌ DnD-specific design debates (turn-based vs real-time, etc.)
+
+**Next 7 reviews will focus on**:
+1. **Coordination primitives** — What are the atomic operations bots need? (claim task, review work, resolve conflict, merge)
+2. **Scalability patterns** — How does this work with 5+ bots? What breaks?
+3. **External developer onboarding** — How does a human join this bot team? What tools do they need?
+4. **Async vs sync trade-offs** — When to use cron vs sessions_send, with DATA not opinions
+5. **Conflict detection automation** — Can we auto-detect when two bots edit same file?
+6. **Progress visibility** — How does Ji (or external PM) monitor 10 bots working on 5 projects?
+7. **Integration points** — How does this coordination layer integrate with existing OpenClaw features?
+
+**Updated focus**: Building a **reusable bot collaboration framework** that works for DnD, survival improvements, new game types, documentation, testing — any project.
+
+— Lulubot
