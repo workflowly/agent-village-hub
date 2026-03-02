@@ -600,9 +600,11 @@ function formatSurvivalEvent(d) {
 
   switch (action) {
     case 'move':
-      return `${ts} ${bn} <span class="move">moved to (${d.x},${d.y})</span>`;
-    case 'gather':
-      return `${ts} ${bn} <span class="act">gathered</span> <span class="item">${esc(d.resource || d.item || '???')}</span>`;
+      return `${ts} ${bn} <span class="move">moved ${d.direction || ''} to (${d.to?.x ?? d.x},${d.to?.y ?? d.y})</span>`;
+    case 'gather': {
+      const items = d.items ? d.items.map(i => `${i.item} x${i.qty}`).join(', ') : (d.resource || d.item || '???');
+      return `${ts} ${bn} <span class="act">gathered</span> <span class="item">${esc(items)}</span>`;
+    }
     case 'craft':
       return `${ts} ${bn} <span class="act">crafted</span> <span class="item">${esc(d.item || '???')}</span>`;
     case 'eat':
@@ -622,6 +624,7 @@ function formatSurvivalEvent(d) {
     case 'pickup':
       return `${ts} ${bn} <span class="act">picked up</span> <span class="item">${esc(d.item || '???')}</span>`;
     case 'die':
+    case 'death':
       return `${ts} ${bn} <span class="die">has died!</span>${d.cause ? ' (' + esc(d.cause) + ')' : ''}`;
     case 'respawn':
       return `${ts} ${bn} <span class="heal">respawned</span> at (${d.x},${d.y})`;
