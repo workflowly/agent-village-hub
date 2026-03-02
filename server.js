@@ -720,6 +720,7 @@ const server = createServer(async (req, res) => {
     res.end(JSON.stringify({
       inGame,
       game: inGame ? { id: gameConfig.raw.id, name: gameConfig.raw.name } : null,
+      failureCount: failureCounts.get(queryBot) || 0,
     }));
     return;
   }
