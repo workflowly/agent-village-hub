@@ -99,7 +99,7 @@
   ],
 
   "autopilot": {
-    "fastTickMs": 2000,
+    "fastTickMs": 1000,
     "autoEatThreshold": 70,
     "autoFleeThreshold": 20,
     "autoGatherOnMove": true,

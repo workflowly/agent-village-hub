@@ -54,8 +54,8 @@ const PORTAL_URL = 'http://127.0.0.1:3000';
 const EMPTY_CLEAR_TICKS = 3;
 
 const isGridGame = gameConfig.isGridGame;
-const TICK_INTERVAL_MS = parseInt(process.env.VILLAGE_TICK_INTERVAL || (isGridGame ? '60000' : '120000'), 10);
-const FAST_TICK_MS = gameConfig.raw.autopilot?.fastTickMs || 2000;
+const TICK_INTERVAL_MS = parseInt(process.env.VILLAGE_TICK_INTERVAL || (isGridGame ? '45000' : '120000'), 10);
+const FAST_TICK_MS = gameConfig.raw.autopilot?.fastTickMs || 1000;
 const STATE_FILE = join(__dirname, `state-${VILLAGE_GAME}.json`);
 const MEMORY_FILENAME = isGridGame ? 'survival.md' : 'village.md';
 const USAGE_FILE = join(paths.PROJECT_DIR, 'api-router', 'usage.json');

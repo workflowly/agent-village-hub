@@ -700,8 +700,9 @@ export function runFastTick(state, gameConfig) {
   const autopilotCfg = gameConfig.raw.autopilot || {};
 
   // Fractional hunger drain per fast tick
-  // 30 fast ticks ≈ 1 slow tick (60s / 2s = 30)
-  const hungerPerFastTick = (gameConfig.raw.survival.hungerPerTick || 3) / 30;
+  const fastTickMs = autopilotCfg.fastTickMs || 1000;
+  const fastTicksPerSlowTick = 45000 / fastTickMs; // ~45 fast ticks per slow tick
+  const hungerPerFastTick = (gameConfig.raw.survival.hungerPerTick || 3) / fastTicksPerSlowTick;
 
   for (const [botName, botState] of Object.entries(state.bots)) {
     if (!botState.alive) continue;

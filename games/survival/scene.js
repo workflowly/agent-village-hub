@@ -152,7 +152,7 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
       if (to === botName) {
         const fromName = (displayNames || {})[from] || from;
         const remaining = (gameConfig.raw.diplomacy.proposalExpireTicks || 5) - (currentTick - proposal.tick);
-        lines.push(`Pending: ${fromName} wants to ally with you (expires in ${remaining} ticks) — say "ACCEPT ALLIANCE ${from}" to accept`);
+        lines.push(`Pending: ${fromName} wants to ally with you (expires in ${remaining} ticks) — say "ACCEPT ALLIANCE ${fromName}" to accept`);
       } else if (from === botName) {
         lines.push(`Your proposal to ${(displayNames || {})[to] || to} is pending...`);
       }
@@ -334,7 +334,7 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
   lines.push('    Intents: gather, hunt, flee, craft, eat, explore, defend, goto, idle');
   lines.push('    Examples:');
   lines.push('      { intent: "gather", target: "iron_ore", fallback: "stone" }');
-  lines.push('      { intent: "hunt", target: "bot-name" }');
+  lines.push('      { intent: "hunt", target: "<nearby bot display name>" }');
   lines.push('      { intent: "goto", x: 15, y: 20 }');
   lines.push('      { intent: "explore" }');
   lines.push('      { intent: "defend" }');
@@ -352,7 +352,7 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
     }
   }
 
-  lines.push('  survival_say { message: "..." } — Speak to other bots (ALL bots hear this)');
+  lines.push('  survival_say { message: "..." } — Speak to nearby bots (only bots within your visibility range hear this)');
   if (gameConfig.raw.diplomacy) {
     lines.push('    USE SAY FOR: diplomacy, threats, lies, coordination, alliance commands.');
     lines.push('    DO NOT narrate scores or your own status — you already see the scoreboard.');
@@ -372,13 +372,17 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
     lines.push('Lie, fake weakness, spread rumors, promise peace then attack — all fair game.');
     lines.push('Think like Zhuge Liang (诸葛亮) — the best victory is won before the battle.');
     lines.push('');
-    lines.push('COMMUNICATION RULES:');
-    lines.push('  - survival_say is for talking TO other bots — diplomacy, threats, lies, deals.');
-    lines.push('  - DO NOT narrate scores, stats, or play-by-play. You already see the scoreboard.');
-    lines.push('  - Put your private thinking in the strategy field, not in say messages.');
-    lines.push('  - Example good say: "wise-koala, let\'s attack jinbot together — split the bounty!"');
-    lines.push('  - Example good say: "I have no weapons, I\'m harmless..." (while secretly hunting)');
-    lines.push('  - Example bad say: "289分第一名！饥饿76%！" (this is useless narration)');
+    lines.push('COMMUNICATION RULES (STRICT):');
+    lines.push('  - Say is ONLY for short, direct messages TO other bots. Max 1-2 sentences.');
+    lines.push('  - FORBIDDEN: narrating scores, stats, HP, hunger, play-by-play, emojis, exclamation spam.');
+    lines.push('  - FORBIDDEN: dramatic commentary, self-narration, announcing your own actions.');
+    lines.push('  - Put ALL private thinking in the strategy field. Say nothing to yourself.');
+    lines.push('  - Only address bots you can SEE in the NEARBY section.');
+    lines.push('  - Be concise and strategic. Every message should have a PURPOSE.');
+    lines.push('  - GOOD: "wise-koala, want to team up against the leader?"');
+    lines.push('  - GOOD: "I come in peace. Let me pass."');
+    lines.push('  - GOOD: "PROPOSE ALLIANCE wise-koala"');
+    lines.push('  - BAD: "289分第一名！饥饿76%紧急！💥" (useless dramatic narration)');
   } else if (gameConfig.raw.scoring) {
     lines.push('This is a COMPETITION. The bot with the most points at round end wins.');
     lines.push('Kills are worth 50 points — hunting other bots is the fastest way to score.');
