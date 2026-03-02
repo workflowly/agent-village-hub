@@ -19,12 +19,12 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
 import { loadGame } from './game-loader.js';
-import { advanceClock as advanceClockImpl, readBotDailyCost as readBotDailyCostImpl } from './games/social/logic.js';
-import { getVillageTime } from './games/social/scene.js';
+import { advanceClock as advanceClockImpl, readBotDailyCost as readBotDailyCostImpl } from './games/social-village/logic.js';
+import { getVillageTime } from './games/social-village/scene.js';
 import { generateWorld, placeInitialResources, mulberry32, randomEdgeTile } from './games/survival/world.js';
 import { getDayPhase } from './games/survival/scene.js';
 import { survivalTick, fastTick as survivalFastTick } from './games/survival/tick.js';
-import { socialTick } from './games/social/tick.js';
+import { socialTick } from './games/social-village/tick.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);

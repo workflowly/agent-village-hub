@@ -48,7 +48,7 @@ describe('loadGame — grid type', () => {
 
 describe('loadGame — social type (regression)', () => {
   it('loads social-village.json with isGridGame false', () => {
-    const socialPath = join(__dirname, '../../games/social/schema.json');
+    const socialPath = join(__dirname, '../../games/social-village/schema.json');
     const config = loadGame(socialPath);
     expect(config.isGridGame).toBe(false);
     expect(config.raw.id).toBeDefined();

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { readBotDailyCost } from '../../games/social/logic.js';
+import { readBotDailyCost } from '../../games/social-village/logic.js';
 
 // --- SEC-034, SEC-035: readBotDailyCost ---
 
