@@ -127,6 +127,13 @@ async function loadState() {
       worldSeed: loaded.worldSeed || gameConfig.raw.world.seed,
       villageCosts: loaded.villageCosts || {},
     };
+    // Round state for scoring
+    state.round = loaded.round || {
+      number: 1,
+      ticksRemaining: gameConfig.raw.scoring?.roundLength || 50,
+      scores: {},
+      roundHistory: [],
+    };
     console.log(`[village] Grid state loaded from ${source}: tick=${state.clock.tick} bots=${Object.keys(state.bots).length}`);
   }
 
@@ -162,6 +169,12 @@ async function loadState() {
       clock: { tick: 0, dayTick: 0 },
       worldSeed: worldConfig.seed,
       villageCosts: {},
+      round: {
+        number: 1,
+        ticksRemaining: gameConfig.raw.scoring?.roundLength || 50,
+        scores: {},
+        roundHistory: [],
+      },
     };
     const resourceCount = Object.keys(tileData).length;
     console.log(`[village] World generated: ${worldConfig.width}x${worldConfig.height}, ${resourceCount} resource tiles`);
@@ -617,6 +630,12 @@ const server = createServer(async (req, res) => {
         });
         console.log(`[village] ${botName} spawned at (${pos.x},${pos.y})`);
       }
+      // Init score for new/rejoining bot
+      if (gameConfig.raw.scoring && state.round) {
+        if (state.round.scores[botName] === undefined) {
+          state.round.scores[botName] = 0;
+        }
+      }
     } else {
       const alreadyInLocation = gameConfig.locationSlugs.some(loc => state.locations[loc].includes(botName));
       if (!alreadyInLocation) {
@@ -745,6 +764,12 @@ const server = createServer(async (req, res) => {
           .filter(k => state.tileData[k].resources?.length > 0)
           .map(k => { const [x, y] = k.split(',').map(Number); return { x, y }; }),
         recentEvents: (state.recentEvents || []).slice(-20),
+        round: state.round ? {
+          number: state.round.number,
+          ticksRemaining: state.round.ticksRemaining,
+          scores: state.round.scores,
+          roundHistory: state.round.roundHistory,
+        } : null,
       });
     } else {
       const initVt = getVillageTime(gameConfig.timezone);

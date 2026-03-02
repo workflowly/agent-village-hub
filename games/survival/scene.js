@@ -6,6 +6,7 @@
  */
 
 import { computeVisibility, buildAsciiMap } from './visibility.js';
+import { buildScoreboard } from './logic.js';
 
 /**
  * Determine the current day/night phase from tick.
@@ -88,7 +89,8 @@ export function formatStats(botState, dayPhase, tick) {
  * @returns {string} Scene prompt
  */
 export function buildSurvivalScene({ botName, botState, worldState, gameConfig, currentTick,
-                                      recentEvents, villageSummary, isScout, fastTickStats }) {
+                                      recentEvents, villageSummary, isScout, fastTickStats,
+                                      round, displayNames }) {
   const labels = gameConfig.raw.sceneLabels;
   const dayNight = gameConfig.raw.dayNight;
   const dayPhase = getDayPhase(currentTick, dayNight);
@@ -99,6 +101,20 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
   lines.push(labels.statusHeader);
   lines.push(formatStats(botState, dayPhase, currentTick));
   lines.push('');
+
+  // == ROUND ==
+  if (round && gameConfig.raw.scoring) {
+    lines.push('== ROUND ==');
+    lines.push(`Round ${round.number} | ${round.ticksRemaining} ticks remaining`);
+    const scoreboard = buildScoreboard(round.scores || {}, displayNames || {});
+    if (scoreboard.length > 0) {
+      const scoreStr = scoreboard.map(s => `${s.displayName}: ${s.score}`).join(', ');
+      lines.push(`Scoreboard: ${scoreStr}`);
+    }
+    const pts = gameConfig.raw.scoring.points;
+    lines.push(`Points: kill=${pts.kill}, craft=${pts.craft}, gather=${pts.gather}, explore=${pts.explore}, survival=${pts.survivalTick}, death=${pts.death}`);
+    lines.push('');
+  }
 
   // == MAP ==
   let radius = computeVisibility(botState, worldState.terrain, dayPhase, gameConfig);
@@ -275,6 +291,11 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
   // == GUIDANCE ==
   lines.push(labels.guidanceHeader);
   if (labels.behaviorGuidance) lines.push(labels.behaviorGuidance);
+  if (gameConfig.raw.scoring) {
+    lines.push('This is a COMPETITION. The bot with the most points at round end wins.');
+    lines.push('Kills are worth 50 points — hunting other bots is the fastest way to score.');
+    lines.push('Craft weapons, explore new tiles, gather resources — everything earns points.');
+  }
   lines.push('You are the General. Set strategic directives — your autopilot soldier executes them automatically.');
   lines.push('The soldier handles movement, pathfinding, gathering, eating, and combat between your turns.');
   lines.push('Focus on WHAT to do, not HOW. Change directive when your situation changes.');

@@ -1,0 +1,3158 @@
+{
+  "terrain": ".....^^^^^^^^^^^^^#^^^^^^^^^^..^.....^^^^^^^^^^^^^^^^^^^^^^^^#.^....^^^^^^^^^^^^^^^^^^^^^^^^^^^^....^^^^^^^^^^^^^^^^^^^^#^^^^^^^....^^^#^^^^^^^^^^^^^^^^^^^^^^^^....^^^^^^^^^^^^^^^^^^^^^^^^^^^^.....^^^^^^^^^^^^^^^^^^^#^^^^^^^.....^^^^^^^^^^^^^^^^^^^^^^#^^^^......^^^^^^^^^^^^^^^^^^^^#^^^^^......^^^^^^^^^^^^^^^^^^^^^^^^^^.....^^^^^^^^^^^^^^^^^^^^^^^^^^^.....^^^^^^^^^^^^^^^^^^^^^^^^^^^....^^^^^^^^^^^^^^^^^^^^^^^^^^^^..........^^^^^^^^^^^^^^^^^^^^^^..........^^^^^^^^^^^^^^^^^^#^#^...........^^^^^^^^^#^^^^^^^^^^^...........^^^^^TT^^^^^^^^^^^^^^.#.........^^^^^TT^^^^^^^^^^^^^^.....#...#.^^^^#^T^^^^^^^^^^^^^^...........^^^^^^^^^^^^^#^^^^^^^^^^.......^^^^^^^^TTTTTT^^^^^^^^^#^^^#^^^^^^^^^^^.TTTTTT^^^^^^^^^^^^^^^^^^^^^^^^...TTTTT^^^^^^^^^^^^^^^^^^^^^^^....^^^T^^^^^^^^^^^^^^^^^^^^^^^...^^^^^^^^#^^^^^#^^^^^^^^^^^^^^.#^^^^^#^^^^^^^#^^^^O^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^TT^^^^^^^^^^^^^^^^^^^^^^^^^^^^TTTTT^#^^^^^^^^^^^^^^^^^^TTTTTTTTTTTT^^^^^^^^^^^^^^^^^^TTTTTTTTTTTTTT^^^^^#^^^^^^^^^TTTTTTTTTTTTTTTT^^^^^^^^^",
+  "tileData": {
+    "11,0": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "13,0": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "14,0": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "15,0": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "17,0": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "21,0": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        },
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "23,0": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "24,0": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "27,0": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "28,0": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "31,0": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "5,1": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "7,1": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "9,1": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "10,1": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "21,1": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "23,1": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "25,1": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "26,1": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "31,1": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "4,2": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "5,2": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "8,2": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "10,2": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "12,2": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "13,2": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "16,2": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "17,2": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "26,2": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "28,2": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "29,2": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "30,2": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "8,3": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "12,3": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        },
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "13,3": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "23,3": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "24,3": {
+      "resources": [
+        {
+          "item": "scrap_metal",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "28,3": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "29,3": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "30,3": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "8,4": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "9,4": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "12,4": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "13,4": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "15,4": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "16,4": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "19,4": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "23,4": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        },
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "24,4": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        },
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "25,4": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "27,4": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "29,4": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "18,5": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "20,5": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "25,5": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "29,5": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "30,5": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "31,5": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "3,6": {
+      "resources": [],
+      "depletedAt": 168
+    },
+    "4,6": {
+      "resources": [],
+      "depletedAt": 134
+    },
+    "5,6": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "6,6": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "9,6": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "10,6": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "11,6": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "14,6": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "16,6": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        },
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "17,6": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "18,6": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "21,6": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "26,6": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "30,6": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "7,7": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "9,7": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        },
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "13,7": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "15,7": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "16,7": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "17,7": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "20,7": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "22,7": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "25,7": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "28,7": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "29,7": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "30,7": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "1,8": {
+      "resources": [],
+      "depletedAt": 48
+    },
+    "7,8": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "8,8": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "13,8": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "19,8": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "20,8": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "28,8": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "29,8": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "6,9": {
+      "resources": [],
+      "depletedAt": 175
+    },
+    "7,9": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "8,9": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "12,9": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "14,9": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "20,9": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "29,9": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "30,9": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        },
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "31,9": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "0,10": {
+      "resources": [],
+      "depletedAt": 135
+    },
+    "2,10": {
+      "resources": [],
+      "depletedAt": 116
+    },
+    "5,10": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "7,10": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "8,10": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "13,10": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "15,10": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "22,10": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "25,10": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "27,10": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "28,10": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "31,10": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "5,11": {
+      "resources": [],
+      "depletedAt": 175
+    },
+    "13,11": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "15,11": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "17,11": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "20,11": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "23,11": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "24,11": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "27,11": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "1,12": {
+      "resources": [],
+      "depletedAt": 172
+    },
+    "3,12": {
+      "resources": [],
+      "depletedAt": 47
+    },
+    "8,12": {
+      "resources": [],
+      "depletedAt": 175
+    },
+    "9,12": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "15,12": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "19,12": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "20,12": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "21,12": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "27,12": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "28,12": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "30,12": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        },
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "31,12": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "1,13": {
+      "resources": [],
+      "depletedAt": 158
+    },
+    "10,13": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "11,13": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "13,13": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "15,13": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "21,13": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "23,13": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "24,13": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "26,13": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "28,13": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "29,13": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "30,13": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "31,13": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 19
+        },
+        {
+          "item": "iron_ore",
+          "qty": 2
+        }
+      ],
+      "depletedAt": 0
+    },
+    "3,14": {
+      "resources": [],
+      "depletedAt": 158
+    },
+    "5,14": {
+      "resources": [],
+      "depletedAt": 170
+    },
+    "12,14": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "15,14": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "18,14": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "19,14": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "20,14": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "25,14": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "6,15": {
+      "resources": [],
+      "depletedAt": 158
+    },
+    "13,15": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "16,15": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "17,15": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "18,15": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "19,15": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "20,15": {
+      "resources": [
+        {
+          "item": "scrap_metal",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "21,15": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "31,15": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "12,16": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "13,16": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "15,16": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "19,16": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "21,16": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "25,16": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "30,16": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "1,17": {
+      "resources": [
+        {
+          "item": "scrap_metal",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "9,17": {
+      "resources": [],
+      "depletedAt": 117
+    },
+    "13,17": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "15,17": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "18,17": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "21,17": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "29,17": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "31,17": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        },
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "1,18": {
+      "resources": [],
+      "depletedAt": 116
+    },
+    "11,18": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "13,18": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "14,18": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "16,18": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "22,18": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "24,18": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "27,18": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "6,19": {
+      "resources": [],
+      "depletedAt": 158
+    },
+    "13,19": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "14,19": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "23,19": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "29,19": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "0,20": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        },
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "2,20": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "5,20": {
+      "resources": [],
+      "depletedAt": 153
+    },
+    "6,20": {
+      "resources": [],
+      "depletedAt": 168
+    },
+    "13,20": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "16,20": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "18,20": {
+      "resources": [
+        {
+          "item": "scrap_metal",
+          "qty": 2
+        },
+        {
+          "item": "stone",
+          "qty": 8
+        },
+        {
+          "item": "wooden_shield",
+          "qty": 4
+        },
+        {
+          "item": "iron_sword",
+          "qty": 1
+        },
+        {
+          "item": "wooden_pickaxe",
+          "qty": 2
+        },
+        {
+          "item": "stone_pickaxe",
+          "qty": 3
+        },
+        {
+          "item": "stone_sword",
+          "qty": 2
+        },
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "21,20": {
+      "resources": [],
+      "depletedAt": 155
+    },
+    "24,20": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "26,20": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "27,20": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "4,21": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "7,21": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "10,21": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "11,21": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "13,21": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "15,21": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "16,21": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "21,21": {
+      "resources": [
+        {
+          "item": "wood",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "25,21": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "28,21": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "0,22": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "2,22": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "5,22": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "11,22": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "12,22": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "17,22": {
+      "resources": [],
+      "depletedAt": 27
+    },
+    "18,22": {
+      "resources": [],
+      "depletedAt": 172
+    },
+    "19,22": {
+      "resources": [],
+      "depletedAt": 169
+    },
+    "20,22": {
+      "resources": [
+        {
+          "item": "wood",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "21,22": {
+      "resources": [],
+      "depletedAt": 169
+    },
+    "22,22": {
+      "resources": [],
+      "depletedAt": 136
+    },
+    "25,22": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "27,22": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "28,22": {
+      "resources": [],
+      "depletedAt": 168
+    },
+    "29,22": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "31,22": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "1,23": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "3,23": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "7,23": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "11,23": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "12,23": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "22,23": {
+      "resources": [],
+      "depletedAt": 169
+    },
+    "23,23": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "24,23": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "0,24": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "1,24": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "4,24": {
+      "resources": [],
+      "depletedAt": 141
+    },
+    "5,24": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "6,24": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "7,24": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "11,24": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "12,24": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "13,24": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "14,24": {
+      "resources": [],
+      "depletedAt": 90
+    },
+    "21,24": {
+      "resources": [],
+      "depletedAt": 169
+    },
+    "22,24": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "27,24": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "28,24": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "31,24": {
+      "resources": [
+        {
+          "item": "scrap_metal",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "3,25": {
+      "resources": [],
+      "depletedAt": 168
+    },
+    "4,25": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "6,25": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "7,25": {
+      "resources": [],
+      "depletedAt": 152
+    },
+    "8,25": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "13,25": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "15,25": {
+      "resources": [],
+      "depletedAt": 157
+    },
+    "16,25": {
+      "resources": [],
+      "depletedAt": 168
+    },
+    "19,25": {
+      "resources": [],
+      "depletedAt": 172
+    },
+    "20,25": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "24,25": {
+      "resources": [],
+      "depletedAt": 168
+    },
+    "26,25": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "28,25": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "1,26": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "2,26": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "4,26": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "6,26": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        },
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "8,26": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "10,26": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "11,26": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "13,26": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "20,26": {
+      "resources": [],
+      "depletedAt": 172
+    },
+    "22,26": {
+      "resources": [],
+      "depletedAt": 138
+    },
+    "27,26": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        },
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "30,26": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "31,26": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "0,27": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "2,27": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "7,27": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "9,27": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "11,27": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "13,27": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "15,27": {
+      "resources": [],
+      "depletedAt": 149
+    },
+    "18,27": {
+      "resources": [],
+      "depletedAt": 168
+    },
+    "19,27": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "20,27": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "22,27": {
+      "resources": [],
+      "depletedAt": 168
+    },
+    "26,27": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "28,27": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "30,27": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "31,27": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "0,28": {
+      "resources": [],
+      "depletedAt": 168
+    },
+    "2,28": {
+      "resources": [],
+      "depletedAt": 141
+    },
+    "4,28": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "6,28": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "8,28": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "11,28": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "18,28": {
+      "resources": [],
+      "depletedAt": 157
+    },
+    "21,28": {
+      "resources": [],
+      "depletedAt": 168
+    },
+    "23,28": {
+      "resources": [],
+      "depletedAt": 172
+    },
+    "29,28": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "1,29": {
+      "resources": [],
+      "depletedAt": 142
+    },
+    "6,29": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "7,29": {
+      "resources": [],
+      "depletedAt": 160
+    },
+    "8,29": {
+      "resources": [],
+      "depletedAt": 160
+    },
+    "11,29": {
+      "resources": [],
+      "depletedAt": 162
+    },
+    "14,29": {
+      "resources": [],
+      "depletedAt": 174
+    },
+    "16,29": {
+      "resources": [],
+      "depletedAt": 143
+    },
+    "18,29": {
+      "resources": [
+        {
+          "item": "wood",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "19,29": {
+      "resources": [],
+      "depletedAt": 172
+    },
+    "21,29": {
+      "resources": [],
+      "depletedAt": 169
+    },
+    "26,29": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "27,29": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "3,30": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "4,30": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "5,30": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "6,30": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "10,30": {
+      "resources": [],
+      "depletedAt": 158
+    },
+    "12,30": {
+      "resources": [],
+      "depletedAt": 174
+    },
+    "15,30": {
+      "resources": [],
+      "depletedAt": 174
+    },
+    "17,30": {
+      "resources": [],
+      "depletedAt": 172
+    },
+    "18,30": {
+      "resources": [],
+      "depletedAt": 172
+    },
+    "19,30": {
+      "resources": [],
+      "depletedAt": 172
+    },
+    "21,30": {
+      "resources": [],
+      "depletedAt": 168
+    },
+    "23,30": {
+      "resources": [],
+      "depletedAt": 172
+    },
+    "27,30": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "28,30": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "29,30": {
+      "resources": [
+        {
+          "item": "scrap_metal",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "30,30": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "0,31": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "3,31": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "4,31": {
+      "resources": [],
+      "depletedAt": 142
+    },
+    "6,31": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "9,31": {
+      "resources": [],
+      "depletedAt": 158
+    },
+    "13,31": {
+      "resources": [],
+      "depletedAt": 174
+    },
+    "15,31": {
+      "resources": [],
+      "depletedAt": 174
+    },
+    "17,31": {
+      "resources": [],
+      "depletedAt": 174
+    },
+    "20,31": {
+      "resources": [],
+      "depletedAt": 143
+    },
+    "23,31": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "24,31": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "26,31": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "29,31": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "30,31": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "31,31": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "24,6": {
+      "resources": [
+        {
+          "item": "iron_ore",
+          "qty": 3
+        },
+        {
+          "item": "stone",
+          "qty": 17
+        }
+      ],
+      "depletedAt": 0
+    },
+    "20,30": {
+      "resources": [],
+      "depletedAt": 169
+    },
+    "16,22": {
+      "resources": [],
+      "depletedAt": 169
+    },
+    "22,31": {
+      "resources": [
+        {
+          "item": "wooden_shield",
+          "qty": 2
+        },
+        {
+          "item": "iron_sword",
+          "qty": 2
+        },
+        {
+          "item": "stone_sword",
+          "qty": 3
+        },
+        {
+          "item": "stone_pickaxe",
+          "qty": 2
+        },
+        {
+          "item": "wooden_sword",
+          "qty": 1
+        },
+        {
+          "item": "wooden_pickaxe",
+          "qty": 2
+        },
+        {
+          "item": "iron_ore",
+          "qty": 1
+        }
+      ],
+      "depletedAt": 0
+    },
+    "17,23": {
+      "resources": [
+        {
+          "item": "stone",
+          "qty": 2
+        }
+      ],
+      "depletedAt": 0
+    }
+  },
+  "bots": {
+    "wise-koala": {
+      "x": 20,
+      "y": 22,
+      "health": 50,
+      "hunger": 55.300000000000146,
+      "inventory": {
+        "stone": 14,
+        "iron_ore": 1,
+        "iron_armor": 1,
+        "wooden_sword": 1
+      },
+      "equipment": {
+        "weapon": "stone_sword",
+        "armor": "wooden_shield",
+        "tool": "stone_pickaxe"
+      },
+      "alive": true,
+      "fastTickStats": {
+        "tilesMoved": 0,
+        "itemsGathered": [],
+        "damageDealt": 0,
+        "damageTaken": 0
+      },
+      "_currentTick": 177,
+      "directive": {
+        "intent": "gather",
+        "target": "berry",
+        "fallback": "wood",
+        "x": null,
+        "y": null,
+        "setAt": 177
+      },
+      "path": null,
+      "pathIdx": 0
+    },
+    "prime-heron": {
+      "x": 3,
+      "y": 14,
+      "health": 15,
+      "hunger": 100,
+      "inventory": {
+        "stone": 12,
+        "iron_ore": 1,
+        "wooden_shield": 3
+      },
+      "equipment": {
+        "weapon": "stone_sword",
+        "armor": "wooden_shield",
+        "tool": "stone_pickaxe"
+      },
+      "alive": true,
+      "fastTickStats": {
+        "tilesMoved": 0,
+        "itemsGathered": [],
+        "damageDealt": 0,
+        "damageTaken": 0
+      },
+      "_currentTick": 177,
+      "directive": {
+        "intent": "gather",
+        "target": "berry",
+        "fallback": "wood",
+        "x": null,
+        "y": null,
+        "setAt": 177
+      },
+      "path": null,
+      "pathIdx": 0
+    },
+    "jinbot": {
+      "x": 7,
+      "y": 14,
+      "health": 50,
+      "hunger": 54.80000000000025,
+      "inventory": {
+        "stone": 3,
+        "iron_ore": 2
+      },
+      "equipment": {
+        "weapon": null,
+        "armor": null,
+        "tool": null
+      },
+      "alive": true,
+      "directive": {
+        "intent": "explore",
+        "target": "berry",
+        "fallback": "berry",
+        "x": null,
+        "y": null,
+        "setAt": 177
+      },
+      "path": null,
+      "pathIdx": 0,
+      "fastTickStats": {
+        "tilesMoved": 0,
+        "itemsGathered": [],
+        "damageDealt": 0,
+        "damageTaken": 0
+      },
+      "_currentTick": 177
+    },
+    "lulubot": {
+      "x": 1,
+      "y": 12,
+      "health": 100,
+      "hunger": 53.500000000000185,
+      "inventory": {
+        "stone": 7,
+        "wood": 6,
+        "berry": 4,
+        "wooden_shield": 1
+      },
+      "equipment": {
+        "weapon": "iron_sword",
+        "armor": "wooden_shield",
+        "tool": "stone_pickaxe"
+      },
+      "alive": true,
+      "directive": {
+        "intent": "gather",
+        "target": "berry",
+        "fallback": "wood",
+        "x": null,
+        "y": null,
+        "setAt": 177
+      },
+      "path": null,
+      "pathIdx": 0,
+      "fastTickStats": {
+        "tilesMoved": 0,
+        "itemsGathered": [],
+        "damageDealt": 0,
+        "damageTaken": 0
+      },
+      "_currentTick": 177
+    }
+  },
+  "recentEvents": [
+    {
+      "action": "hunger_drain",
+      "bot": "prime-heron",
+      "hunger": 100,
+      "health": 15,
+      "drain": 5
+    },
+    {
+      "action": "craft",
+      "bot": "wise-koala",
+      "item": "stone_pickaxe",
+      "label": "Stone Pickaxe",
+      "inputs": [
+        "wood",
+        "stone",
+        "stone"
+      ]
+    },
+    {
+      "action": "directive",
+      "bot": "wise-koala",
+      "intent": "gather",
+      "target": "berry",
+      "x": 20,
+      "y": 22
+    },
+    {
+      "action": "say",
+      "bot": "wise-koala",
+      "message": "制作石镐释放空间！收集脚下木材和浆果！",
+      "x": 20,
+      "y": 22
+    },
+    {
+      "action": "say",
+      "bot": "wise-koala",
+      "message": "lulubot太好了你到了救援现场！Prime-heron饥饿100%HP15极度危险！我又犯错背包满了石头，正在制作装备释放空间！你有浆果x4快救他！我继续收集建立储备！",
+      "x": 20,
+      "y": 22
+    },
+    {
+      "action": "directive",
+      "bot": "prime-heron",
+      "intent": "gather",
+      "target": "berry",
+      "x": 3,
+      "y": 14
+    },
+    {
+      "action": "say",
+      "bot": "prime-heron",
+      "message": "饥饿100%血量15！最后机会找浆果救命！",
+      "x": 3,
+      "y": 14
+    },
+    {
+      "action": "say",
+      "bot": "prime-heron",
+      "message": "生死时刻！饥饿100%血量15！我看到地图@资源点，拼命采集浆果！lulubot你有浆果4个太好了！wise-koala继续收集！大家一起努力！",
+      "x": 3,
+      "y": 14
+    },
+    {
+      "action": "directive",
+      "bot": "jinbot",
+      "intent": "explore",
+      "target": "berry",
+      "x": 7,
+      "y": 14
+    },
+    {
+      "action": "say",
+      "bot": "lulubot",
+      "message": "prime-heron！你饥饿100%HP15快死了！周围有@资源点，赶紧采集！我饥饿53%继续收集浆果！jinbot也帮忙找！",
+      "x": 1,
+      "y": 12
+    },
+    {
+      "action": "directive",
+      "bot": "lulubot",
+      "intent": "gather",
+      "target": "berry",
+      "x": 1,
+      "y": 12
+    },
+    {
+      "action": "say",
+      "bot": "lulubot",
+      "message": "继续采集浆果！大家都要找食物！",
+      "x": 1,
+      "y": 12
+    }
+  ],
+  "clock": {
+    "tick": 177,
+    "dayTick": 9
+  },
+  "worldSeed": 42,
+  "villageCosts": {
+    "wise-koala": 5.391711599999997,
+    "prime-heron": 5.278013549999998,
+    "glad-fox": 0.76753815,
+    "jinbot": 0.7825899,
+    "lulubot": 0.19451924999999998
+  }
+}

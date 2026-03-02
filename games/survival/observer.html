@@ -97,6 +97,33 @@ canvas{image-rendering:pixelated;image-rendering:crisp-edges;cursor:crosshair}
 #controls label{font-size:10px;color:#555;cursor:pointer;user-select:none}
 #controls input[type=checkbox]{margin-right:3px}
 
+/* Scoreboard panel */
+#scoreboard{padding:4px 10px;border-bottom:1px solid #1a1a1a;flex-shrink:0;max-height:120px;overflow-y:auto}
+#scoreboard h4{font-size:10px;color:#555;margin-bottom:2px;text-transform:uppercase;letter-spacing:1px}
+#scoreboard table{width:100%;border-collapse:collapse;font-size:10px}
+#scoreboard td{padding:1px 4px}
+#scoreboard .sb-rank{color:#555;width:16px}
+#scoreboard .sb-name{color:#bbb}
+#scoreboard .sb-score{text-align:right;color:#4a9;font-weight:700}
+#scoreboard .sb-leader .sb-name{color:#fdd835;font-weight:700}
+#scoreboard .sb-leader .sb-score{color:#fdd835}
+
+/* Round-end overlay */
+#round-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:50}
+#round-overlay.show{display:flex}
+#round-overlay .ro-card{background:#111;border:1px solid #333;border-radius:8px;padding:16px 28px;max-width:360px;text-align:center}
+#round-overlay .ro-title{font-size:16px;color:#fdd835;font-weight:700;margin-bottom:8px}
+#round-overlay .ro-winner{font-size:13px;color:#4a9;margin-bottom:10px}
+#round-overlay table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px}
+#round-overlay td{padding:2px 6px}
+#round-overlay .ro-rank{color:#555;width:20px}
+#round-overlay .ro-name{color:#ccc}
+#round-overlay .ro-pts{text-align:right;color:#4a9;font-weight:700}
+#round-overlay .ro-first .ro-name{color:#fdd835}
+#round-overlay .ro-first .ro-pts{color:#fdd835}
+#round-overlay .ro-fade{animation:roFadeIn .3s ease}
+@keyframes roFadeIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+
 /* Tooltip */
 #tooltip{position:absolute;background:rgba(10,10,10,.92);border:1px solid #2a2a2a;color:#bbb;font:11px/1.4 'Courier New',monospace;padding:4px 8px;pointer-events:none;z-index:15;display:none;max-width:200px;border-radius:2px}
 
@@ -136,6 +163,10 @@ canvas{image-rendering:pixelated;image-rendering:crisp-edges;cursor:crosshair}
         <h4>Bots</h4>
       </div>
       <div id="log-wrap">
+        <div id="scoreboard">
+          <h4>Scoreboard</h4>
+          <div id="scoreboard-body"></div>
+        </div>
         <div id="status-strip"></div>
         <div id="chat-wrap">
           <div id="chat-header">Chat</div>
@@ -148,8 +179,10 @@ canvas{image-rendering:pixelated;image-rendering:crisp-edges;cursor:crosshair}
       </div>
     </div>
   </div>
+  <div id="round-overlay"><div class="ro-card ro-fade" id="ro-card"></div></div>
   <div id="bar">
     <span class="lbl">Survival</span>
+    <span id="round-info"></span>
     <span id="tick-info">&mdash;</span>
     <span id="phase-info"></span>
     <span id="bot-count"></span>
@@ -234,6 +267,10 @@ let resourceTiles = new Set();
 let dragging = false;
 let dragStartX = 0, dragStartY = 0;
 let dragCamStartX = 0, dragCamStartY = 0;
+let roundNumber = 0;
+let roundTicksRemaining = 0;
+let roundScores = {};
+let roundOverlayTimer = null;
 
 // ========== HELPERS ==========
 function esc(s) {
@@ -696,6 +733,57 @@ function renderStatusStrip() {
   el.innerHTML = html;
 }
 
+// ========== SCOREBOARD ==========
+function renderScoreboard() {
+  const el = document.getElementById('scoreboard-body');
+  if (!roundScores || Object.keys(roundScores).length === 0) {
+    el.innerHTML = '<div style="font-size:10px;color:#444;font-style:italic">No scores yet</div>';
+    return;
+  }
+  const sorted = Object.entries(roundScores)
+    .map(([id, score]) => ({ id, name: bots[id]?.displayName || id, score }))
+    .sort((a, b) => b.score - a.score);
+  let html = '<table>';
+  sorted.forEach((s, i) => {
+    const cls = i === 0 ? ' class="sb-leader"' : '';
+    const color = getBotColor(s.id);
+    html += `<tr${cls}>`;
+    html += `<td class="sb-rank">${i + 1}.</td>`;
+    html += `<td class="sb-name" style="color:${i === 0 ? '#fdd835' : color}">${esc(s.name)}</td>`;
+    html += `<td class="sb-score">${s.score}</td>`;
+    html += '</tr>';
+  });
+  html += '</table>';
+  el.innerHTML = html;
+}
+
+function showRoundEndOverlay(d) {
+  const overlay = document.getElementById('round-overlay');
+  const card = document.getElementById('ro-card');
+  const winnerName = d.winnerDisplayName || d.winner || 'Nobody';
+  let html = `<div class="ro-title">Round ${d.round} Complete!</div>`;
+  html += `<div class="ro-winner">Winner: ${esc(winnerName)}</div>`;
+  if (d.scoreboard && d.scoreboard.length > 0) {
+    html += '<table>';
+    d.scoreboard.forEach((s, i) => {
+      const cls = i === 0 ? ' class="ro-first"' : '';
+      html += `<tr${cls}>`;
+      html += `<td class="ro-rank">${i + 1}.</td>`;
+      html += `<td class="ro-name">${esc(s.displayName || s.bot)}</td>`;
+      html += `<td class="ro-pts">${s.score}</td>`;
+      html += '</tr>';
+    });
+    html += '</table>';
+  }
+  card.innerHTML = html;
+  overlay.classList.add('show');
+  if (roundOverlayTimer) clearTimeout(roundOverlayTimer);
+  roundOverlayTimer = setTimeout(() => {
+    overlay.classList.remove('show');
+    roundOverlayTimer = null;
+  }, 8000);
+}
+
 // ========== SPEECH BUBBLES ==========
 const speechQueue = [];
 let speechTimer = null;
@@ -858,8 +946,16 @@ function updateBar() {
   const countEl = document.getElementById('bot-count');
   const cdEl = document.getElementById('countdown');
   const stEl = document.getElementById('status');
+  const roundEl = document.getElementById('round-info');
 
   tickEl.textContent = tick > 0 ? 'Tick ' + tick : '--';
+
+  if (roundNumber > 0) {
+    roundEl.textContent = `Round ${roundNumber} | ${roundTicksRemaining} ticks left`;
+    roundEl.style.color = '#fdd835';
+  } else {
+    roundEl.textContent = '';
+  }
 
   if (dayPhase) {
     const p = dayPhase.toLowerCase();
@@ -1080,6 +1176,13 @@ function processInit(d) {
     }
   }
 
+  // Round data
+  if (d.round) {
+    roundNumber = d.round.number || 0;
+    roundTicksRemaining = d.round.ticksRemaining || 0;
+    roundScores = d.round.scores || {};
+  }
+
   // Select first alive bot if none selected
   if (!selectedBot) {
     const first = Object.values(bots).find(b => b.alive !== false);
@@ -1090,6 +1193,7 @@ function processInit(d) {
   renderBotInfo();
   renderBotList();
   renderStatusStrip();
+  renderScoreboard();
   updateBar();
 
   addActivity(`Connected to survival grid (${worldW}\u00d7${worldH}, ${Object.keys(bots).length} bots)`, '');
@@ -1247,6 +1351,13 @@ function processTick(d) {
     if (terrain) prerenderTerrain();
   }
 
+  // Round data
+  if (d.round) {
+    roundNumber = d.round.number || roundNumber;
+    roundTicksRemaining = d.round.ticksRemaining !== undefined ? d.round.ticksRemaining : roundTicksRemaining;
+    roundScores = d.round.scores || roundScores;
+  }
+
   // Narrative tick separator with bot status hints
   const aliveBots = Object.values(bots).filter(b => b.alive !== false);
   const total = Object.keys(bots).length;
@@ -1264,6 +1375,7 @@ function processTick(d) {
   renderBotInfo();
   renderBotList();
   renderStatusStrip();
+  renderScoreboard();
   updateBar();
 }
 
@@ -1312,6 +1424,9 @@ function connect() {
         processFastTick(d);
       } else if (type === 'thinking') {
         processThinking(d);
+      } else if (type === 'round_end') {
+        showRoundEndOverlay(d);
+        addActivity(`\ud83c\udfc6 Round ${d.round} ended! Winner: ${esc(d.winnerDisplayName || d.winner || 'Nobody')}`, 'dramatic');
       }
     } catch (err) {
       // Ignore parse errors
@@ -1347,6 +1462,14 @@ function connect() {
   es.addEventListener('thinking', (e) => {
     try {
       processThinking(JSON.parse(e.data));
+    } catch {}
+  });
+
+  es.addEventListener('round_end', (e) => {
+    try {
+      const d = JSON.parse(e.data);
+      showRoundEndOverlay(d);
+      addActivity(`\ud83c\udfc6 Round ${d.round} ended! Winner: ${esc(d.winnerDisplayName || d.winner || 'Nobody')}`, 'dramatic');
     } catch {}
   });
 

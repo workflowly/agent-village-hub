@@ -5,6 +5,49 @@
  * Handles movement, gathering, crafting, eating, combat, and survival mechanics.
  */
 
+// --- Scoring ---
+
+/**
+ * Initialize scores for all bots to 0.
+ * @param {object} botsState - { botName: { ... } }
+ * @returns {object} { botName: 0, ... }
+ */
+export function initScores(botsState) {
+  const scores = {};
+  for (const botName of Object.keys(botsState)) {
+    scores[botName] = 0;
+  }
+  return scores;
+}
+
+/**
+ * Award points to a bot for a scoring category.
+ * @param {object} scores - { botName: number }
+ * @param {string} botName
+ * @param {string} category - key in config.raw.scoring.points
+ * @param {object} config - gameConfig with raw.scoring.points
+ * @returns {number} points awarded (0 if bot/category missing)
+ */
+export function awardPoints(scores, botName, category, config) {
+  if (scores[botName] === undefined) return 0;
+  const pts = config.raw.scoring?.points?.[category];
+  if (pts === undefined) return 0;
+  scores[botName] += pts;
+  return pts;
+}
+
+/**
+ * Build a sorted scoreboard from scores.
+ * @param {object} scores - { botName: number }
+ * @param {object} displayNames - { botName: displayName }
+ * @returns {Array<{ bot: string, displayName: string, score: number }>} sorted desc by score
+ */
+export function buildScoreboard(scores, displayNames) {
+  return Object.entries(scores)
+    .map(([bot, score]) => ({ bot, displayName: displayNames[bot] || bot, score }))
+    .sort((a, b) => b.score - a.score);
+}
+
 // --- Direction mapping ---
 
 const DIRECTIONS = {

@@ -16,6 +16,9 @@ import {
   resolveCombat,
   tickSurvival,
   handleDeath,
+  initScores,
+  awardPoints,
+  buildScoreboard,
 } from './logic.js';
 import { runFastTick } from './autopilot.js';
 import { appendVillageMemory, buildMemoryEntry } from '../../memory.js';
@@ -76,6 +79,61 @@ export async function survivalTick(ctx) {
     displayNames[name] = info.displayName;
   }
 
+  // --- Round lifecycle ---
+  if (gameConfig.raw.scoring) {
+    // Ensure round state exists
+    if (!state.round) {
+      state.round = {
+        number: 1,
+        ticksRemaining: gameConfig.raw.scoring.roundLength,
+        scores: initScores(state.bots),
+        roundHistory: [],
+      };
+    }
+
+    state.round.ticksRemaining--;
+
+    // Award survival tick points to all alive bots
+    for (const [botName, bs] of Object.entries(state.bots)) {
+      if (bs.alive) awardPoints(state.round.scores, botName, 'survivalTick', gameConfig);
+    }
+
+    // Round end check
+    if (state.round.ticksRemaining <= 0) {
+      const scoreboard = buildScoreboard(state.round.scores, displayNames);
+      const winner = scoreboard[0];
+
+      // Archive round
+      state.round.roundHistory.push({
+        number: state.round.number,
+        winner: winner?.bot || null,
+        winnerDisplayName: winner?.displayName || null,
+        scores: { ...state.round.scores },
+        endedAt: new Date().toISOString(),
+      });
+
+      // Cap history at 20 rounds
+      if (state.round.roundHistory.length > 20) {
+        state.round.roundHistory = state.round.roundHistory.slice(-20);
+      }
+
+      // Broadcast round_end event
+      broadcastEvent({
+        type: 'round_end',
+        round: state.round.number,
+        scoreboard,
+        winner: winner?.bot || null,
+        winnerDisplayName: winner?.displayName || null,
+      });
+
+      // Start new round
+      state.round.number++;
+      state.round.ticksRemaining = gameConfig.raw.scoring.roundLength;
+      state.round.scores = initScores(state.bots);
+      state.round.explored = {};
+    }
+  }
+
   // Read daily costs for cost cap enforcement
   const dailyCosts = new Map();
   for (const [botName, info] of participants) {
@@ -90,6 +148,9 @@ export async function survivalTick(ctx) {
   // 2. Handle deaths from starvation
   for (const ev of survivalEvents) {
     if (ev.action === 'starved') {
+      if (state.round) {
+        awardPoints(state.round.scores, ev.bot, 'death', gameConfig);
+      }
       const deathEvents = handleDeath(
         ev.bot, state.bots[ev.bot], state,
         gameConfig.raw.survival, gameConfig.raw.world.terrain,
@@ -168,6 +229,8 @@ export async function survivalTick(ctx) {
       villageSummary: villageSummaries.get(botName) || '',
       isScout: false,
       fastTickStats: botState.fastTickStats || null,
+      round: state.round || null,
+      displayNames,
     });
 
     const conversationId = `survival:${botName}`;
@@ -224,6 +287,24 @@ export async function survivalTick(ctx) {
     actionEvents.push(...evts);
     pendingAttacks.push(...atks);
 
+    // Score gather/craft/explore events
+    if (state.round) {
+      for (const ev of evts) {
+        if (ev.action === 'gather') awardPoints(state.round.scores, botName, 'gather', gameConfig);
+        if (ev.action === 'craft') awardPoints(state.round.scores, botName, 'craft', gameConfig);
+        if (ev.action === 'move') {
+          // Track explored tiles per round
+          if (!state.round.explored) state.round.explored = {};
+          if (!state.round.explored[botName]) state.round.explored[botName] = {};
+          const tileKey = `${ev.to.x},${ev.to.y}`;
+          if (!state.round.explored[botName][tileKey]) {
+            state.round.explored[botName][tileKey] = 1;
+            awardPoints(state.round.scores, botName, 'explore', gameConfig);
+          }
+        }
+      }
+    }
+
     // Reset fast-tick stats after slow tick processes
     botState.fastTickStats = {
       tilesMoved: 0,
@@ -237,11 +318,23 @@ export async function survivalTick(ctx) {
   const combatEvents = resolveCombat(pendingAttacks, state.bots, gameConfig);
   actionEvents.push(...combatEvents);
 
-  // Handle combat deaths
+  // Handle combat deaths + scoring
   for (const ev of combatEvents) {
     if (ev.action === 'killed') {
       const bs = state.bots[ev.bot];
       if (bs && bs.health <= 0) {
+        // Score: death penalty for killed bot
+        if (state.round) {
+          awardPoints(state.round.scores, ev.bot, 'death', gameConfig);
+        }
+        // Score: kill points for attackers
+        if (state.round) {
+          for (const atk of pendingAttacks) {
+            if (atk.target === ev.bot) {
+              awardPoints(state.round.scores, atk.attacker, 'kill', gameConfig);
+            }
+          }
+        }
         const deathEvents = handleDeath(
           ev.bot, bs, state,
           gameConfig.raw.survival, gameConfig.raw.world.terrain,
@@ -348,5 +441,10 @@ export async function survivalTick(ctx) {
     resourceChanges: (depletedTiles.length > 0 || respawnedCoords.length > 0)
       ? { depleted: depletedTiles, respawned: respawnedCoords }
       : undefined,
+    round: state.round ? {
+      number: state.round.number,
+      ticksRemaining: state.round.ticksRemaining,
+      scores: state.round.scores,
+    } : undefined,
   });
 }

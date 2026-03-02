@@ -52,6 +52,18 @@
     "unarmedDamage": 5
   },
 
+  "scoring": {
+    "roundLength": 50,
+    "points": {
+      "kill": 50,
+      "craft": 10,
+      "gather": 2,
+      "explore": 3,
+      "survivalTick": 1,
+      "death": -15
+    }
+  },
+
   "items": {
     "wood":           { "type": "resource", "weight": 2, "label": "Wood" },
     "stone":          { "type": "resource", "weight": 3, "label": "Stone" },
