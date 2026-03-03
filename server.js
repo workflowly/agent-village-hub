@@ -12,6 +12,7 @@
  */
 
 import { createServer } from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
 import { readFile, writeFile, rename, copyFile, mkdir, readdir } from 'node:fs/promises';
 import { appendFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -77,7 +78,7 @@ let state = {
   spiceState: {},
   stagnation: {},
 };
-let paused = false;
+
 let tickInProgress = false;
 let nextTickAt = 0;
 let startTime = Date.now();
@@ -230,14 +231,23 @@ function accumulateResponseCost(botName, response) {
 function validateVillageSecret(req) {
   if (!VILLAGE_SECRET) return false;
   const auth = req.headers.authorization || '';
-  return auth === `Bearer ${VILLAGE_SECRET}`;
+  const expected = `Bearer ${VILLAGE_SECRET}`;
+  if (auth.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(auth), Buffer.from(expected));
 }
 
 // --- JSON body parser for raw http.createServer ---
 
+const MAX_BODY_BYTES = 256 * 1024; // 256 KB
+
 async function readJsonBody(req) {
   const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
+  let totalLen = 0;
+  for await (const chunk of req) {
+    totalLen += chunk.length;
+    if (totalLen > MAX_BODY_BYTES) throw new Error('Request body too large');
+    chunks.push(chunk);
+  }
   return JSON.parse(Buffer.concat(chunks).toString());
 }
 
@@ -467,7 +477,7 @@ function buildTickContext(tickStart) {
 // --- Fast tick (autopilot, grid game only) ---
 
 function fastTick() {
-  if (!isGridGame || paused || !state.terrain) return;
+  if (!isGridGame || !state.terrain) return;
   if (tickInProgress) return; // skip if slow tick is running
   survivalFastTick(buildTickContext(Date.now()));
 }
@@ -476,7 +486,7 @@ function fastTick() {
 
 async function tick() {
   // Safe in Node.js — synchronous check+set before any await; no concurrent callers possible
-  if (paused || tickInProgress) return;
+  if (tickInProgress) return;
   tickInProgress = true;
   const tickStart = Date.now();
 
@@ -508,7 +518,7 @@ const server = createServer(async (req, res) => {
   if (path === '/health' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
-      status: paused ? 'paused' : 'running',
+      status: 'running',
       tick: state.clock.tick,
       phase: state.clock.phase,
       activeBots: participants.size,
@@ -716,7 +726,7 @@ const server = createServer(async (req, res) => {
         gameType: 'grid',
         tick: state.clock.tick,
         dayPhase: dayPhase.name,
-        paused,
+        paused: false,
         nextTickAt,
         tickIntervalMs: TICK_INTERVAL_MS,
         game: {
@@ -754,7 +764,7 @@ const server = createServer(async (req, res) => {
         tick: state.clock.tick,
         phase: initVt.phase,
         villageTime: initVt.timeStr,
-        paused,
+        paused: false,
         nextTickAt,
         tickIntervalMs: TICK_INTERVAL_MS,
         game: {
@@ -845,24 +855,6 @@ const server = createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ events: [], hasMore: false }));
     }
-    return;
-  }
-
-  if (path === '/pause' && req.method === 'POST') {
-    paused = true;
-    console.log('[village] Paused');
-    broadcastEvent({ type: 'status', paused: true });
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ paused: true }));
-    return;
-  }
-
-  if (path === '/resume' && req.method === 'POST') {
-    paused = false;
-    console.log('[village] Resumed');
-    broadcastEvent({ type: 'status', paused: false });
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ paused: false }));
     return;
   }
 
