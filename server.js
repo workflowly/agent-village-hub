@@ -2,8 +2,8 @@
  * Village Orchestrator — the "game master" for the bot social village.
  *
  * Maintains world state, runs a tick-based game loop, sends scene prompts
- * to each bot's /village endpoint, routes responses, writes village memories,
- * and serves an observer web UI via SSE.
+ * to bots via the portal relay proxy, routes responses, writes village
+ * memories, and serves an observer web UI via SSE.
  *
  * Uses Node.js built-ins only. Imports CJS lib/ modules via createRequire.
  *
@@ -47,7 +47,6 @@ const SCENE_HISTORY_CAP = parseInt(process.env.VILLAGE_SCENE_HISTORY_CAP || '10'
 const VILLAGE_SECRET = process.env.VILLAGE_SECRET || '';
 const VILLAGE_DAILY_COST_CAP = parseFloat(process.env.VILLAGE_DAILY_COST_CAP || '2'); // $/bot/day
 const MAX_PUBLIC_LOG_DEPTH = parseInt(process.env.VILLAGE_MAX_LOG_DEPTH || '20', 10);
-const SCENE_TIMEOUT_MS = 45_000;
 const REMOTE_SCENE_TIMEOUT_MS = 120_000;
 const MAX_CONSECUTIVE_FAILURES_REMOTE = 5;
 const PORTAL_URL = 'http://127.0.0.1:3000';
@@ -88,7 +87,7 @@ const observers = new Set(); // { res, botName }
 
 // --- Participants (event-driven, updated by /api/join and /api/leave) ---
 const participants = new Map(); // botName → { port, displayName }
-const failureCounts = new Map(); // botName → consecutive sendScene failure count
+const failureCounts = new Map(); // botName → consecutive failure count
 const lastMoveTick = new Map();  // botName → tick number of last move (cooldown)
 const MAX_CONSECUTIVE_FAILURES = 3;
 
@@ -374,37 +373,7 @@ async function recoverParticipants() {
   console.log(`[village] Recovery complete: ${participants.size} active participant(s)`);
 }
 
-// --- Send scene to a bot ---
-
-async function sendScene(botName, port, conversationId, payload) {
-  try {
-    const headers = { 'Content-Type': 'application/json' };
-    if (VILLAGE_SECRET) {
-      headers['Authorization'] = `Bearer ${VILLAGE_SECRET}`;
-    }
-
-    const resp = await fetch(`http://127.0.0.1:${port}/village`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ conversationId, ...payload }),
-      signal: AbortSignal.timeout(SCENE_TIMEOUT_MS),
-    });
-
-    if (!resp.ok) {
-      console.error(`[village] ${botName} HTTP ${resp.status}`);
-      trackFailure(botName);
-      return null;
-    }
-
-    // Success — reset failure count
-    failureCounts.delete(botName);
-    return await resp.json();
-  } catch (err) {
-    console.error(`[village] ${botName} ${err.name === 'TimeoutError' ? 'timeout (60s)' : err.message} — skipped`);
-    trackFailure(botName);
-    return null;
-  }
-}
+// --- Send scene to a bot (via portal relay proxy) ---
 
 async function sendSceneRemote(botName, conversationId, payload) {
   try {
@@ -486,7 +455,7 @@ function advanceClock() {
 function buildTickContext(tickStart) {
   return {
     state, gameConfig, participants, lastMoveTick,
-    broadcastEvent, sendScene, sendSceneRemote,
+    broadcastEvent, sendSceneRemote,
     accumulateResponseCost, readBotDailyCost, saveState,
     TICK_INTERVAL_MS, VILLAGE_DAILY_COST_CAP, MEMORY_FILENAME,
     SCENE_HISTORY_CAP, MAX_PUBLIC_LOG_DEPTH, EMPTY_CLEAR_TICKS,

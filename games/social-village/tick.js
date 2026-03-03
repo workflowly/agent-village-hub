@@ -44,7 +44,7 @@ const paths = require('../../../lib/paths');
 export async function socialTick(ctx) {
   const {
     state, gameConfig, participants, lastMoveTick,
-    broadcastEvent, sendScene, sendSceneRemote,
+    broadcastEvent, sendSceneRemote,
     accumulateResponseCost, readBotDailyCost, saveState,
     TICK_INTERVAL_MS, VILLAGE_DAILY_COST_CAP, MEMORY_FILENAME,
     SCENE_HISTORY_CAP, MAX_PUBLIC_LOG_DEPTH, EMPTY_CLEAR_TICKS,
@@ -184,17 +184,15 @@ export async function socialTick(ctx) {
       });
 
       const payload = buildV2Payload(scene, gameConfig);
-      allSceneRequests.push({ botName, port: pInfo.port, remote: pInfo.remote, conversationId, payload, loc });
+      allSceneRequests.push({ botName, conversationId, payload, loc });
     }
   }
 
   // Send all scenes across all locations in parallel
   const allResults = await Promise.all(
-    allSceneRequests.map(async ({ botName, port, remote, conversationId, payload, loc }) => {
+    allSceneRequests.map(async ({ botName, conversationId, payload, loc }) => {
       botsSent++;
-      const response = remote
-        ? await sendSceneRemote(botName, conversationId, payload)
-        : await sendScene(botName, port, conversationId, payload);
+      const response = await sendSceneRemote(botName, conversationId, payload);
       return { botName, response, loc };
     })
   );

@@ -118,7 +118,7 @@ export function fastTick(ctx) {
 export async function survivalTick(ctx) {
   const {
     state, gameConfig, participants,
-    broadcastEvent, sendScene, sendSceneRemote,
+    broadcastEvent, sendSceneRemote,
     accumulateResponseCost, readBotDailyCost, saveState,
     TICK_INTERVAL_MS, VILLAGE_DAILY_COST_CAP, MEMORY_FILENAME,
     tickStart,
@@ -267,8 +267,6 @@ export async function survivalTick(ctx) {
       continue;
     }
 
-    const { port } = participants.get(botName);
-
     // Filter recent events to ones near this bot
     const visibleEvents = allEvents.filter(ev => {
       if (ev.bot === botName) return true;
@@ -296,7 +294,7 @@ export async function survivalTick(ctx) {
 
     const conversationId = `survival:${botName}`;
     const payload = buildV2Payload(scene, gameConfig);
-    allSceneRequests.push({ botName, port, conversationId, payload });
+    allSceneRequests.push({ botName, conversationId, payload });
   }
 
   // Broadcast thinking state for all bots being sent scenes
@@ -306,12 +304,9 @@ export async function survivalTick(ctx) {
 
   // Send scenes in parallel
   const allResults = await Promise.all(
-    allSceneRequests.map(async ({ botName, port, conversationId, payload }) => {
+    allSceneRequests.map(async ({ botName, conversationId, payload }) => {
       botsSent++;
-      const info = participants.get(botName);
-      const response = info?.remote
-        ? await sendSceneRemote(botName, conversationId, payload)
-        : await sendScene(botName, port, conversationId, payload);
+      const response = await sendSceneRemote(botName, conversationId, payload);
       return { botName, response };
     })
   );
