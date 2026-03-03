@@ -269,7 +269,53 @@ async function run() {
     assert(data?.inGame === true, `inGame=true after rejoin`);
   }
 
-  console.log('\n=== 10. Error: bad token ===');
+  console.log('\n=== 10. Kick (poison pill) ===');
+  {
+    // Bot is in game from test 9. Start polling in background.
+    const pollPromise = fetch(`${HUB}/api/village/poll/${BOT}`, {
+      headers: auth(),
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    // Give poll a moment to register
+    await new Promise(r => setTimeout(r, 300));
+
+    // Kick via server secret (not bot token)
+    const kickResp = await fetch(`${HUB}/api/village/kick/${BOT}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret}` },
+      body: JSON.stringify({ reason: 'E2E test kick' }),
+      signal: AbortSignal.timeout(5_000),
+    });
+    const kickData = await kickResp.json();
+    assert(kickResp.status === 200, `kick status 200 (got ${kickResp.status})`);
+    assert(kickData?.ok === true, `kick ok=true`);
+    assert(kickData?.reason === 'E2E test kick', `kick reason preserved`);
+
+    // Poll should receive the poison pill
+    const pollResp = await pollPromise;
+    assert(pollResp.status === 200, `poll got kick payload (status ${pollResp.status})`);
+    const pollData = await pollResp.json();
+    assert(pollData?.kick === true, `poll payload has kick=true`);
+    assert(pollData?.reason === 'E2E test kick', `poll payload has reason`);
+
+    // Verify bot was removed from game
+    await new Promise(r => setTimeout(r, 500));
+    const { data: statusData } = await req('POST', `${HUB}/api/village/hello`, {});
+    // Token was revoked — hello should fail with 401
+    assert(statusData?.error === 'Invalid or missing VILLAGE_TOKEN', `token revoked → 401 (got ${JSON.stringify(statusData)})`);
+  }
+
+  // Re-add token for remaining tests
+  {
+    const { readFile, writeFile } = await import('fs/promises');
+    const tokensPath = '/root/openclaw-cloud/portal/village-tokens.json';
+    const tokens = JSON.parse(await readFile(tokensPath, 'utf8'));
+    tokens[TOKEN] = { botName: BOT, displayName: 'Test Phantom', createdAt: new Date().toISOString(), claimedAt: new Date().toISOString() };
+    await writeFile(tokensPath, JSON.stringify(tokens, null, 2) + '\n');
+  }
+
+  console.log('\n=== 11. Error: bad token ===');  // renumbered from 10
   {
     const { status } = await req('POST', `${HUB}/api/village/hello`, {}, 'vtk_invalid_garbage_token_000000000000');
     assert(status === 401, `bad token → 401 (got ${status})`);
@@ -283,7 +329,7 @@ async function run() {
     assert(status === 401, `bad token heartbeat → 401 (got ${status})`);
   }
 
-  console.log('\n=== 11. Error: poll with wrong botName ===');
+  console.log('\n=== 12. Error: poll with wrong botName ===');
   {
     const resp = await fetch(`${HUB}/api/village/poll/wrong-bot-name`, {
       headers: auth(),
@@ -292,7 +338,7 @@ async function run() {
     assert(resp.status === 403, `wrong botName → 403 (got ${resp.status})`);
   }
 
-  console.log('\n=== 12. Error: respond with expired requestId ===');
+  console.log('\n=== 13. Error: respond with expired requestId ===');
   {
     const { status, data } = await req('POST', `${HUB}/api/village/respond/vr_999_expired`, {
       actions: [{ tool: 'village_observe', params: {} }],
@@ -300,7 +346,7 @@ async function run() {
     assert(status === 404, `expired requestId → 404 (got ${status})`);
   }
 
-  console.log('\n=== 13. Cleanup: leave ===');
+  console.log('\n=== 14. Cleanup: leave ===');
   {
     const { status } = await req('POST', `${HUB}/api/village/leave`, {});
     assert(status === 200, `cleanup leave status 200 (got ${status})`);

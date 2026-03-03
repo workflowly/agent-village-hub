@@ -1410,6 +1410,7 @@ function renderIntelPanel() {
   html += '<div class="intel-section"><div class="intel-header">Scoreboard</div>';
   if (roundScores && Object.keys(roundScores).length > 0) {
     const sorted = Object.entries(roundScores)
+      .filter(([id]) => bots[id])
       .map(([id, score]) => ({ id, name: bots[id]?.displayName || id, score }))
       .sort((a, b) => b.score - a.score);
     html += '<table>';
@@ -2058,6 +2059,14 @@ function processSurvivalEvent(d) {
 
     if (d.action === 'die') bot.alive = false;
     if (d.action === 'respawn') bot.alive = true;
+    if (d.action === 'leave') {
+      delete bots[botId];
+      if (botPixiObjects[botId]) {
+        botLayer.removeChild(botPixiObjects[botId].container);
+        delete botPixiObjects[botId];
+      }
+      removeSpeechBubble(botId);
+    }
   } else if (botId && !bots[botId]) {
     bots[botId] = {
       _id: botId,
