@@ -90,10 +90,24 @@ export function getBountyBot(scores) {
  * Process say events for alliance actions. Mutates diplomacy state.
  * @returns {Array} diplomatic events to broadcast
  */
-export function processAllianceActions(sayEvents, diplomacy, bots, currentTick, diplomacyCfg) {
+export function processAllianceActions(sayEvents, diplomacy, bots, currentTick, diplomacyCfg, displayNames) {
   const events = [];
   const maxAllies = diplomacyCfg.maxAllies || 1;
   const expireTicks = diplomacyCfg.proposalExpireTicks || 5;
+
+  // Build reverse lookup: display name → internal name
+  const nameToId = {};
+  if (displayNames) {
+    for (const [id, dName] of Object.entries(displayNames)) {
+      nameToId[dName.toLowerCase()] = id;
+    }
+  }
+
+  // Resolve a name (display or internal) to internal bot id
+  function resolveTarget(name) {
+    if (bots[name]) return name; // already internal
+    return nameToId[(name || '').toLowerCase()] || null;
+  }
 
   // Count current allies per bot
   function allyCount(botName) {
@@ -108,10 +122,11 @@ export function processAllianceActions(sayEvents, diplomacy, bots, currentTick, 
     if (ev.action !== 'say' || !ev.bot || !ev.message) continue;
     const parsed = parseAllianceMessage(ev.message);
     if (!parsed) continue;
-    const { action, target } = parsed;
+    const { action } = parsed;
+    const target = resolveTarget(parsed.target);
 
     // Target must exist
-    if (!bots[target]) continue;
+    if (!target || !bots[target]) continue;
     // Can't ally with yourself
     if (target === ev.bot) continue;
 
@@ -258,7 +273,7 @@ function addToInventory(inventory, item, count = 1) {
  * @param {object} gameConfig - Full game config
  * @returns {{ events: Array, pendingAttacks: Array }}
  */
-export function processActions(botName, actions, botState, worldState, gameConfig) {
+export function processActions(botName, actions, botState, worldState, gameConfig, displayNames) {
   if (!botState.alive) return { events: [], pendingAttacks: [] };
 
   const events = [];
@@ -338,7 +353,7 @@ export function processActions(botName, actions, botState, worldState, gameConfi
         break;
       }
       case 'set_directive': {
-        const result = applyDirective(botName, botState, params);
+        const result = applyDirective(botName, botState, params, displayNames);
         events.push(...result);
         break;
       }
@@ -376,15 +391,23 @@ const VALID_INTENTS = new Set([
  * @param {object} params - { intent, target, fallback, x, y, message }
  * @returns {Array} events
  */
-export function applyDirective(botName, botState, params) {
+export function applyDirective(botName, botState, params, displayNames) {
   const intent = params.intent || 'idle';
   if (!VALID_INTENTS.has(intent)) {
     return [{ action: 'directive_fail', bot: botName, reason: `Unknown intent: ${intent}` }];
   }
 
+  // Resolve display name → internal name for target (e.g. hunt)
+  let target = params.target || null;
+  if (target && displayNames) {
+    for (const [id, dName] of Object.entries(displayNames)) {
+      if (dName.toLowerCase() === target.toLowerCase()) { target = id; break; }
+    }
+  }
+
   botState.directive = {
     intent,
-    target: params.target || null,
+    target,
     fallback: params.fallback || null,
     x: params.x != null ? params.x : null,
     y: params.y != null ? params.y : null,

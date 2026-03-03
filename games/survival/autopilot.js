@@ -14,7 +14,9 @@ import {
   doEat,
   doAttack,
   resolveCombat,
+  handleDeath,
 } from './logic.js';
+import { mulberry32 } from './world.js';
 
 // --- Direction helpers ---
 
@@ -713,6 +715,20 @@ export function runFastTick(state, gameConfig) {
   const fastTicksPerSlowTick = 45000 / fastTickMs; // ~45 fast ticks per slow tick
   const hungerPerFastTick = (gameConfig.raw.survival.hungerPerTick || 3) / fastTicksPerSlowTick;
 
+  // Respawn any zombie bots (health=0, alive=true) — safety net
+  const rngZombie = mulberry32(state.worldSeed + state.clock.tick + 999);
+  for (const [botName, botState] of Object.entries(state.bots)) {
+    if (botState.alive && botState.health <= 0) {
+      // Zombie state: killed in fast-tick combat but handleDeath wasn't called
+      const deathEvents = handleDeath(
+        botName, botState, state,
+        gameConfig.raw.survival, gameConfig.raw.world.terrain,
+        rngZombie, gameConfig.raw.world.width, gameConfig.raw.world.height
+      );
+      allEvents.push(...deathEvents);
+    }
+  }
+
   for (const [botName, botState] of Object.entries(state.bots)) {
     if (!botState.alive) continue;
 
@@ -760,13 +776,25 @@ export function runFastTick(state, gameConfig) {
     const combatEvents = resolveCombat(allPendingAttacks, state.bots, gameConfig);
     allEvents.push(...combatEvents);
 
-    // Track damage stats
+    // Track damage stats + handle deaths
+    const rng = mulberry32(state.worldSeed + state.clock.tick);
     for (const ev of combatEvents) {
       if (ev.action === 'attack') {
         const attacker = state.bots[ev.bot];
         const target = state.bots[ev.target];
         if (attacker?.fastTickStats) attacker.fastTickStats.damageDealt += ev.damage || 0;
         if (target?.fastTickStats) target.fastTickStats.damageTaken += ev.damage || 0;
+      }
+      if (ev.action === 'killed') {
+        const bs = state.bots[ev.bot];
+        if (bs && bs.health <= 0) {
+          const deathEvents = handleDeath(
+            ev.bot, bs, state,
+            gameConfig.raw.survival, gameConfig.raw.world.terrain,
+            rng, gameConfig.raw.world.width, gameConfig.raw.world.height
+          );
+          allEvents.push(...deathEvents);
+        }
       }
     }
   }
