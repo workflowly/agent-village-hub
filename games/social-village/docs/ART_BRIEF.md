@@ -212,3 +212,79 @@ All decorations have transparent backgrounds and include a small ground shadow t
 **Priority order**: buildings.png and characters.png first (these replace procedural drawing immediately). Ground and decor tiles are future upgrades.
 
 **Reference**: The current game uses simple colored vector shapes — rectangles for walls, parallelograms for depth faces, triangles for roofs. The sprites should match this same 3/4 perspective but look like proper pixel art instead of flat geometry.
+
+---
+
+## How to Deliver & Integrate
+
+### Repo Location
+
+All sprite sheets go in one folder:
+
+```
+village/games/social-village/assets/
+  characters.png     <-- you create this
+  buildings.png      <-- you create this
+  ground.png         <-- future
+  decor.png          <-- future
+```
+
+Drop the finished PNG files directly into that `assets/` folder. The game code already looks for them by exact filename — no config changes needed. If a file exists, the game uses it. If it doesn't exist, the game falls back to procedural vector drawing.
+
+### One File Per Sheet — Do NOT Split
+
+Each sheet must be delivered as a **single composite PNG file** at the exact dimensions listed above. The game code slices the sheet into individual cells at runtime using pixel coordinates. Do NOT deliver individual sprites as separate files.
+
+- `characters.png` = one 384x384 image containing all 144 character cells (12 rows x 12 cols)
+- `buildings.png` = one 384x960 image containing all 12 building cells (6 rows x 2 cols)
+- `ground.png` = one 256x256 image containing all terrain tiles
+- `decor.png` = one 256x256 image containing all decoration tiles
+
+### How to Build Each Sheet
+
+**Option A — Draw directly on the final sheet** (recommended for pixel art):
+Open a canvas at the final sheet dimensions. Use guides/grid lines at the cell boundaries. Draw each sprite in its designated cell. Export once.
+
+**Option B — Draw individual cells, then composite**:
+Draw each cell as a separate file at exactly the cell dimensions (32x32 for characters, 192x160 for buildings, 16x16 for tiles). Then stitch them into the final sheet using any image tool — cells go left-to-right, top-to-bottom with no gaps or padding between cells.
+
+Either way, the final delivery is **one PNG per sheet**.
+
+### Cell Packing Rules
+
+- **No padding** between cells — cells are packed edge-to-edge
+- **No border/outline** around cells
+- Cell (0,0) is the **top-left** corner of the sheet
+- Column index increases left-to-right, row index increases top-to-bottom
+- The game extracts cell at `(col * cellWidth, row * cellHeight)` with size `(cellWidth, cellHeight)`
+
+### Number of Individual Sprites to Draw
+
+| Sheet | Total Sprites | Breakdown |
+|-------|--------------|-----------|
+| `characters.png` | **144** | 12 character variants x 6 poses x 2 frames. But frame 1 is just frame 0 shifted 1px up, so effectively **72 unique drawings** (12 variants x 6 poses) |
+| `buildings.png` | **12** | 6 known locations + 6 generic building styles |
+| `ground.png` | **~50** | 8 grass + 18 path + 8 cobble + 4 park + 9 water + depth edges |
+| `decor.png` | **~40** | 4 trees (2x2 each) + 6 plants + 4 rocks + 6 fence + 12 furniture + 8 nature |
+
+### Testing Your Work
+
+1. Place the PNG file in `village/games/social-village/assets/`
+2. Open the game in a browser — the observer automatically loads any sheet that exists
+3. If the sprites look wrong (misaligned, cut off), check:
+   - Sheet dimensions match exactly (384x384, 384x960, etc.)
+   - Cells are packed with zero padding
+   - No extra whitespace or borders around the sheet edges
+
+### Transparency
+
+- All sheet backgrounds must be **fully transparent** (alpha = 0)
+- Sprites sit on transparency — the game composites them over the terrain
+- Use PNG-32 format to preserve the alpha channel
+- Do NOT use a solid color background (no white, no green) — pure transparency only
+
+### Color Space
+
+- sRGB color space
+- 8 bits per channel (standard PNG-32)
+- No embedded ICC profiles needed
