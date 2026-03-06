@@ -2,20 +2,16 @@
 """
 Generate characters.png sprite sheet for the social village observer.
 
-Uses Gemini 3 Pro Image (Nano Banana Pro) to generate individual part rows,
-then composites them into the final 384x736 sprite sheet.
+Uses Gemini to generate 12 complete character variants (one per API call).
+Each call produces a 3×2 grid of 6 poses for one character, which gets
+split into 6 cells, downscaled to 32×32 each, and placed into the
+variant's row in the final 384×384 sheet.
 
 Usage:
   source /root/openclaw-cloud/.env
   python3 generate-characters.py
 
-The script generates parts in batches (one row at a time) and composites
-them into the final sheet. Each row is 384x32 (12 cells of 32x32).
-
-API returns large images (~1024px+) which get downscaled to exact pixel
-art dimensions using NEAREST neighbor sampling.
-
-Cost estimate: 23 API calls × $0.134/image = ~$3.08 total
+Cost estimate: 12 API calls × ~$0.13 = ~$1.56 total
 """
 
 import os
@@ -36,28 +32,99 @@ if not API_KEY:
 
 MODEL = "gemini-3-pro-image-preview"
 OUTPUT_DIR = Path(__file__).parent / "assets"
-PARTS_DIR = OUTPUT_DIR / "char_parts"  # intermediate row images
+PARTS_DIR = OUTPUT_DIR / "char_variants"  # intermediate variant images
 OUTPUT_FILE = OUTPUT_DIR / "characters.png"
 SHEET_W = 384  # 12 cols × 32px
-SHEET_H = 736  # 23 rows × 32px
+SHEET_H = 384  # 12 rows × 32px
 CELL = 32
-
-# Column labels for prompts
-POSE_COLS = "idle-f0, idle-f1, walk-f0, walk-f1, talk-f0, talk-f1, think-f0, think-f1, sit-f0, sit-f1, wave-f0, wave-f1"
+COLS = 12
+ROWS = 12
 
 client = genai.Client(api_key=API_KEY)
 
 # --- Shared prompt preamble ---
 PREAMBLE = (
-    "You are a pixel art sprite sheet artist creating a CHARACTER PARTS sprite strip "
-    "for an RPG village game. The strip has 12 cells arranged left-to-right. "
-    "Each cell is a square. The 12 columns represent 6 poses × 2 animation frames: "
-    f"{POSE_COLS}. "
-    "Art style: clean retro pixel art, 2-4 shades per material, NO anti-aliasing, "
-    "NO gradients, NO smoothing. Front-facing characters, light from top-left. "
-    "Use a SOLID BRIGHT GREEN (#00ff00) background so it can be chroma-keyed later. "
-    "DO NOT use green anywhere on the character parts themselves."
+    "You are a pixel art sprite sheet artist. Generate a 3×2 grid image showing "
+    "6 poses of a SINGLE CHARACTER for an RPG village game. "
+    "The grid is 3 columns × 2 rows, reading left-to-right, top-to-bottom:\n"
+    "  1. idle (standing still)\n"
+    "  2. walk (legs spread, arms swinging)\n"
+    "  3. talk (one arm raised, gesturing)\n"
+    "  4. think (hand on chin)\n"
+    "  5. sit (seated, legs forward)\n"
+    "  6. wave (arm raised high, waving)\n\n"
+    "Art style: clean retro pixel art like classic SNES RPGs. Front-facing character, "
+    "2-4 shades per material, NO anti-aliasing, NO gradients. Light from top-left. "
+    "Each cell should show the COMPLETE character (head, body, legs, feet) centered. "
+    "Use a SOLID BRIGHT GREEN (#00ff00) background so it can be chroma-keyed. "
+    "DO NOT use green anywhere on the character."
 )
+
+# --- 12 character variant descriptions ---
+VARIANTS = [
+    # Rows 0-3: "efficient" personality — neat clothing, cool tones
+    (0, "variant_00.png",
+     "VARIANT 0 (Efficient): A tidy professional in a navy blue blazer and dark slacks. "
+     "Short cropped dark hair, serious expression. Cool-toned palette: navy, charcoal, white shirt underneath. "
+     "Clean-cut, organized look. Light skin tone."),
+
+    (1, "variant_01.png",
+     "VARIANT 1 (Efficient): A sharp analyst with rectangular glasses and a gray sweater vest "
+     "over a light blue shirt. Medium-length brown hair, neatly parted. Dark pants. "
+     "Intellectual but approachable. Medium skin tone."),
+
+    (2, "variant_02.png",
+     "VARIANT 2 (Efficient): A practical engineer in a dark teal polo shirt and khaki pants. "
+     "Black hair in a short neat style. Carries a small tool or clipboard. "
+     "Functional, no-nonsense look. Dark skin tone."),
+
+    (3, "variant_03.png",
+     "VARIANT 3 (Efficient): A composed planner in a crisp white button-down and charcoal trousers. "
+     "Silver/gray hair tied back neatly. Minimal accessories. "
+     "Elegant efficiency. Medium-light skin tone."),
+
+    # Rows 4-7: "witty" personality — colorful, expressive
+    (4, "variant_04.png",
+     "VARIANT 4 (Witty): A bold character in a bright red jacket with yellow accents. "
+     "Wild spiky auburn hair. Mischievous grin. Colorful sneakers. "
+     "Energetic and eye-catching. Light skin tone."),
+
+    (5, "variant_05.png",
+     "VARIANT 5 (Witty): A quirky artist in a purple tie-dye shirt and orange shorts. "
+     "Messy pink-streaked hair. Expressive face. Bright mismatched socks visible. "
+     "Creative chaos personified. Medium skin tone."),
+
+    (6, "variant_06.png",
+     "VARIANT 6 (Witty): A streetwise joker in a green hoodie with a funny graphic. "
+     "Dark curly hair with a bright blue streak. Confident smirk. "
+     "Jeans with patches. Urban cool. Dark skin tone."),
+
+    (7, "variant_07.png",
+     "VARIANT 7 (Witty): A theatrical character in a magenta vest and striped pants. "
+     "Dramatic wavy dark hair. Bowtie. Animated expression. "
+     "Showmanship and flair. Medium-light skin tone."),
+
+    # Rows 8-11: "caring" personality — warm tones, soft look
+    (8, "variant_08.png",
+     "VARIANT 8 (Caring): A gentle healer in a soft green cardigan over a cream top. "
+     "Long flowing brown hair with a small flower tucked behind the ear. Warm smile. "
+     "Comfortable brown boots. Nurturing presence. Light skin tone."),
+
+    (9, "variant_09.png",
+     "VARIANT 9 (Caring): A warm cook in a peach apron over a light yellow shirt. "
+     "Short curly auburn hair. Kind round face. Flour-dusted look. "
+     "Cozy and welcoming. Medium skin tone."),
+
+    (10, "variant_10.png",
+     "VARIANT 10 (Caring): A patient gardener in earth-toned overalls and a rust-colored shirt. "
+     "Dark hair in a loose ponytail. Gentle eyes. Work gloves. "
+     "Grounded and dependable. Dark skin tone."),
+
+    (11, "variant_11.png",
+     "VARIANT 11 (Caring): A soft-spoken sage in a lavender robe with a warm orange sash. "
+     "Long white/silver hair. Peaceful expression. Simple sandals. "
+     "Wisdom and warmth. Medium-light skin tone."),
+]
 
 
 def extract_image(response):
@@ -86,8 +153,8 @@ def chromakey_to_alpha(img):
     return img
 
 
-def generate_row(prompt, filename, retries=2):
-    """Generate a single row image via Gemini API, with retry."""
+def generate_variant(prompt, filename, retries=2):
+    """Generate a single variant's 3×2 grid via Gemini API, with retry."""
     full_prompt = f"{PREAMBLE}\n\n{prompt}"
 
     for attempt in range(retries + 1):
@@ -108,13 +175,10 @@ def generate_row(prompt, filename, retries=2):
 
             print(f"  [{filename}] Got {img.size[0]}x{img.size[1]} ({img.mode})")
 
-            # Resize to exact strip dimensions (nearest neighbor for pixel art)
-            img = img.resize((SHEET_W, CELL), Image.NEAREST)
-
             # Chroma key green background to alpha
             img = chromakey_to_alpha(img)
 
-            # Save intermediate
+            # Save intermediate (full resolution)
             img.save(PARTS_DIR / filename)
             return img
 
@@ -127,181 +191,118 @@ def generate_row(prompt, filename, retries=2):
     return None
 
 
+def split_grid_to_row(img):
+    """
+    Split a 3×2 grid image into 12 cells (6 poses × 2 frames) for one row.
+    Returns a 384×32 RGBA image.
+
+    Grid layout (3 cols × 2 rows):
+      idle, walk, talk
+      think, sit, wave
+
+    Output columns (6 poses × 2 frames):
+      idle-f0, idle-f1, walk-f0, walk-f1, talk-f0, talk-f1,
+      think-f0, think-f1, sit-f0, sit-f1, wave-f0, wave-f1
+
+    Frame 0 = downscaled pose, Frame 1 = shifted 1px up (bounce).
+    """
+    w, h = img.size
+    cell_w = w // 3
+    cell_h = h // 2
+
+    row = Image.new("RGBA", (SHEET_W, CELL), (0, 0, 0, 0))
+
+    # Grid positions: (grid_col, grid_row) for each pose
+    grid_positions = [
+        (0, 0),  # idle
+        (1, 0),  # walk
+        (2, 0),  # talk
+        (0, 1),  # think
+        (1, 1),  # sit
+        (2, 1),  # wave
+    ]
+
+    for pose_idx, (gc, gr) in enumerate(grid_positions):
+        # Crop the cell from the grid
+        cell = img.crop((gc * cell_w, gr * cell_h, (gc + 1) * cell_w, (gr + 1) * cell_h))
+
+        # Downscale to 32×32 (nearest neighbor for pixel art)
+        cell_32 = cell.resize((CELL, CELL), Image.NEAREST)
+
+        # Frame 0: normal
+        col_f0 = pose_idx * 2
+        row.paste(cell_32, (col_f0 * CELL, 0))
+
+        # Frame 1: bounce (shift 1px up, wrap bottom)
+        bounce = Image.new("RGBA", (CELL, CELL), (0, 0, 0, 0))
+        bounce.paste(cell_32.crop((0, 1, CELL, CELL)), (0, 0))
+        col_f1 = pose_idx * 2 + 1
+        row.paste(bounce, (col_f1 * CELL, 0))
+
+    return row
+
+
 def generate_sheet():
-    """Generate all rows and composite into final sheet."""
+    """Generate all variants and composite into final sheet."""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     PARTS_DIR.mkdir(parents=True, exist_ok=True)
     sheet = Image.new("RGBA", (SHEET_W, SHEET_H), (0, 0, 0, 0))
 
-    # --- Row definitions: (row_index, filename, prompt) ---
-    rows = [
-        # Body base (rows 0-2): 3 body types, gray-scale, tinted with skin tone at runtime
-        (0, "body_slim.png",
-         "SLIM BODY TYPE. Draw a GRAY-SCALE (#808080 base, #909090 highlight, #707070 shadow) "
-         "character body — slim/thin proportions. Head is 8px round, thin neck, narrow torso "
-         "(10px wide), thin arms at sides, thin legs. "
-         "Poses: idle=standing still, walk=legs spread+arms swing, talk=one arm raised gesturing, "
-         "think=hand on chin, sit=seated legs forward, wave=arm raised high. "
-         "Frames alternate: f0 base, f1 slight bounce (1px shift). GRAY ONLY, no colors."),
-
-        (1, "body_average.png",
-         "AVERAGE BODY TYPE. Same as slim but wider: torso 12px, proportionally thicker limbs "
-         "and slightly larger head. GRAY-SCALE (#808080 base). Same 6 poses × 2 frames."),
-
-        (2, "body_stocky.png",
-         "STOCKY BODY TYPE. Broad/heavy: torso 14px wide, shorter legs, wide shoulders, "
-         "larger round head. GRAY-SCALE (#808080 base). Same 6 poses × 2 frames."),
-
-        # Hair (rows 3-8): gray-scale, tinted at runtime
-        (3, "hair_short.png",
-         "SHORT HAIR only (no face/body). Gray-scale (#808080). Short cropped hair ~3px tall, "
-         "sits on top and sides of where a 12px-wide head would be. Each cell shows the hair "
-         "positioned for that pose's head location. Transparent everywhere except hair pixels."),
-
-        (4, "hair_medium.png",
-         "MEDIUM HAIR only. Gray-scale. Comes to ear level (~6px below head top). Side-parted. "
-         "Transparent everywhere except hair. Same head positions per pose."),
-
-        (5, "hair_messy.png",
-         "MESSY/WILD HAIR only. Gray-scale. Uneven spikes in different directions, ~5px tall. "
-         "Some strands stick out asymmetrically. Transparent background."),
-
-        (6, "hair_long.png",
-         "LONG HAIR only. Gray-scale. Straight hair flowing past shoulders (~10px below head top). "
-         "Frames face on both sides. Transparent background."),
-
-        (7, "hair_ponytail.png",
-         "PONYTAIL HAIR only. Gray-scale. Short on top, gathered ponytail extending to one side. "
-         "~4px on top + 6px ponytail. Transparent background."),
-
-        (8, "hair_spiky.png",
-         "SPIKY HAIR only. Gray-scale. Dramatic tall spikes ~7px high, 3-4 distinct points. "
-         "Anime-inspired upward style. Transparent background."),
-
-        # Outfit tops (rows 9-13): gray-scale, tinted at runtime
-        (9, "top_tee.png",
-         "T-SHIRT overlay only. Gray-scale. Basic short-sleeve tee covering torso area. "
-         "Round neckline. Transparent gaps at neck, hands, and below waist. "
-         "Must match body pose positions per column."),
-
-        (10, "top_collared.png",
-         "COLLARED SHIRT overlay. Gray-scale. Like tee but with collar points (2px triangles "
-         "at neckline). Slightly longer sleeves. Same pose positions."),
-
-        (11, "top_vest.png",
-         "VEST overlay. Gray-scale. Sleeveless open-front vest over lighter inner area. "
-         "V-neckline. Arms show through (transparent sleeves). Same pose positions."),
-
-        (12, "top_jacket.png",
-         "JACKET overlay. Gray-scale. Full-sleeved jacket with lapels/collar. "
-         "1px button dots down center front. Wider than torso. Same pose positions."),
-
-        (13, "top_apron.png",
-         "APRON overlay. Gray-scale. Front-covering apron with neck strap and side ties. "
-         "Extends to below waist. Same pose positions."),
-
-        # Outfit bottoms (rows 14-16)
-        (14, "bottom_pants.png",
-         "LONG PANTS overlay only. Gray-scale. Cover legs from waist to ankles. "
-         "Center seam visible. Match leg positions for each pose."),
-
-        (15, "bottom_shorts.png",
-         "SHORTS overlay only. Gray-scale. Cover upper legs only (half-length). "
-         "Lower legs remain transparent."),
-
-        (16, "bottom_skirt.png",
-         "SKIRT overlay only. Gray-scale. A-line shape from waist. Covers upper legs. "
-         "Slightly flared bottom. In sit pose, drapes differently."),
-
-        # Shoes (rows 17-19)
-        (17, "shoes_boots.png",
-         "BOOTS overlay only. Gray-scale. Chunky boots covering feet + lower ankles. "
-         "Visible darker sole at bottom. Match foot positions per pose."),
-
-        (18, "shoes_sneakers.png",
-         "SNEAKERS overlay only. Gray-scale. Low-cut casual shoes. "
-         "Lighter toe area, tiny lace details. Smaller than boots."),
-
-        (19, "shoes_sandals.png",
-         "SANDALS overlay only. Gray-scale. Minimal strappy footwear. "
-         "Partly open — some foot skin would show through transparent gaps."),
-
-        # Faces (row 20): actual colors
-        (20, "faces.png",
-         "FACES — use ACTUAL COLORS, NOT gray-scale! "
-         "Cols 0-1: ROUND EYES — large white circles with #1a1a2e pupils, 1px white highlight. "
-         "Cols 2-3: NARROW EYES — half-closed cool look. "
-         "Cols 4-5: BIG EYES — extra large innocent style. "
-         "Cols 6-7: SLEEPY EYES — droopy relaxed. "
-         "Cols 8: NEUTRAL mouth (thin #c08080 line). "
-         "Col 9: SMIRK mouth (asymmetric #c06060). "
-         "Col 10: GENTLE SMILE (small curve #c06060). "
-         "Col 11: SERIOUS mouth (flat #c08080 line). "
-         "Use skin #f0c8a0 for face area. Only facial features — no head shape/outline."),
-
-        # Accessories (row 21): gray-scale
-        (21, "accessories.png",
-         "ACCESSORIES — gray-scale (#808080). Each uses 2 columns: "
-         "Cols 0-1: GLASSES — thin rectangular frames at eye level. "
-         "Cols 2-3: HAT — small cap/beret on head top. "
-         "Cols 4-5: SCARF — wrapped at neck. "
-         "Cols 6-7: BOWTIE — small bow at collar. "
-         "Cols 8-9: FLOWER — tucked behind ear. "
-         "Cols 10-11: empty (transparent). Transparent background."),
-
-        # Skin palette (row 22): reference
-        (22, "skin_palette.png",
-         "SKIN PALETTE — ACTUAL COLORS (not gray). Draw 6 vertical color strips: "
-         "Strip 1: #fce4c8 (very light skin). Strip 2: #f0c8a0 (light). "
-         "Strip 3: #d8a878 (medium-light). Strip 4: #c09060 (medium). "
-         "Strip 5: #8a6a48 (medium-dark). Strip 6: #5a4030 (dark). "
-         "Each strip ~60px wide, 3 horizontal bands: highlight, base, shadow."),
-    ]
-
-    total_calls = len(rows)
-    cost_per_call = 0.134  # $0.134 per 1K/2K image
+    total_calls = len(VARIANTS)
+    cost_per_call = 0.13
     total_cost = total_calls * cost_per_call
-    print(f"=== Character Sprite Sheet Generator ===")
+    print(f"=== Character Sprite Sheet Generator (Variant Mode) ===")
     print(f"Model: {MODEL}")
-    print(f"Rows to generate: {total_calls}")
+    print(f"Variants to generate: {total_calls}")
     print(f"Estimated cost: {total_calls} × ${cost_per_call} = ${total_cost:.2f}")
     print(f"Output: {OUTPUT_FILE}")
+    print(f"Sheet: {SHEET_W}×{SHEET_H} ({COLS} cols × {ROWS} rows of {CELL}×{CELL})")
     print()
 
     successes = 0
     failures = 0
 
-    for row_idx, filename, prompt in rows:
-        # Skip if intermediate already exists (resume support)
-        cached = PARTS_DIR / filename
-        if cached.exists():
-            print(f"  [{filename}] Using cached intermediate")
-            img = Image.open(cached)
-            sheet.paste(img, (0, row_idx * CELL), img)
+    for row_idx, filename, prompt in VARIANTS:
+        # Check for cached processed row
+        cached_row = PARTS_DIR / f"row_{row_idx:02d}.png"
+        if cached_row.exists():
+            print(f"  [row_{row_idx:02d}] Using cached row")
+            row_img = Image.open(cached_row)
+            sheet.paste(row_img, (0, row_idx * CELL), row_img)
             successes += 1
             continue
 
-        img = generate_row(prompt, filename)
+        # Check for cached raw variant (resume support)
+        cached_raw = PARTS_DIR / filename
+        if cached_raw.exists():
+            print(f"  [{filename}] Using cached intermediate, processing...")
+            img = Image.open(cached_raw)
+        else:
+            img = generate_variant(prompt, filename)
+
         if img:
-            sheet.paste(img, (0, row_idx * CELL), img)
+            row_img = split_grid_to_row(img)
+            row_img.save(cached_row)  # cache processed row
+            sheet.paste(row_img, (0, row_idx * CELL), row_img)
             successes += 1
         else:
             failures += 1
 
-        # Brief pause between calls to avoid rate limiting
-        time.sleep(1)
+        # Brief pause between API calls to avoid rate limiting
+        if not cached_raw.exists():
+            time.sleep(1)
 
     # Save final composite sheet
     sheet.save(OUTPUT_FILE)
     actual_cost = successes * cost_per_call
     print(f"\n=== Done ===")
     print(f"Sheet saved to: {OUTPUT_FILE}")
-    print(f"Dimensions: {SHEET_W}x{SHEET_H}")
-    print(f"Rows: {successes} OK, {failures} failed")
+    print(f"Dimensions: {SHEET_W}×{SHEET_H}")
+    print(f"Variants: {successes} OK, {failures} failed")
     print(f"Actual cost: ~${actual_cost:.2f}")
 
     if failures > 0:
-        print(f"\nTo retry failed rows, just run the script again (cached rows are reused).")
+        print(f"\nTo retry failed variants, just run the script again (cached rows are reused).")
 
 
 if __name__ == "__main__":

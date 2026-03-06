@@ -10,7 +10,6 @@ import { join } from 'node:path';
 import { createRequire } from 'node:module';
 
 import { buildScene, getVillageTime } from './scene.js';
-import { generateAppearance } from './appearance.js';
 import {
   processActions,
   computeQualityMetrics,
@@ -240,26 +239,6 @@ export async function socialTick(ctx) {
         ...ev,
         ...extra,
       });
-    }
-  }
-
-  // Regenerate appearance for bots whose occupation changed this tick
-  for (const { botName, response } of allResults) {
-    if (!response?.actions) continue;
-    for (const action of response.actions) {
-      if (action.tool === 'village_set_occupation') {
-        const title = state.occupations?.[botName]?.title || null;
-        try {
-          const newAppearance = await generateAppearance(botName, title);
-          const pInfo = participants.get(botName);
-          if (pInfo) pInfo.appearance = newAppearance;
-          broadcastEvent({
-            type: 'appearance_update', tick: tickNum,
-            bot: botName, appearance: newAppearance,
-          });
-        } catch { /* non-critical */ }
-        break; // only one occupation change per bot per tick
-      }
     }
   }
 

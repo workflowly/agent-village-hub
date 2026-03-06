@@ -34,29 +34,28 @@ All assets live under `village/games/social-village/assets/` in the repo:
 village/games/social-village/
   assets/
     ground.png         256x256   Terrain + path tileset
-    parts.png          512x256   Modular building parts (walls, roofs, doors, windows)
+    buildings.png      384x960   Pre-drawn building sprites (2 cols x 6 rows of 192x160)
     decor.png          256x256   Props, trees, nature, furniture
-    characters.png     384x736   Character parts (body, hair, outfits, faces, accessories)
+    characters.png     384x384   Character variants (12 pre-drawn characters x 6 poses x 2 frames)
   docs/
     TILE_ART_SPEC.md             This file
   observer.html                  Loads assets from ./assets/ via PIXI.Assets
 ```
 
-The observer loads them at startup:
+The observer loads optional sprite sheets at startup (fallback to procedural drawing
+when any sheet is missing):
 ```javascript
-const [groundTex, partsTex, decorTex] = await Promise.all([
-  PIXI.Assets.load('./assets/ground.png'),
-  PIXI.Assets.load('./assets/parts.png'),
-  PIXI.Assets.load('./assets/decor.png'),
-]);
-// Character sheet loaded separately (optional — fallback to canvas drawing)
+// Character sheet (optional)
 let charSheet = null;
 try { charSheet = await PIXI.Assets.load('./assets/characters.png'); } catch {}
+
+// Building sheet (optional)
+let buildingSheet = null;
+try { buildingSheet = await PIXI.Assets.load('./assets/buildings.png'); } catch {}
 ```
 
-4 files. Every building in the world is assembled from tiles in `parts.png`. Every piece
-of ground from `ground.png`. Every decoration from `decor.png`. Every unique character
-from layered parts in `characters.png`.
+Pre-drawn sprites when available, procedural vector fallback when not. Every character
+is a pre-drawn variant from `characters.png`. Every building from `buildings.png`.
 
 ---
 
@@ -182,245 +181,75 @@ ground surfaces (plazas, parks). They show the side face of a raised platform.
 
 ---
 
-## 2. Building Parts Tileset — `parts.png` (512x256)
+## 2. Building Sprite Sheet — `buildings.png` (384x960)
 
-32 columns x 16 rows = 512 tile slots.
+**Pre-drawn complete building sprites.** Each cell is a fully-rendered building or
+location in 3/4 isometric pixel art style (front face + right side depth + roof).
+Transparent background. The observer extracts cells by location ID and scales to fit.
 
-**This is the core of the modular system.** Every building — current and future, built by
-bots at runtime — is assembled from parts on this sheet. The code picks wall style + roof
-style + door + windows + details and composites them into a building sprite on a canvas
-at runtime.
+When `buildings.png` is not present, the observer falls back to procedural vector
+drawing (PIXI.Graphics) — the same colored rectangles, parallelograms, and
+location-specific details that existed before sprites.
 
-### How Modular Buildings Work
+### Sheet Layout
 
+2 columns x 6 rows of 192x160 cells = 384x960 total.
+
+| Row | Col 0 | Col 1 |
+|-----|-------|-------|
+| 0 | central-square (plaza) | chill-zone (park) |
+| 1 | coffee-hub | knowledge-corner |
+| 2 | workshop | sunset-lounge |
+| 3 | generic-warm (cottage, earth tones) | generic-cool (stone, blue-gray) |
+| 4 | generic-rustic (timber, brown) | generic-modern (plaster, clean) |
+| 5 | generic-cozy (small shop, awning) | generic-grand (tall, ornate) |
+
+- **Rows 0-2**: Known locations — each has its specific look (chimney on coffee-hub,
+  books in knowledge-corner, anvil at workshop, etc.)
+- **Rows 3-5**: Generic variants for dynamic bot-built locations — each has a distinct
+  architectural style
+
+Cell size 192x160 gives enough room for the 3/4 view building with depth faces and
+roof overhang.
+
+### Known Location Details
+
+| Location | Key Visual Elements |
+|----------|-------------------|
+| central-square | Cobblestone ground plane, stone fountain, two benches, raised platform with depth faces |
+| chill-zone | Green lawn, wooden fence, pond, four corner trees, bench |
+| coffee-hub | Brown plank walls, clay roof, brick chimney, shop door, signboard, awning |
+| knowledge-corner | Stone masonry walls, slate roof, arched door/windows, visible bookshelves, ivy, globe |
+| workshop | Timber-frame walls, thatch roof, barn door, anvil, workbench, hammer, barrels |
+| sunset-lounge | Plaster walls (purple-mauve), clay roof, arched door, lanterns, shuttered windows, flower boxes |
+
+### Generic Variants
+
+Dynamic locations built by bots at runtime get a deterministic generic building:
+
+```javascript
+const idx = Math.abs(hashStr(locationSlug)) % 6;
+const col = idx % 2;
+const row = 3 + Math.floor(idx / 2);
 ```
-     [roof-peak]
-    /  [roof-L]  [roof-R]  \        ← Roof row (front face)
-   /    [roof-side-L] [roof-side-R]  \  ← Roof row (side face)
-  [wall] [wall] [window] [wall] [wall]  ← Wall rows (front face, repeated)
-  [wall] [wall] [wall] [wall] [wall]
-  [wall] [wall] [door]  [wall] [wall]  ← Bottom wall row with door
-  .......[side-wall]...[side-wall].....  ← Side face (parallelogram, tiled vertically)
-```
 
-A building N tiles wide and M tiles tall is assembled by:
-1. Stamping **wall tiles** in a grid for the front face (N x M)
-2. Stamping **side-wall tiles** as a parallelogram column for the right side (1 x M, sheared)
-3. Placing **roof tiles** along the top (front triangle + side parallelogram)
-4. Placing **door** tile(s) at bottom-center of front wall
-5. Placing **window** tiles at regular intervals on front wall
-6. Adding **detail** tiles per location type (chimney, sign, etc.)
+| Variant | Style | Description |
+|---------|-------|-------------|
+| generic-warm | Cottage | Earth-toned plaster, clay roof, simple wooden door |
+| generic-cool | Stone | Blue-gray masonry, slate roof, arched door |
+| generic-rustic | Timber | Wood plank walls, thatch roof, exposed beams |
+| generic-modern | Plaster | Clean white-gray walls, slate roof, large windows |
+| generic-cozy | Shop | Wood walls, awning, glass door, hanging sign |
+| generic-grand | Ornate | Two-story stone+plaster, dormer, balcony, double doors |
 
-### IMPORTANT: Gray-Scale Base + Runtime Tinting
+### Generation
 
-**All wall and roof tiles are drawn in NEUTRAL GRAY** — the code applies color tint
-at runtime using `PIXI.Color` or canvas `globalCompositeOperation: 'multiply'`.
-
-- Walls: draw in gray range `#808080` base, `#909090` highlight, `#707070` shadow
-- Roofs: draw in gray range `#707070` base, `#606060` shadow, `#808080` highlight
-- The code tints walls with the location's `c` (wall color) and roofs with `r` (roof color)
-- This means ONE set of wall tiles works for ALL buildings — coffee hub gets brown tint,
-  knowledge corner gets blue tint, dynamic locations get whatever color they want
-
-Doors, windows, and detail props are drawn in their actual colors (not tinted).
-
-### Wall Tiles (rows 0-3) — 4 wall styles x 8 variants each
-
-Each wall style provides 8 tiles for different positions in the building:
-
-| Variant | Purpose |
-|---------|---------|
-| full | Interior wall — no edges visible. Uniform material. |
-| top | Top row of wall, just below roof. May have a subtle shadow from eave. |
-| bottom | Bottom row. May show foundation stones or a baseboard. |
-| left-edge | Left edge of front wall. Slightly darker left column (corner shadow). |
-| right-edge | Right edge, connects to side wall. |
-| side | Side wall tile (for the right-face parallelogram). 15% darker than front. Sheared perspective — draw as if viewed from an angle. |
-| side-top | Side wall top row (under roof side). |
-| side-bottom | Side wall bottom row. |
-
-#### Style A — Smooth Plaster (row 0)
-
-Clean, smooth wall surface. Minimal texture — very subtle vertical brush marks (1px
-shade variation every 6-8px). Good for refined buildings (lounge, library). In gray:
-base `#808080`, with `#858585` and `#7b7b7b` subtle streaks.
-
-| Slot | Description |
-|------|-------------|
-| 0,0 | **Plaster full** — Smooth gray fill. 1-2 barely-visible vertical streaks of lighter/darker gray. No edge features. |
-| 1,0 | **Plaster top** — Top 2px slightly darker (shadow under eave overhang). Rest matches full. |
-| 2,0 | **Plaster bottom** — Bottom 2px: thin foundation line (slightly darker, suggesting stone base). |
-| 3,0 | **Plaster left** — Left 1px column: subtle corner shadow (1 shade darker). |
-| 4,0 | **Plaster right** — Right 1px: corner highlight (1 shade lighter, catches light before side wall). |
-| 5,0 | **Plaster side** — 15% darker than full. Same smooth texture. Drawn slightly compressed horizontally to suggest the angle. |
-| 6,0 | **Plaster side-top** — Side wall under roof. Top 2px darker (eave shadow). |
-| 7,0 | **Plaster side-bottom** — Side wall ground row. Foundation line. |
-
-#### Style B — Wood Plank (row 1)
-
-Horizontal plank siding. Visible plank lines every 4px — 1px darker gray line
-(`#6a6a6a`) separating planks. Each plank has subtle wood grain: 1-2px horizontal
-streaks in slightly varying gray. Rustic feel. Good for coffee shop, workshop.
-
-| Slot | Description |
-|------|-------------|
-| 0,1 | **Plank full** — 4 horizontal planks. Grain lines within each plank (horizontal 1px streaks, `#848484` and `#7c7c7c` alternating). Plank-divider lines at y=3, y=7, y=11. |
-| 1,1 | **Plank top** — Same planks, top 2px darkened (eave shadow). |
-| 2,1 | **Plank bottom** — Bottom plank slightly wider. 1px darker baseboard strip. |
-| 3,1 | **Plank left** — Left 1px shadow column. Planks don't touch left edge (1px gap = corner shadow). |
-| 4,1 | **Plank right** — Right edge highlight. Plank ends visible (slightly lighter end-grain). |
-| 5,1 | **Plank side** — Planks continue on side wall, 15% darker. Same horizontal lines. |
-| 6,1 | **Plank side-top** — Eave shadow over side planks. |
-| 7,1 | **Plank side-bottom** — Foundation visible on side. |
-
-#### Style C — Stone Masonry (row 2)
-
-Cut stone blocks — rectangular blocks ~6x3px with 1px mortar lines between them.
-Offset pattern (each row shifted half a block). Individual blocks vary slightly in
-shade. Scholarly/castle feel. Good for library, future castle/tower buildings.
-
-| Slot | Description |
-|------|-------------|
-| 0,2 | **Stone full** — 5 rows of offset stone blocks. Mortar `#6a6a6a`. Blocks range `#787878` to `#888888`. Each block has a 1px highlight on top edge and 1px shadow on bottom edge (depth). |
-| 1,2 | **Stone top** — Top 2px: lintel stones (wider, more uniform). Eave shadow. |
-| 2,2 | **Stone bottom** — Bottom row: larger foundation stones (wider blocks, rougher texture). |
-| 3,2 | **Stone left** — Corner quoins: left 3px column has larger alternating blocks (decorative corner stones). |
-| 4,2 | **Stone right** — Right corner quoins. |
-| 5,2 | **Stone side** — Same masonry, 15% darker. Blocks continue at angle. |
-| 6,2 | **Stone side-top** — Lintel on side wall. |
-| 7,2 | **Stone side-bottom** — Foundation on side. |
-
-#### Style D — Timber Frame (row 3)
-
-Half-timbered style — visible dark timber beams (`#505050`) over lighter plaster fill
-(`#8a8a8a`). Beams: 3px wide vertical at edges, horizontal at mid-height, diagonal
-cross-braces. Plaster between beams. Good for workshop, tavern, future medieval builds.
-
-| Slot | Description |
-|------|-------------|
-| 0,3 | **Timber full** — Central panel: light plaster fill surrounded by dark beam edges. One diagonal brace line corner-to-corner (1px dark). |
-| 1,3 | **Timber top** — Horizontal beam along top (3px dark strip). Plaster below. |
-| 2,3 | **Timber bottom** — Horizontal beam along bottom (sill beam). |
-| 3,3 | **Timber left** — Vertical beam along left (3px dark strip). |
-| 4,3 | **Timber right** — Vertical beam along right. |
-| 5,3 | **Timber side** — Same beams on side wall, 15% darker. |
-| 6,3 | **Timber side-top** — Side wall top beam. |
-| 7,3 | **Timber side-bottom** — Side wall sill. |
-
-### Roof Tiles (rows 4-6) — 3 roof styles x 10 tiles each
-
-Roofs are assembled as a triangle (front face) + parallelogram (side face). The code
-needs tiles for: peak, left slope, right slope, eave (bottom edge), and side-face
-equivalents.
-
-#### Style A — Clay Tile Roof (row 4)
-
-Semi-circular overlapping tile rows. Rows every 4px — each row is a scalloped line of
-rounded tile ends. Classic Mediterranean/RPG look.
-
-| Slot | Description |
-|------|-------------|
-| 0,4 | **Clay roof flat** — Full tile. 4 rows of scalloped clay tiles. Each tile ~3px wide with rounded bottom edge. Alternating slight shade variation row-to-row. Gray base `#707070`, lighter tops `#7a7a7a`. |
-| 1,4 | **Clay roof left-slope** — Left edge of roof front face. Tiles end at a diagonal — left columns are transparent (roof slopes up). Used to build the triangular front face. |
-| 2,4 | **Clay roof right-slope** — Mirror of left-slope for the right side of the triangle. |
-| 3,4 | **Clay roof peak** — The very top tile where left and right slopes meet. Narrow point. Ridge cap: 2px raised strip along top (lighter gray). |
-| 4,4 | **Clay roof eave** — Bottom edge of roof. Tiles overhang by 2px (extend slightly below the tile boundary). Shadow underneath eave (2px darker strip at very bottom). |
-| 5,4 | **Clay roof side** — Side face of roof (right parallelogram). 20% darker than front. Same tile pattern but viewed from angle — tiles appear compressed horizontally. |
-| 6,4 | **Clay roof side-slope** — Side face upper slope meeting the ridge line. |
-| 7,4 | **Clay roof ridge** — Ridge cap tile for the roof peak, viewed from side. Horizontal strip. |
-| 8,4 | **Clay eave-corner** — Where eave meets the side face. The 3D corner where front overhang turns into side. |
-| 9,4 | **Clay eave-side** — Side face eave (bottom of side roof). |
-
-#### Style B — Thatch Roof (row 5)
-
-Rough straw/reed bundles. Uneven, organic texture. Rougher edge at eave line (1-2px
-jagged instead of straight). Good for rustic/workshop buildings. Gray base `#686868`
-with streaky horizontal lines suggesting reed bundles.
-
-Same 10 tile layout as Clay (slots 0-9, row 5). Key difference:
-- Texture is streaky horizontal lines (like bundled reeds) instead of scalloped tiles
-- Edges are irregular (1-2px jagged, not smooth)
-- Ridge cap is a thick rounded bundle along the top
-
-#### Style C — Slate Roof (row 6)
-
-Flat rectangular overlapping tiles in neat rows. Clean, geometric. More upscale look.
-Good for library, lounge, future government buildings. Gray base `#6a6a6a`, very
-uniform. Visible rectangular tile edges in precise grid.
-
-Same 10 tile layout. Key difference:
-- Rectangular tiles (~4x2px each) in strict grid pattern
-- Very clean edges
-- Subtle variation between individual tiles (2-3 slightly different gray shades)
-- Ridge: neat capping stones
-
-### Doors (row 7) — 6 door styles
-
-Each door is 1 tile wide x 2 tiles tall (16x32). The top tile is the upper half of the
-door, bottom tile is the lower half. Doors are drawn in **actual color** (not gray —
-they're not tinted).
-
-| Slots | Door | Description |
-|-------|------|-------------|
-| 0-1,7 | **Wood simple** | Plain wooden door. Dark brown (`#4a3a2a`). Vertical plank lines. Black iron handle (2px, right side). No decoration. For workshops, dynamic buildings. |
-| 2-3,7 | **Wood panel** | Paneled wooden door. Medium brown (`#5a4a3a`). Two rectangular recessed panels (slightly darker, with highlight edge). Brass handle (gold `#ddaa55`, 2x2). For homes, shops. |
-| 4-5,7 | **Arched** | Door with arched top. Upper tile has the arch — top row curves inward. Warm brown wood with glass pane in upper half (warm yellow glow `#ffe8c0`). Ornate handle. For refined buildings (lounge, library). |
-| 6-7,7 | **Double** | Wide double door (needs 2 tiles width = 32px). Each half 16px. Center seam visible. Heavier construction. Iron studs (dark dots). For large buildings, future town hall. Lower half only — upper half from regular door tops. |
-| 8-9,7 | **Barn** | Sliding barn-door style. Wide planks with X-brace pattern (diagonal cross in darker wood). Iron rail visible at top. Slightly open — 2px dark gap on right showing interior. For workshop, stables. |
-| 10-11,7 | **Shop** | Glass-front shop door. Thin wood frame around glass pane. Interior glow visible through glass. Small "step" at bottom (1px lighter strip). For cafes, future shops. |
-
-### Windows (row 8) — 6 window styles
-
-Each window is 1 tile (16x16) but uses only the center ~14x12px (frame included).
-Transparent outside the frame. Drawn in actual color (not tinted).
-
-| Slot | Window | Description |
-|------|--------|-------------|
-| 0,8 | **Basic** | Simple rectangle, 14x12. Wood frame (`#5a4a3a`, 1px wide). Warm yellow interior glow (`#ffffe0`). Cross-bar muntins dividing into 4 panes (1px dark cross at center). |
-| 1,8 | **Arched** | Same but top 2 rows curved inward (arch shape). Frame follows arch. 4 panes with arch on top two. For refined buildings. |
-| 2,8 | **Shuttered** | Basic window + wooden shutters on both sides. Shutters: 3px wide each, dark wood, with horizontal slat lines. Window itself narrower (8px). Cozy/residential. |
-| 3,8 | **Round** | Circular porthole window. 10px diameter circle frame. 4 panes divided by a cross. For nautical-themed or unique buildings. |
-| 4,8 | **Tall** | Full-height window (14x14 — uses more of the tile). More glass, thinner frame. For libraries, modern buildings. Brighter interior glow. |
-| 5,8 | **Boarded** | Basic window frame but glass replaced with wooden boards (brown planks crossing the opening in an X). Dark interior. For abandoned, under-construction, or haunted buildings. |
-
-### Building Detail Parts (rows 9-11)
-
-Unique elements that give each building type its character. Placed on top of the
-assembled wall/roof structure. Drawn in actual color.
-
-#### Chimneys (row 9) — 4 styles, 3 tiles each (front + side + top)
-
-| Slots | Chimney | Description |
-|-------|---------|-------------|
-| 0-2,9 | **Brick chimney** | Front: 6x14px brick rectangle (`#6a4020`, with mortar lines). Side: 3px parallelogram, darker (`#5a3010`). Top: flat opening view (dark center hole, lighter stone rim). For coffee hub. |
-| 3-5,9 | **Stone chimney** | Similar shape in gray stone. Rougher texture. For workshop/forge. |
-| 6-8,9 | **Thin pipe** | Narrow metal chimney/stovepipe. 3px wide, 12px tall. Dark gray (`#444`). For industrial buildings. |
-| 9-11,9 | **Wide chimney** | Broader brick chimney (10px wide). For bakery, future large buildings. |
-
-#### Signs & Awnings (row 10)
-
-| Slot | Part | Description |
-|------|------|-------------|
-| 0,10 | **Hanging sign bracket** | Iron bracket: L-shape, dark gray. Extends right from wall. 8x4px. Sign hangs from right end. |
-| 1,10 | **Sign — wood blank** | 10x6px wooden plank sign. Brown (`#5a3010`). Hangs from bracket. Painted symbol area (lighter center rectangle). The code can stamp a tiny icon on this per-location. |
-| 2,10 | **Awning left** | Left end of a fabric awning/canopy. Striped canvas (alternating color bands — drawn in gray stripes for tinting). Scalloped bottom edge. |
-| 3,10 | **Awning center** | Center segment — tiles horizontally for wider awnings. Same stripe pattern. |
-| 4,10 | **Awning right** | Right end of awning. Scalloped edge terminator. |
-| 5,10 | **Banner** | Vertical hanging banner. 6x14px. Fabric (`#808080` for tinting). Pointed bottom. Pole at top. |
-| 6,10 | **Plaque** | Small wall-mounted sign. 8x4px. Stone frame with text area (lighter center). |
-
-#### Architectural Details (row 11)
-
-| Slot | Part | Description |
-|------|------|-------------|
-| 0,11 | **Balcony railing** | Iron railing segment, 16px wide. Thin vertical bars (`#3a3a3a`) with horizontal rail top and bottom. For upper floor decoration. |
-| 1,11 | **Flower box** | Window planter. 12x4px. Terra cotta box with green foliage + tiny flower pixels (pink, yellow). Mounted below a window. |
-| 2,11 | **Ivy patch** | 8x10px cluster of ivy/vine on wall. Dark green pixels (`#2a5a2a`) on transparent background. Place on wall corners for aged look. |
-| 3,11 | **Wall lamp** | Small sconce lamp. 4x6px. Black iron bracket + warm glow bulb (`#ffcc66`). 1-2 semi-transparent yellow glow pixels around it. |
-| 4,11 | **Foundation step** | Door step/stoop. 16x4px. Stone slab (`#8a8a7a`). Placed in front of doors. Visible top surface (lighter, 3/4 view). |
-| 5,11 | **Scaffold** | Construction scaffolding. Wooden poles (brown) in X-pattern. Transparent background. Overlaid on wall for under-construction buildings. |
-| 6,11 | **Weather vane** | Small ornament for roof peak. 6x8px. Iron pole + directional arrow. Dark gray. |
-| 7,11 | **Roof dormer** | Small window protruding from roof. Mini triangle roof + tiny window with glow. 10x8px. For large buildings. |
+Generated by `generate-buildings.py` using Gemini image generation:
+- 12 API calls (one per cell)
+- Chroma-key green background to transparency
+- Downscale to 192x160 (NEAREST)
+- Composite into 384x960 sheet
+- Cached intermediates for resume support
 
 ---
 
@@ -519,70 +348,54 @@ Small scatter elements for making the world feel alive.
 
 ---
 
-## 4. How Buildings Are Assembled at Runtime
+## 4. How Buildings Are Rendered at Runtime
 
-This is the key to infinite extensibility. The code does NOT load a pre-made building
-sprite. Instead, it composites one on demand:
+The observer uses a **sprite-first, vector-fallback** pattern for buildings:
 
-```
-Given a location with:
-  - width:  W tiles (building front face width)
-  - height: H tiles (building front face height)
-  - wallStyle: A/B/C/D (plaster/plank/stone/timber)
-  - roofStyle: A/B/C (clay/thatch/slate)
-  - doorStyle: 0-5
-  - windowStyle: 0-5
-  - color: wall tint hex
-  - roofColor: roof tint hex
-  - details: [chimney, sign, ivy, ...]
-
-Procedure:
-  1. Create canvas (W*16 + DEPTH) x (H*16 + ROOF_HEIGHT)
-  2. Fill front wall: stamp wall tiles in W x H grid, applying color tint
-  3. Fill side wall: stamp side-wall tiles in parallelogram column, tinted darker
-  4. Draw roof: stamp roof tiles in triangle (front) + parallelogram (side)
-  5. Place door: stamp door tiles at bottom-center of front wall
-  6. Place windows: stamp window tiles at regular grid positions on front wall
-  7. Overlay details: chimney on side wall, sign on front, ivy on corner, etc.
-  8. Convert canvas → PIXI.Texture → PIXI.Sprite
-  9. Cache texture by hash of building params (reuse for same config)
-```
-
-### Mapping Existing Locations to Parts
-
-| Location | Wall | Roof | Door | Window | Details |
-|----------|------|------|------|--------|---------|
-| coffee-hub | B (plank) | A (clay) | Shop | Basic | Brick chimney, hanging sign, awning |
-| knowledge-corner | C (stone) | C (slate) | Arched | Arched | Ivy, wall lamp, flower box, dormer |
-| workshop | D (timber) | B (thatch) | Barn | Basic | Stone chimney, scaffold (if recent build) |
-| sunset-lounge | A (plaster) | A (clay) | Arched | Shuttered | Lanterns at door, flower box, banner |
-| dynamic (new) | Random | Random | Wood simple | Basic or Boarded | Flag, scaffold |
-
-### Assigning Styles to Dynamic Locations
-
-When a bot builds a new location, the code deterministically picks styles from the
-slug hash:
+### When `buildings.png` is available
 
 ```javascript
-const wallStyles = ['A', 'B', 'C', 'D'];
-const roofStyles = ['A', 'B', 'C'];
-const doorStyles = [0, 1, 2, 3, 4, 5];
-const windowStyles = [0, 1, 2, 3, 4, 5];
-
-function buildingStyleFromSlug(slug) {
-  const h = hashStr(slug);
-  return {
-    wall:   wallStyles[Math.abs(h) % wallStyles.length],
-    roof:   roofStyles[Math.abs(h >> 4) % roofStyles.length],
-    door:   doorStyles[Math.abs(h >> 8) % doorStyles.length],
-    window: windowStyles[Math.abs(h >> 12) % windowStyles.length],
-  };
+function drawLocationGraphics(id, L) {
+  if (buildingSheet) {
+    // Look up cell coordinates from BUILDING_MAP (known locations)
+    // or hash the slug into the generic pool (rows 3-5)
+    const tex = getBuildingTexture(id);
+    const sprite = new PIXI.Sprite(tex);
+    // Scale to fit location dimensions
+    sprite.width = L.w + DEPTH + ROOF_OVERHANG;
+    sprite.height = L.h + DEPTH;
+    sprite.position.set(-ROOF_OVERHANG, -DEPTH);
+    container.addChild(sprite);
+  } else {
+    // Vector fallback (existing PIXI.Graphics code)
+  }
 }
 ```
 
-This means every dynamic building looks unique but consistent (same slug always
-produces the same building appearance). 4 walls x 3 roofs x 6 doors x 6 windows =
-**432 unique building combinations** from the same tileset.
+Textures are cached by location ID — each cell is extracted once from the sheet
+and reused for the lifetime of the session.
+
+### When `buildings.png` is NOT available
+
+The observer falls back to the existing procedural vector drawing:
+- Colored rectangles (front wall), parallelograms (side wall, roof side)
+- Triangular roof front face
+- Location-specific details: chimney, bookshelf, anvil, lanterns, etc.
+- Uses `L.c` (wall color), `L.r` (roof color), `L.w`/`L.h` (dimensions)
+
+### Dynamic Location Assignment
+
+Dynamic locations built by bots at runtime get a deterministic generic building
+from the pool of 6 generic variants (rows 3-5):
+
+```javascript
+const GENERIC_BUILDINGS = 6; // 2 cols x 3 rows
+const idx = Math.abs(hashStr(slug)) % GENERIC_BUILDINGS;
+const col = idx % 2;
+const row = 3 + Math.floor(idx / 2);
+```
+
+Same slug always produces the same building — consistent across sessions.
 
 ---
 
@@ -620,31 +433,31 @@ for the visible area and update incrementally.
 
 ---
 
-## 6. Character Parts Sheet — `characters.png` (384x736)
+## 6. Character Variant Sheet — `characters.png` (384x384)
 
-**Layered sprite parts for unique bot appearances.** Each bot gets a unique look
-composited at runtime from gray-scale parts + color tinting — same pattern as
-building walls in `parts.png`.
+**Pre-drawn full character variants.** Each bot is assigned a variant index (0–11)
+based on personality type and name hash. Each variant is a complete, fully-drawn
+character — no layered assembly required.
 
-The observer loads the sheet and composites parts per bot using the appearance
-config sent via SSE. If `characters.png` is not found, the observer falls back
-to the old canvas-drawn sprites.
+The observer loads the sheet and extracts animation frames by row (variant) and
+column (pose × frame). If `characters.png` is not found, the observer falls back
+to procedural canvas-drawn sprites.
 
 ### File location
 
 ```
 village/games/social-village/
   assets/
-    characters.png    384x736   Character parts sprite sheet
+    characters.png    384x384   Character variant sprite sheet
 ```
 
 ### Sheet Dimensions
 
 - **Cell size**: 32x32 pixels
 - **Columns**: 12 (6 poses × 2 frames = 384px wide)
-- **Rows**: 23 (736px tall)
+- **Rows**: 12 (12 character variants = 384px tall)
 
-### Column Layout (every part uses the same column order)
+### Column Layout
 
 | Cols | Pose | Frames |
 |------|------|--------|
@@ -655,94 +468,71 @@ village/games/social-village/
 | 8-9 | sit | f0, f1 |
 | 10-11 | wave | f0, f1 |
 
-### Row Layout
+Frame 1 is a 1px-up bounce of frame 0 for simple animation.
 
-| Rows | Part | Variants | Tinted? | Description |
-|------|------|----------|---------|-------------|
-| 0-2 | **Body base** | 3 body types (slim, average, stocky) | Skin tone | Gray-scale body+limbs. Skin-exposed areas (neck, hands, face outline) use a distinct marker region. Pose-correct arm/leg positions for each column. |
-| 3-8 | **Hair** | 6 styles (short, medium, messy, long, ponytail, spiky) | Hair color | Gray-scale hair positioned per-pose head location. Must align precisely with body base head position across all poses. |
-| 9-13 | **Outfit top** | 5 styles (tee, collared, vest, jacket, apron) | Top color | Gray-scale torso overlay. Covers body base torso area. Arm openings match body base arm positions per pose. |
-| 14-16 | **Outfit bottom** | 3 styles (pants, shorts, skirt) | Bottom color | Gray-scale leg overlay. Covers body base leg area. |
-| 17-19 | **Shoes** | 3 styles (boots, sneakers, sandals) | Shoe color | Gray-scale foot overlay. Matches body base foot positions per pose. |
-| 20 | **Faces** | 4 eye styles × 2 frames (cols 0-7) + expressions (cols 8-11) | **Not tinted** | Drawn in actual colors. Tiny pixel details — eye whites, pupils, mouth shapes. Eye styles: round, narrow, big, sleepy. Expressions: neutral, smirk, gentle, serious. |
-| 21 | **Accessories** | 5 styles (glasses, hat, scarf, bowtie, flower) | Accessory color | Gray-scale. Optional overlay. Each style uses 2 cols (f0, f1). |
-| 22 | **Skin palettes** | 6 tones | Reference only | Not used at runtime. Reference strips showing base/shade/highlight for each skin tone (light to dark). For the artist's reference when drawing body parts. |
+### Row Layout — Character Variants
 
-### Gray-Scale Drawing Rules
+| Rows | Personality | Description |
+|------|-------------|-------------|
+| 0 | Efficient | Navy blazer, dark slacks, short dark hair, serious expression. Cool tones. |
+| 1 | Efficient | Gray sweater vest, glasses, brown hair neatly parted. Intellectual. |
+| 2 | Efficient | Dark teal polo, khaki pants, short black hair. Practical. |
+| 3 | Efficient | White button-down, charcoal trousers, silver hair tied back. Elegant. |
+| 4 | Witty | Bright red jacket, wild spiky auburn hair, mischievous grin. Bold. |
+| 5 | Witty | Purple tie-dye shirt, orange shorts, messy pink-streaked hair. Quirky. |
+| 6 | Witty | Green hoodie, dark curly hair with blue streak, confident smirk. Urban. |
+| 7 | Witty | Magenta vest, striped pants, dramatic wavy hair, bowtie. Theatrical. |
+| 8 | Caring | Soft green cardigan, long brown hair with flower, warm smile. Gentle. |
+| 9 | Caring | Peach apron, curly auburn hair, kind round face. Warm cook. |
+| 10 | Caring | Earth-toned overalls, dark ponytail, work gloves. Grounded gardener. |
+| 11 | Caring | Lavender robe, orange sash, long white hair, peaceful. Wise sage. |
 
-All tinted parts (body, hair, outfit, shoes, accessories) follow these rules:
-
-- **Base gray**: `#808080`
-- **Highlight**: `#909090` (top/left edges catching light)
-- **Shadow**: `#707070` (bottom/right edges)
-- **Transparent background**: only the part pixels are opaque
-- Parts must leave empty (transparent) space where other layers will show
-
-The code applies color tinting using canvas `globalCompositeOperation: 'multiply'`:
+### Personality-to-Variant Mapping
 
 ```javascript
-// Draw gray-scale part to temp canvas
-tmpCtx.drawImage(charSheet, sx, sy, 32, 32, 0, 0, 32, 32);
-// Multiply tint color
-tmpCtx.globalCompositeOperation = 'multiply';
-tmpCtx.fillStyle = tintColor;
-tmpCtx.fillRect(0, 0, 32, 32);
-// Restore alpha from original part
-tmpCtx.globalCompositeOperation = 'destination-in';
-tmpCtx.drawImage(charSheet, sx, sy, 32, 32, 0, 0, 32, 32);
-// Composite onto main canvas
-ctx.drawImage(tmpCanvas, 0, 0);
+const PERSONALITY_RANGES = {
+  efficient: [0, 3],   // rows 0–3
+  witty:     [4, 7],   // rows 4–7
+  caring:    [8, 11],  // rows 8–11
+};
 ```
 
-### Drawing Order (back to front)
-
-1. **Shadow** — shared oval, drawn by code (not from sheet)
-2. **Body base** — tinted with skin tone
-3. **Outfit bottom** — tinted with `bottomColor`
-4. **Shoes** — tinted with `shoeColor`
-5. **Outfit top** — tinted with `topColor`
-6. **Hair** — tinted with `hairColor`
-7. **Face/eyes** — actual colors, NOT tinted
-8. **Accessory** — if present, tinted with accessory color
-
-### Alignment Rules
-
-- **Head position** must be identical across all poses for body base, hair, face, and accessory rows
-- **Arm/leg positions** must match exactly between body base and outfit parts for each pose
-- Body base row 0 (slim) should be ~2px narrower than row 2 (stocky) in the torso
-- Outfit tops must cover the body base torso completely — no gray body pixels visible through clothing
+Each bot's variant is deterministic: `personality range + seeded RNG from name hash`.
 
 ### Appearance Config (sent from server per bot)
 
 ```javascript
-{
-  bodyType: 0,        // 0=slim, 1=average, 2=stocky → rows 0-2
-  skinTone: 2,        // 0-5 → index into SKIN_TONES palette
-  hairStyle: 3,       // 0-5 → rows 3-8
-  hairColor: '#4a3020',
-  eyeStyle: 1,        // 0-3 → cols 0-7 of row 20
-  topStyle: 2,        // 0-4 → rows 9-13
-  topColor: '#e74c3c',
-  bottomStyle: 0,     // 0-2 → rows 14-16
-  bottomColor: '#3a3a5c',
-  shoeStyle: 0,       // 0-2 → rows 17-19
-  shoeColor: '#4a3728',
-  accessory: null,    // null | { style: 0-4, color: '#hex' } → row 21
-  expression: 'neutral',
-}
+{ variant: 7 }  // index 0–11, maps directly to a sheet row
 ```
 
-**Uniqueness**: 3 body × 6 skin × 6 hair × 6 hairColor × 4 eye × 5 top × 5 topColor
-× 3 bottom × 3 shoe = **~1.4 million** unique combinations from one sprite sheet.
+### Rendering
+
+No compositing needed. For a given variant and pose:
+
+```javascript
+const col = poseIndex * 2 + frame;  // 0–11
+const row = variant;                 // 0–11
+// Extract 32×32 cell at (col * 32, row * 32) from characters.png
+```
+
+### Fallback
+
+When `characters.png` is not available, the observer uses `drawSocialChar()` —
+a procedural canvas-drawing function that renders simple colored characters.
+The variant index maps to a color via `BCOLORS[variant % BCOLORS.length]`.
+
+### Adding New Variants
+
+1. Add rows to the bottom of the sheet (row 12+)
+2. Update `VARIANT_COUNT` in `appearance.js`
+3. Update `PERSONALITY_RANGES` if adding to a personality group
+4. Regenerate with `generate-characters.py`
 
 ### Adding New Poses
 
-To add a new pose (e.g., `dance`):
-
 1. Add 2 columns to the right of the sheet (new-pose-f0, new-pose-f1)
-2. Draw all parts (body, hair, outfits, etc.) for the new pose in those columns
-3. Add the pose name to the `ANIM_POSES` array in `observer.html`
-4. The compositor indexes by pose position — everything else works automatically
+2. Draw all 12 variants for the new pose in those columns
+3. Add the pose name to `ANIM_POSES` in `observer.html`
 
 ---
 
@@ -750,15 +540,14 @@ To add a new pose (e.g., `dance`):
 
 When drawing tiles, keep these expansion scenarios in mind:
 
-- [ ] **New wall styles**: rows 0-3 of parts.png use 4 styles. Rows 12-15 are empty for 4 more
-- [ ] **New roof styles**: rows 4-6 use 3 styles. Rows 13-15 available for more
+- [ ] **New building variants**: add rows to buildings.png (row 6+), update `GENERIC_BUILDINGS` count
+- [ ] **New known locations**: add to `BUILDING_MAP` in observer.html, add cell to buildings.png
 - [ ] **New ground types**: sand, snow, brick road — add rows 7+ in ground.png
 - [ ] **New tree types**: cherry blossom, palm, dead tree — add at rows 3+ in decor.png
-- [ ] **Seasonal variants**: autumn trees (orange foliage), snow-covered roofs — add as extra rows
+- [ ] **Seasonal variants**: autumn trees (orange foliage), snow-covered buildings — add as extra rows/sheets
 - [ ] **Interior tiles**: if buildings become enterable, add floor/furniture tiles as new sheet
-- [ ] **Night variants**: window glow tiles brighter at night, lamp tiles lit — code handles this with tinting, no extra art needed
-- [ ] **Biome support**: desert village, snow village — new ground.png variants, same parts.png + decor.png work everywhere with tinting
+- [ ] **Night variants**: window glow brighter at night, lamp tiles lit — code-side tinting or overlay
+- [ ] **Biome support**: desert village, snow village — new ground.png variants, alternate buildings.png
 - [ ] **New character poses**: add 2 columns per pose to characters.png, add name to `ANIM_POSES`
-- [ ] **New outfit styles**: add rows to characters.png (top/bottom/shoes sections)
-- [ ] **New accessories**: add to row 21 of characters.png (max 6 per row, then add row 23+)
+- [ ] **New character variants**: add rows to characters.png, update `VARIANT_COUNT` and `PERSONALITY_RANGES` in appearance.js
 - [ ] **Character emotes**: overlay particle effects per expression — code-side only, no art needed
