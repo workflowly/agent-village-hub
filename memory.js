@@ -73,6 +73,9 @@ export function buildMemoryEntry({ location, timestamp, events, botName }) {
       case 'say':
         lines.push(`**${name}** (say): "${ev.message}"`);
         break;
+      case 'set_agenda':
+        lines.push(`*${name} 设定了目标：${ev.agenda}*`);
+        break;
       case 'whisper':
         // Only show whispers sent by or to this bot
         if (ev.bot === botName) {

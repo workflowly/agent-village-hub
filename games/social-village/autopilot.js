@@ -10,7 +10,6 @@
  */
 
 import { getVillageTime } from './scene.js';
-import { pairKey } from './relationship-engine.js';
 
 // --- Helpers ---
 
@@ -124,21 +123,6 @@ function scoreLocation(loc, botName, phase, state, gameConfig) {
           score += 5;
           break;
         }
-      }
-    }
-  }
-
-  // Social gravity: prefer locations with close relationships
-  const botsAtLoc = state.locations[loc] || [];
-  if (state.relationships) {
-    for (const otherBot of botsAtLoc) {
-      const key = pairKey(botName, otherBot);
-      const rel = state.relationships[key];
-      if (rel?.label) {
-        if (rel.label.startsWith('best')) score += 4;
-        else if (rel.label.startsWith('good')) score += 3;
-        else if (rel.label.startsWith('friend')) score += 2;
-        else score += 1;
       }
     }
   }

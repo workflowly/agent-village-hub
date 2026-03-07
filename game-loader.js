@@ -51,9 +51,6 @@ export function loadGame(filePath) {
     phases,
     phaseDescriptions,
     timezone: raw.timezone,
-    spice: raw.spice,
-    spiceConfig: raw.spiceConfig,
-    relationships: raw.relationships,
     tools: raw.tools,
     sceneLabels: raw.sceneLabels,
   };
@@ -153,7 +150,7 @@ function validateGrid(raw, filePath) {
  */
 function validate(raw, filePath) {
   const required = ['id', 'locations', 'spawnLocation', 'phases',
-    'spice', 'spiceConfig', 'relationships', 'tools', 'sceneLabels'];
+    'tools', 'sceneLabels'];
 
   for (const field of required) {
     if (raw[field] === undefined || raw[field] === null) {

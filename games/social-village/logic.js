@@ -11,7 +11,7 @@
 import { ACTION_HANDLERS } from './action-handlers.js';
 
 // Re-export governance functions for backwards compatibility
-export { ensureGovernance, resolveExpiredProposal } from './governance.js';
+export { ensureGovernance, resolveExpiredProposal, expireMayor, enforceExiles, checkViolations } from './governance.js';
 
 /**
  * Roll a random village event for a location.
@@ -53,43 +53,6 @@ export function rollVillageEvent(tick, location, eventState, gameConfig) {
   if (ls.recentEvents.length > eventConfig.recentCap) ls.recentEvents.shift();
 
   return event.text;
-}
-
-/**
- * Roll a conversation spice prompt for a location.
- *
- * @param {number} tick - Current tick
- * @param {string} location - Location slug
- * @param {number} botCount - Number of bots at this location
- * @param {object} spiceState - Per-location spice tracking (mutated)
- * @param {object} gameConfig - Loaded game configuration
- * @returns {string|null} Spice text, or null
- */
-export function rollConversationSpice(tick, location, botCount, spiceState, gameConfig) {
-  const { spice, spiceConfig } = gameConfig;
-
-  if (botCount < spiceConfig.minBots) return null;
-
-  if (!spiceState[location]) {
-    spiceState[location] = { lastSpiceTick: -Infinity, recentSpice: [] };
-  }
-  const ss = spiceState[location];
-
-  // Cooldown
-  if (tick - ss.lastSpiceTick < spiceConfig.cooldownTicks) return null;
-
-  // Random chance per tick
-  if (Math.random() > spiceConfig.chance) return null;
-
-  const eligible = spice.filter(s => !ss.recentSpice.includes(s));
-  if (eligible.length === 0) return null;
-
-  const picked = eligible[Math.floor(Math.random() * eligible.length)];
-  ss.lastSpiceTick = tick;
-  ss.recentSpice.push(picked);
-  if (ss.recentSpice.length > spiceConfig.recentCap) ss.recentSpice.shift();
-
-  return picked;
 }
 
 /**

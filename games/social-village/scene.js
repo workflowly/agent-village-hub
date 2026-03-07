@@ -123,10 +123,8 @@ export function buildScene({
   whispers,
   movements,
   sceneHistoryCap = 10,
-  relationships,
   canMove = true,
   villageMemory = '',
-  conversationSpice = '',
   gameConfig,
   state = {},
   totalVoters = 0,
@@ -138,10 +136,8 @@ export function buildScene({
   // Time + phase + location
   renderLocationHeader(lines, location, state, gameConfig);
 
-  // Decorations and messages at this location
+  // Wall messages at this location
   const ls = state.locationState?.[location];
-  addSection(lines, sceneLabels.decorationsHeader, ls?.decorations?.slice(-5),
-    d => `- ${botDisplayNames[d.bot] || d.bot}: ${d.text}`);
   addSection(lines, sceneLabels.messagesHeader, ls?.messages?.slice(-5),
     m => `- "${m.text}" —${botDisplayNames[m.bot] || m.bot}`);
 
@@ -161,56 +157,12 @@ export function buildScene({
   }
   lines.push('');
 
-  // Relationships
-  if (relationships) {
-    const relLines = [];
-    for (const [key, rel] of Object.entries(relationships)) {
-      if (!rel.label) continue;
-      const [a, b] = key.split('::');
-      if (a !== botName && b !== botName) continue;
-      const other = a === botName ? b : a;
-      const otherDisplay = botDisplayNames[other] || other;
-      relLines.push(`- ${otherDisplay}: ${rel.label}`);
-    }
-    if (relLines.length > 0) {
-      lines.push(sceneLabels.relationships);
-      lines.push(...relLines);
-      lines.push('');
-    }
-  }
-
-  // Bonds (life sim)
-  if (state.bonds) {
-    const bondLines = [];
-    for (const [key, bond] of Object.entries(state.bonds)) {
-      const [a, b] = key.split('::');
-      if (a !== botName && b !== botName) continue;
-      const other = a === botName ? b : a;
-      const otherDisplay = botDisplayNames[other] || other;
-      bondLines.push(renderTemplate(sceneLabels.bondFormat, { name1: botDisplayName, name2: otherDisplay, bondType: bond.type }));
-    }
-    if (bondLines.length > 0) {
-      lines.push(sceneLabels.bondsHeader);
-      lines.push(...bondLines);
-      lines.push('');
-    }
-  }
-
   // Own agenda (or default)
-  const DEFAULT_AGENDA = '积极参与村庄生活——探索、社交、提议、投票。让村庄变得更有趣。';
+  const DEFAULT_AGENDA = '积极参与村庄生活——社交、提议、投票、建造新地点。让村庄不断发展壮大。';
   const agendaText = state.agendas?.[botName]?.goal || DEFAULT_AGENDA;
   lines.push(`你的目标：${agendaText}`);
   lines.push('用 village_reflect 随时更新你的目标或记录想法。');
   lines.push('');
-
-  // Exploration hint
-  if (state.explorations?.[botName]) {
-    const expl = state.explorations[botName];
-    if (tick - expl.tick <= 5) {
-      lines.push(sceneLabels.exploreHint);
-      lines.push('');
-    }
-  }
 
   // Village memory summary (high-level context from past interactions)
   if (villageMemory) {
@@ -222,7 +174,7 @@ export function buildScene({
   // Governance section
   const gov = state.governance;
   if (gov) {
-    renderGovernanceSection(lines, gov, tick, botName, botDisplayNames, sceneLabels, totalVoters, renderTemplate);
+    renderGovernanceSection(lines, gov, tick, botName, botDisplayNames, sceneLabels, totalVoters, renderTemplate, state);
   }
 
   // News bulletin
@@ -248,12 +200,6 @@ export function buildScene({
         lines.push(renderTemplate(sceneLabels.leaveVillage, { name }));
       }
     }
-    lines.push('');
-  }
-
-  // Conversation spice (provocative prompt)
-  if (conversationSpice) {
-    lines.push(`${sceneLabels.spicePrefix} ${conversationSpice}`);
     lines.push('');
   }
 

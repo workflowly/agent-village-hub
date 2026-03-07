@@ -6,14 +6,10 @@
  *   ctx = { botName, params, location, state, tick, validLocations, lastMoveTick, onCooldown }
  */
 
-import { pairKey } from './relationship-engine.js';
-import { ensureGovernance, handlePropose, handleVote } from './governance.js';
+import { ensureGovernance, handlePropose, handleVote, handleDecree, handleExile } from './governance.js';
 
 export const MAX_WHISPERS_PER_BOT = 20;
-export const MAX_DECORATIONS_PER_LOCATION = 10;
 export const MAX_MESSAGES_PER_LOCATION = 20;
-export const EXPLORE_COOLDOWN_TICKS = 3;
-export const BUILD_WINDOW_TICKS = 5;
 
 function ensureLocationState(state, location) {
   if (!state.locationState) state.locationState = {};
@@ -44,6 +40,7 @@ function handleWhisper(ctx) {
 
 function handleMove(ctx) {
   const { botName, params, location, state, onCooldown, validLocations, lastMoveTick, tick } = ctx;
+  if (state.exiles?.[botName] && tick < state.exiles[botName].until) return null;
   if (onCooldown) return null;
   const dest = params?.location;
   const allValid = [...validLocations, ...Object.keys(state.customLocations || {})];
@@ -55,16 +52,6 @@ function handleMove(ctx) {
   return { bot: botName, action: 'move', from: location, to: dest };
 }
 
-function handleDecorate(ctx) {
-  const { botName, params, location, state, tick } = ctx;
-  const desc = (params?.description || '').slice(0, 200);
-  if (!desc) return null;
-  const ls = ensureLocationState(state, location);
-  ls.decorations.push({ bot: botName, text: desc, tick });
-  if (ls.decorations.length > MAX_DECORATIONS_PER_LOCATION) ls.decorations.shift();
-  return { bot: botName, action: 'decorate', decoration: desc };
-}
-
 function handleLeaveMessage(ctx) {
   const { botName, params, location, state, tick } = ctx;
   const msg = (params?.message || '').slice(0, 300);
@@ -73,15 +60,6 @@ function handleLeaveMessage(ctx) {
   ls.messages.push({ bot: botName, text: msg, tick });
   if (ls.messages.length > MAX_MESSAGES_PER_LOCATION) ls.messages.shift();
   return { bot: botName, action: 'leave_message', message: msg };
-}
-
-function handleExplore(ctx) {
-  const { botName, location, state, tick } = ctx;
-  if (!state.explorations) state.explorations = {};
-  const prev = state.explorations[botName];
-  if (prev && tick - prev.tick < EXPLORE_COOLDOWN_TICKS) return null;
-  state.explorations[botName] = { from: location, tick };
-  return { bot: botName, action: 'explore' };
 }
 
 function handleBuild(ctx) {
@@ -112,18 +90,6 @@ function handleBuild(ctx) {
   state.emptyTicks[slug] = 0;
   passedBuild.built = true;
   return { bot: botName, action: 'build', locationSlug: slug, locationName: name, locationDesc: desc, connectedTo };
-}
-
-function handleProposeBond(ctx) {
-  const { botName, params, location, state, tick } = ctx;
-  const target = params?.target;
-  const bondType = (params?.bond_type || '').slice(0, 50).trim();
-  if (!target || !bondType) return null;
-  if (!state.locations[location]?.includes(target)) return null;
-  if (!state.bonds) state.bonds = {};
-  const key = pairKey(botName, target);
-  state.bonds[key] = { type: bondType, proposedBy: botName, tick };
-  return { bot: botName, action: 'propose_bond', target, bondType };
 }
 
 function handleReflect(ctx) {
@@ -184,13 +150,12 @@ export const ACTION_HANDLERS = new Map([
   ['village_say', handleSay],
   ['village_whisper', handleWhisper],
   ['village_move', handleMove],
-  ['village_decorate', handleDecorate],
   ['village_leave_message', handleLeaveMessage],
-  ['village_explore', handleExplore],
   ['village_build', handleBuild],
   ['village_propose', handleProposeAction],
   ['village_vote', handleVoteAction],
-  ['village_propose_bond', handleProposeBond],
   ['village_reflect', handleReflect],
   ['village_memory_search', handleMemorySearch],
+  ['village_decree', handleDecree],
+  ['village_exile', handleExile],
 ]);

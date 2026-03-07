@@ -11,11 +11,12 @@ import { buildScene, getVillageTime } from './scene.js';
 import {
   processActions,
   computeQualityMetrics,
-  rollConversationSpice,
   resolveExpiredProposal,
   ensureGovernance,
+  expireMayor,
+  enforceExiles,
+  checkViolations,
 } from './logic.js';
-import { updateSocialDynamics } from './relationship-engine.js';
 import { buildMemoryEntry, appendVillageMemory } from '../../memory.js';
 import { rollNewsBulletin } from './news.js';
 
@@ -151,6 +152,23 @@ export async function socialTick(ctx) {
     });
   }
 
+  // Expire mayor if term has elapsed
+  const mayorExpiry = expireMayor(state, tickNum);
+  if (mayorExpiry) {
+    console.log(`[village] mayor ${mayorExpiry.mayorName} term expired at tick ${tickNum}`);
+    broadcastEvent({
+      type: 'mayor_term_expired',
+      tick: tickNum,
+      mayorName: mayorExpiry.mayorName,
+    });
+  }
+
+  // Enforce active exiles
+  const exileEvents = enforceExiles(state, tickNum);
+  for (const ev of exileEvents) {
+    broadcastEvent({ ...ev, tick: tickNum });
+  }
+
   // Build display name lookup from participants Map
   const displayNames = {};
   for (const [name, info] of participants) {
@@ -180,7 +198,7 @@ export async function socialTick(ctx) {
 
   // Build scenes and collect actions per location
   const allEvents = new Map(); // location → events[]
-  const actionCounts = { say: 0, whisper: 0, move: 0, decorate: 0, leave_message: 0, explore: 0, build: 0, reflect: 0, propose_bond: 0, propose: 0, vote: 0 };
+  const actionCounts = { say: 0, whisper: 0, move: 0, leave_message: 0, build: 0, reflect: 0, propose: 0, vote: 0, decree: 0, exile: 0 };
   let botsSent = 0;
   let botsResponded = 0;
   let botsSkippedCost = 0;
@@ -188,19 +206,6 @@ export async function socialTick(ctx) {
 
   // All locations = schema + custom (built by bots)
   const allLocations = [...gameConfig.locationSlugs, ...Object.keys(state.customLocations || {})];
-
-  // Roll conversation spice for occupied locations
-  const activeSpice = new Map();   // location → spice text
-  for (const loc of allLocations) {
-    const botsAtLoc = state.locations[loc] || [];
-    if (botsAtLoc.length === 0) continue;
-    const spice = rollConversationSpice(tickNum, loc, botsAtLoc.length, state.spiceState, gameConfig);
-    if (spice) {
-      activeSpice.set(loc, spice);
-      console.log(`[village] spice at ${loc}: ${spice}`);
-      broadcastEvent({ type: 'conversation_spice', tick: tickNum, location: loc, locationName: gameConfig.locationNames[loc], text: spice });
-    }
-  }
 
   // Roll news bulletin (~every 30 ticks)
   await rollNewsBulletin(tickNum, state, broadcastEvent);
@@ -257,10 +262,8 @@ export async function socialTick(ctx) {
         whispers: pendingWhispers,
         movements: [],
         sceneHistoryCap: SCENE_HISTORY_CAP,
-        relationships: state.relationships,
         canMove,
         villageMemory: villageSummaries.get(botName) || '',
-        conversationSpice: activeSpice.get(loc) || '',
         gameConfig,
         state,
         totalVoters: participants.size,
@@ -319,6 +322,16 @@ export async function socialTick(ctx) {
         ...extra,
       });
     }
+  }
+
+  // Check for constitutional violations
+  const violations = await checkViolations(state, tickNum);
+  if (violations && violations.length > 0) {
+    broadcastEvent({
+      type: 'violation_detected',
+      tick: tickNum,
+      violations,
+    });
   }
 
   // Build memory entries for all bots that participated
@@ -380,20 +393,6 @@ export async function socialTick(ctx) {
     }
   }
 
-  // Update social dynamics (relationships)
-  const { relationshipChanges } = updateSocialDynamics({
-    state, allEvents, displayNames, gameConfig,
-  });
-  for (const change of relationshipChanges) {
-    broadcastEvent({
-      type: 'relationship', tick: tickNum,
-      from: change.from, to: change.to,
-      fromDisplay: change.fromDisplay, toDisplay: change.toDisplay,
-      label: change.label, prevLabel: change.prevLabel,
-    });
-    console.log(`[village] relationship: ${change.fromDisplay} & ${change.toDisplay} → ${change.label || '(none)'}`);
-  }
-
   // Trigger memory summarization for bots with too many recent entries
   const MAX_RECENT_ENTRIES = 30;
   for (const [botName, mem] of Object.entries(state.memories)) {
@@ -445,11 +444,10 @@ export async function socialTick(ctx) {
         ...(participants.get(b)?.appearance ? { appearance: participants.get(b).appearance } : {}),
       }))])
     ),
-    relationships: state.relationships,
     customLocations: state.customLocations || {},
     occupations: state.occupations || {},
-    bonds: state.bonds || {},
     governance: state.governance || {},
+    exiles: state.exiles || {},
     memories: state.memories || {},
     agendas: state.agendas || {},
     newsBulletins: state.newsBulletins || [],

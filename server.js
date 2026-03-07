@@ -73,13 +73,9 @@ let state = {
   publicLogs: {},
   clock: { tick: 0, phase: 'morning', ticksInPhase: 0 },
   emptyTicks: {},
-  relationships: {},
-  spiceState: {},
   locationState: {},
   customLocations: {},
   occupations: {},
-  bonds: {},
-  explorations: {},
 };
 
 let tickInProgress = false;
@@ -105,17 +101,14 @@ async function loadState() {
       publicLogs: loaded.publicLogs || {},
       clock: loaded.clock || { tick: 0, phase: 'morning', ticksInPhase: 0 },
       emptyTicks: loaded.emptyTicks || {},
-      relationships: loaded.relationships || {},
       villageCosts: loaded.villageCosts || {},
-      spiceState: loaded.spiceState || {},
       locationState: loaded.locationState || {},
       customLocations: loaded.customLocations || {},
       occupations: loaded.occupations || {},
-      bonds: loaded.bonds || {},
-      explorations: loaded.explorations || {},
       memories: loaded.memories || {},
       agendas: loaded.agendas || {},
       newsBulletins: loaded.newsBulletins || [],
+      exiles: loaded.exiles || {},
       fastTickSummary: loaded.fastTickSummary || {},
       autopilotState: loaded.autopilotState || { ambientCooldowns: {}, moveCooldowns: {} },
     };
@@ -137,6 +130,10 @@ async function loadState() {
     delete state.eventState;
     delete state.autopilotState;
     delete state.fastTickSummary;
+    delete state.relationships;
+    delete state.bonds;
+    delete state.spiceState;
+    delete state.explorations;
     console.log(`[village] State loaded from ${source}: tick=${state.clock.tick} phase=${state.clock.phase} customLocations=${Object.keys(state.customLocations).length}`);
   }
 
@@ -210,15 +207,13 @@ async function loadState() {
       state.publicLogs[loc] = [];
       state.emptyTicks[loc] = 0;
     }
-    state.relationships = {};
     state.locationState = {};
     state.customLocations = {};
     state.occupations = {};
-    state.bonds = {};
-    state.explorations = {};
     state.memories = {};
     state.agendas = {};
     state.newsBulletins = [];
+    state.exiles = {};
   }
   console.log('[village] Fresh state initialized');
 }
@@ -850,7 +845,6 @@ const server = createServer(async (req, res) => {
             ...(participants.get(b)?.appearance ? { appearance: participants.get(b).appearance } : {}),
           }))])
         ),
-        relationships: state.relationships,
         publicLogs: Object.fromEntries(
           initAllLocs.filter(l => (state.publicLogs[l] || []).length > 0)
             .map(l => [l, state.publicLogs[l].map(e => ({
@@ -860,8 +854,8 @@ const server = createServer(async (req, res) => {
         ),
         customLocations: state.customLocations || {},
         occupations: state.occupations || {},
-        bonds: state.bonds || {},
         governance: state.governance || {},
+        exiles: state.exiles || {},
         memories: state.memories || {},
         agendas: state.agendas || {},
         newsBulletins: state.newsBulletins || [],
@@ -892,7 +886,7 @@ const server = createServer(async (req, res) => {
 
     // Filter events by current game type so survival events don't show in social UI and vice versa
     const SURVIVAL_TYPES = new Set(['survival_event', 'survival_tick', 'fast_tick', 'thinking']);
-    const SOCIAL_TYPES = new Set(['action', 'conversation_spice', 'ambient', 'idle', 'autopilot_move']);
+    const SOCIAL_TYPES = new Set(['action', 'ambient', 'idle', 'autopilot_move']);
     function matchesGameType(ev) {
       if (isGridGame) {
         if (SOCIAL_TYPES.has(ev.type)) return false;
