@@ -104,6 +104,7 @@ async function loadState() {
       villageCosts: loaded.villageCosts || {},
       locationState: loaded.locationState || {},
       customLocations: loaded.customLocations || {},
+      remoteParticipants: loaded.remoteParticipants || {},
       occupations: loaded.occupations || {},
       memories: loaded.memories || {},
       agendas: loaded.agendas || {},
@@ -387,41 +388,30 @@ async function recoverParticipants() {
     }
   }
 
-  // Second pass: check unrecovered bots against village-tokens.json (remote bots)
+  // Second pass: check unrecovered bots against state.remoteParticipants
   const stillUnrecovered = toRemove.filter(({ botName }) => !participants.has(botName));
-  if (stillUnrecovered.length > 0) {
-    try {
-      const tokensPath = join(paths.PROJECT_DIR, 'portal', 'village-tokens.json');
-      const raw = await readFile(tokensPath, 'utf-8');
-      const tokens = JSON.parse(raw);
-      // Build botName → token entry lookup
-      const tokensByBot = new Map();
-      for (const [, entry] of Object.entries(tokens)) {
-        if (entry.botName) tokensByBot.set(entry.botName, entry);
-      }
-
-      for (let i = stillUnrecovered.length - 1; i >= 0; i--) {
-        const { botName } = stillUnrecovered[i];
-        const tokenEntry = tokensByBot.get(botName);
-        if (tokenEntry) {
-          let remoteAppearance = null;
-          if (!isGridGame) {
-            try {
-              const occupation = state.occupations?.[botName]?.title || null;
-              remoteAppearance = await generateAppearance(botName, occupation);
-            } catch { /* non-critical */ }
-          }
-          participants.set(botName, {
-            port: null,
-            displayName: tokenEntry.displayName || botName,
-            remote: true,
-            appearance: remoteAppearance,
-          });
-          stillUnrecovered.splice(i, 1);
-          console.log(`[village] Recovery: ${botName} OK (remote)`);
+  if (stillUnrecovered.length > 0 && state.remoteParticipants) {
+    for (let i = stillUnrecovered.length - 1; i >= 0; i--) {
+      const { botName } = stillUnrecovered[i];
+      const entry = state.remoteParticipants[botName];
+      if (entry) {
+        let remoteAppearance = null;
+        if (!isGridGame) {
+          try {
+            const occupation = state.occupations?.[botName]?.title || null;
+            remoteAppearance = await generateAppearance(botName, occupation);
+          } catch { /* non-critical */ }
         }
+        participants.set(botName, {
+          port: null,
+          displayName: entry.displayName || botName,
+          remote: true,
+          appearance: remoteAppearance,
+        });
+        stillUnrecovered.splice(i, 1);
+        console.log(`[village] Recovery: ${botName} OK (remote, from remoteParticipants)`);
       }
-    } catch { /* no village-tokens.json */ }
+    }
   }
 
   // Remove bots that couldn't be recovered locally or remotely
@@ -653,6 +643,12 @@ const server = createServer(async (req, res) => {
       : { port, displayName: name, appearance });
     failureCounts.delete(botName);
 
+    // Persist remote participant for recovery across server restarts
+    if (remote) {
+      if (!state.remoteParticipants) state.remoteParticipants = {};
+      state.remoteParticipants[botName] = { displayName: name, joinedAt: new Date().toISOString() };
+    }
+
     // Place bot in the world
     if (isGridGame) {
       if (!state.bots[botName]) {
@@ -740,8 +736,12 @@ const server = createServer(async (req, res) => {
     // Idempotent — 200 even if bot not present
     if (participants.has(botName)) {
       removeBot(botName, 'leave request');
-      await saveState();
     }
+    // Remove from remoteParticipants on explicit leave (not on timeout)
+    if (state.remoteParticipants?.[botName]) {
+      delete state.remoteParticipants[botName];
+    }
+    await saveState();
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true }));
@@ -760,10 +760,13 @@ const server = createServer(async (req, res) => {
 
     const queryBot = botStatusMatch[1];
     const inGame = participants.has(queryBot);
+    // Remote bot not currently active but was previously joined — should auto-rejoin
+    const shouldRejoin = !inGame && !!state.remoteParticipants?.[queryBot];
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       inGame,
-      game: inGame ? { id: gameConfig.raw.id, name: gameConfig.raw.name } : null,
+      shouldRejoin,
+      game: (inGame || shouldRejoin) ? { id: gameConfig.raw.id, name: gameConfig.raw.name } : null,
       failureCount: failureCounts.get(queryBot) || 0,
     }));
     return;
