@@ -419,6 +419,27 @@ async function recoverParticipants() {
     removeBot(botName, `recovery: ${reason}`);
   }
 
+  // Third pass: restore remote bots from remoteParticipants that aren't in state.locations
+  // (e.g. bot timed out before server restart — removed from locations but kept in remoteParticipants)
+  if (state.remoteParticipants && !isGridGame) {
+    for (const [botName, entry] of Object.entries(state.remoteParticipants)) {
+      if (participants.has(botName)) continue; // already recovered
+      let remoteAppearance = null;
+      try {
+        const occupation = state.occupations?.[botName]?.title || null;
+        remoteAppearance = await generateAppearance(botName, occupation);
+      } catch { /* non-critical */ }
+      participants.set(botName, {
+        port: null,
+        displayName: entry.displayName || botName,
+        remote: true,
+        appearance: remoteAppearance,
+      });
+      state.locations[gameConfig.spawnLocation].push(botName);
+      console.log(`[village] Recovery: ${botName} restored (remote, re-placed at ${gameConfig.spawnLocation})`);
+    }
+  }
+
   console.log(`[village] Recovery complete: ${participants.size} active participant(s)`);
 }
 
@@ -760,13 +781,10 @@ const server = createServer(async (req, res) => {
 
     const queryBot = botStatusMatch[1];
     const inGame = participants.has(queryBot);
-    // Remote bot not currently active but was previously joined — should auto-rejoin
-    const shouldRejoin = !inGame && !!state.remoteParticipants?.[queryBot];
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       inGame,
-      shouldRejoin,
-      game: (inGame || shouldRejoin) ? { id: gameConfig.raw.id, name: gameConfig.raw.name } : null,
+      game: inGame ? { id: gameConfig.raw.id, name: gameConfig.raw.name } : null,
       failureCount: failureCounts.get(queryBot) || 0,
     }));
     return;
