@@ -5,9 +5,7 @@
  * built by the orchestrator.
  */
 
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { createRequire } from 'node:module';
+import { request as httpRequest } from 'node:http';
 
 import { buildScene, getVillageTime } from './scene.js';
 import {
@@ -18,6 +16,8 @@ import {
   ensureGovernance,
 } from './logic.js';
 import { updateSocialDynamics } from './relationship-engine.js';
+import { buildMemoryEntry, appendVillageMemory } from '../../memory.js';
+import { rollNewsBulletin } from './news.js';
 
 function buildV2Payload(scene, gameConfig) {
   return {
@@ -31,8 +31,88 @@ function buildV2Payload(scene, gameConfig) {
   };
 }
 
-const require = createRequire(import.meta.url);
-const paths = require('../../../lib/paths');
+const SUMMARIZE_MODEL = 'claude-haiku-4-5-20251001';
+const SUMMARIZE_MAX_TOKENS = 600;
+const API_ROUTER_URL = 'http://127.0.0.1:9090';
+const NPC_API_TOKEN = process.env.NPC_API_TOKEN || '';
+const KEEP_RECENT = 20;
+
+/**
+ * Summarize old memory entries for a bot using Haiku.
+ * Replaces old entries with a compressed summary, keeping recent ones.
+ */
+async function summarizeStateMemory(state, botName) {
+  const mem = state.memories?.[botName];
+  if (!mem || !mem.recent || mem.recent.length <= KEEP_RECENT) return;
+
+  const oldEntries = mem.recent.slice(0, -KEEP_RECENT);
+  const existingSummary = mem.summary || '';
+
+  const prompt = [
+    existingSummary ? `Previous summary:\n${existingSummary}\n\n` : '',
+    `New entries to incorporate:\n${oldEntries.join('\n\n')}\n\n`,
+    'Summarize this bot\'s village experiences concisely. Focus on: key conversations, relationships formed, notable events, recurring themes, decisions made. Preserve names and important details. Write in Chinese. Max 800 chars.',
+  ].join('');
+
+  const body = JSON.stringify({
+    model: SUMMARIZE_MODEL,
+    max_tokens: SUMMARIZE_MAX_TOKENS,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  return new Promise((resolve) => {
+    const url = new URL(`${API_ROUTER_URL}/v1/messages`);
+    const req = httpRequest(
+      {
+        hostname: url.hostname,
+        port: url.port,
+        path: url.pathname,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': NPC_API_TOKEN,
+          'anthropic-version': '2023-06-01',
+          'Content-Length': Buffer.byteLength(body),
+        },
+        timeout: 30000,
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          try {
+            const json = JSON.parse(data);
+            if (json.error) {
+              console.error(`[memory] Summarization API error for ${botName}: ${json.error.message || JSON.stringify(json.error)}`);
+              resolve();
+              return;
+            }
+            const textBlock = (json.content || []).find(b => b.type === 'text');
+            if (textBlock?.text) {
+              mem.summary = textBlock.text.slice(0, 1500);
+              mem.recent = mem.recent.slice(-KEEP_RECENT);
+              console.log(`[memory] Summarized ${oldEntries.length} entries for ${botName}`);
+            }
+          } catch (err) {
+            console.error(`[memory] Summarization parse error for ${botName}: ${err.message}`);
+          }
+          resolve();
+        });
+      },
+    );
+    req.on('error', (err) => {
+      console.error(`[memory] Summarization request error for ${botName}: ${err.message}`);
+      resolve();
+    });
+    req.on('timeout', () => {
+      console.error(`[memory] Summarization timeout for ${botName}`);
+      req.destroy();
+      resolve();
+    });
+    req.write(body);
+    req.end();
+  });
+}
 
 /**
  * Social tick — full LLM-driven tick for social village game.
@@ -85,33 +165,22 @@ export async function socialTick(ctx) {
     dailyCosts.set(botName, await readBotDailyCost(botName));
   }
 
-  // Read village memory summaries for all participants
-  // Skip remote bots — no local memory file
+  // Build village memory from state for all participants
   const VILLAGE_MEMORY_CAP = 1500;
   const villageSummaries = new Map(); // botName → summary string
-  for (const [botName, info] of participants) {
-    if (info.remote) continue;
-    try {
-      const memPath = join(paths.memoryDir(botName), MEMORY_FILENAME);
-      const content = await readFile(memPath, 'utf-8');
-      // Extract "## Village History (summarized)" section
-      const start = content.indexOf('## Village History (summarized)');
-      if (start !== -1) {
-        const afterHeader = content.indexOf('\n', start);
-        const nextSection = content.indexOf('\n## ', afterHeader + 1);
-        const summaryText = nextSection !== -1
-          ? content.slice(afterHeader + 1, nextSection).trim()
-          : content.slice(afterHeader + 1).trim();
-        if (summaryText) {
-          villageSummaries.set(botName, summaryText.slice(0, VILLAGE_MEMORY_CAP));
-        }
-      }
-    } catch { /* no village.md or no summary yet */ }
+  for (const [botName] of participants) {
+    const mem = state.memories?.[botName];
+    if (!mem) continue;
+    const parts = [];
+    if (mem.summary) parts.push(mem.summary);
+    if (mem.recent?.length > 0) parts.push(mem.recent.slice(-5).join('\n\n'));
+    const text = parts.join('\n\n').trim();
+    if (text) villageSummaries.set(botName, text.slice(0, VILLAGE_MEMORY_CAP));
   }
 
   // Build scenes and collect actions per location
   const allEvents = new Map(); // location → events[]
-  const actionCounts = { say: 0, whisper: 0, move: 0, decorate: 0, leave_message: 0, explore: 0, build: 0, set_occupation: 0, propose_bond: 0, propose: 0, vote: 0, amend: 0 };
+  const actionCounts = { say: 0, whisper: 0, move: 0, decorate: 0, leave_message: 0, explore: 0, build: 0, reflect: 0, propose_bond: 0, propose: 0, vote: 0 };
   let botsSent = 0;
   let botsResponded = 0;
   let botsSkippedCost = 0;
@@ -132,6 +201,9 @@ export async function socialTick(ctx) {
       broadcastEvent({ type: 'conversation_spice', tick: tickNum, location: loc, locationName: gameConfig.locationNames[loc], text: spice });
     }
   }
+
+  // Roll news bulletin (~every 30 ticks)
+  await rollNewsBulletin(tickNum, state, broadcastEvent);
 
   // Build all scene requests across all locations from a single snapshot
   const allSceneRequests = [];
@@ -189,7 +261,6 @@ export async function socialTick(ctx) {
         canMove,
         villageMemory: villageSummaries.get(botName) || '',
         conversationSpice: activeSpice.get(loc) || '',
-        fastTickSummary: state.fastTickSummary?.[loc] || [],
         gameConfig,
         state,
         totalVoters: participants.size,
@@ -199,9 +270,6 @@ export async function socialTick(ctx) {
       allSceneRequests.push({ botName, conversationId, payload, loc });
     }
   }
-
-  // Clear fast tick summary buffer — scenes have captured it
-  state.fastTickSummary = {};
 
   // Send all scenes across all locations in parallel
   const allResults = await Promise.all(
@@ -253,6 +321,65 @@ export async function socialTick(ctx) {
     }
   }
 
+  // Build memory entries for all bots that participated
+  const timestamp = new Date().toISOString();
+  for (const { botName, response, loc } of allResults) {
+    if (!response || !response.actions) continue;
+    const locEvents = allEvents.get(loc) || [];
+    if (locEvents.length === 0) continue;
+
+    const locName = gameConfig.locationNames[loc] || state.customLocations?.[loc]?.name || loc;
+    const entry = buildMemoryEntry({
+      location: locName,
+      timestamp,
+      events: locEvents.map(ev => ({
+        ...ev,
+        displayName: displayNames[ev.bot] || ev.bot,
+        targetDisplayName: ev.target ? (displayNames[ev.target] || ev.target) : undefined,
+      })),
+      botName,
+    });
+
+    if (entry) {
+      if (!state.memories[botName]) state.memories[botName] = { summary: '', recent: [] };
+      state.memories[botName].recent.push(entry);
+
+      // Filesystem sync for non-NPC, non-remote bots
+      const pInfo = participants.get(botName);
+      if (pInfo && !pInfo.npc && !pInfo.remote) {
+        appendVillageMemory(botName, entry, { filename: MEMORY_FILENAME }).catch(err => {
+          console.error(`[memory] Failed to sync ${botName}: ${err.message}`);
+        });
+      }
+    }
+  }
+
+  // Build observation memory entries for NPCs at locations where events happened
+  for (const [loc, locEvents] of allEvents) {
+    if (locEvents.length === 0) continue;
+    const botsAtLoc = state.locations[loc] || [];
+    const npcsHere = botsAtLoc.filter(b => participants.get(b)?.npc);
+    if (npcsHere.length === 0) continue;
+
+    const locName = gameConfig.locationNames[loc] || state.customLocations?.[loc]?.name || loc;
+    for (const npcName of npcsHere) {
+      const entry = buildMemoryEntry({
+        location: locName,
+        timestamp,
+        events: locEvents.map(ev => ({
+          ...ev,
+          displayName: displayNames[ev.bot] || ev.bot,
+          targetDisplayName: ev.target ? (displayNames[ev.target] || ev.target) : undefined,
+        })),
+        botName: npcName,
+      });
+      if (entry) {
+        if (!state.memories[npcName]) state.memories[npcName] = { summary: '', recent: [] };
+        state.memories[npcName].recent.push(entry);
+      }
+    }
+  }
+
   // Update social dynamics (relationships)
   const { relationshipChanges } = updateSocialDynamics({
     state, allEvents, displayNames, gameConfig,
@@ -265,6 +392,16 @@ export async function socialTick(ctx) {
       label: change.label, prevLabel: change.prevLabel,
     });
     console.log(`[village] relationship: ${change.fromDisplay} & ${change.toDisplay} → ${change.label || '(none)'}`);
+  }
+
+  // Trigger memory summarization for bots with too many recent entries
+  const MAX_RECENT_ENTRIES = 30;
+  for (const [botName, mem] of Object.entries(state.memories)) {
+    if (mem.recent && mem.recent.length > MAX_RECENT_ENTRIES) {
+      summarizeStateMemory(state, botName).catch(err => {
+        console.error(`[memory] Summarization failed for ${botName}: ${err.message}`);
+      });
+    }
   }
 
   // Persist state
@@ -313,5 +450,8 @@ export async function socialTick(ctx) {
     occupations: state.occupations || {},
     bonds: state.bonds || {},
     governance: state.governance || {},
+    memories: state.memories || {},
+    agendas: state.agendas || {},
+    newsBulletins: state.newsBulletins || [],
   });
 }

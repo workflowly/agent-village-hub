@@ -26,8 +26,7 @@ import { generateWorld, placeInitialResources, mulberry32, randomEdgeTile } from
 import { getDayPhase } from './games/survival/scene.js';
 import { survivalTick, fastTick as survivalFastTick } from './games/survival/tick.js';
 import { socialTick } from './games/social-village/tick.js';
-import { initNPCs, runNPCTick } from './games/social-village/npcs.js';
-import { runSocialFastTick } from './games/social-village/autopilot.js';
+import { initNPCs, runNPCTick, probeAPIRouter, getNPCProfiles } from './games/social-village/npcs.js';
 import { generateAppearance } from './games/social-village/appearance.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -58,7 +57,6 @@ const EMPTY_CLEAR_TICKS = 3;
 
 const isGridGame = gameConfig.isGridGame;
 const TICK_INTERVAL_MS = parseInt(process.env.VILLAGE_TICK_INTERVAL || (isGridGame ? '45000' : '120000'), 10);
-const FAST_TICK_MS = gameConfig.raw.autopilot?.fastTickMs || 1000;
 const STATE_FILE = join(__dirname, `state-${VILLAGE_GAME}.json`);
 const MEMORY_FILENAME = isGridGame ? 'survival.md' : 'village.md';
 const USAGE_FILE = join(paths.PROJECT_DIR, 'api-router', 'usage.json');
@@ -115,6 +113,9 @@ async function loadState() {
       occupations: loaded.occupations || {},
       bonds: loaded.bonds || {},
       explorations: loaded.explorations || {},
+      memories: loaded.memories || {},
+      agendas: loaded.agendas || {},
+      newsBulletins: loaded.newsBulletins || [],
       fastTickSummary: loaded.fastTickSummary || {},
       autopilotState: loaded.autopilotState || { ambientCooldowns: {}, moveCooldowns: {} },
     };
@@ -134,6 +135,8 @@ async function loadState() {
     delete state.emotions;
     delete state.stagnation;
     delete state.eventState;
+    delete state.autopilotState;
+    delete state.fastTickSummary;
     console.log(`[village] State loaded from ${source}: tick=${state.clock.tick} phase=${state.clock.phase} customLocations=${Object.keys(state.customLocations).length}`);
   }
 
@@ -213,6 +216,9 @@ async function loadState() {
     state.occupations = {};
     state.bonds = {};
     state.explorations = {};
+    state.memories = {};
+    state.agendas = {};
+    state.newsBulletins = [];
   }
   console.log('[village] Fresh state initialized');
 }
@@ -525,20 +531,11 @@ function buildTickContext(tickStart) {
 // --- Fast tick (autopilot) ---
 
 function fastTick() {
-  if (tickInProgress) return; // skip if slow tick is running
+  if (tickInProgress) return;
 
   if (isGridGame) {
     if (!state.terrain) return;
     survivalFastTick(buildTickContext(Date.now()));
-  } else {
-    socialFastTick();
-  }
-}
-
-function socialFastTick() {
-  const { events } = runSocialFastTick(state, gameConfig, participants);
-  for (const ev of events) {
-    broadcastEvent({ ...ev, tick: state.clock.tick, _ts: new Date().toISOString() });
   }
 }
 
@@ -864,7 +861,14 @@ const server = createServer(async (req, res) => {
         customLocations: state.customLocations || {},
         occupations: state.occupations || {},
         bonds: state.bonds || {},
-        autopilotEnabled: !!gameConfig.raw.autopilot,
+        governance: state.governance || {},
+        memories: state.memories || {},
+        agendas: state.agendas || {},
+        newsBulletins: state.newsBulletins || [],
+        locationFlavors: Object.fromEntries(
+          Object.entries(gameConfig.raw.locations || {}).map(([k, v]) => [k, v.flavor || ''])
+        ),
+        npcProfiles: getNPCProfiles(),
       });
     }
     res.write(`data: ${initData}\n\n`);
@@ -1063,9 +1067,12 @@ function startGameLoop() {
   setTimeout(() => tick(), 5000);
   tickTimer = setInterval(() => tick(), TICK_INTERVAL_MS);
 
-  // Start fast tick (autopilot for both grid and social games)
-  fastTickTimer = setInterval(() => fastTick(), FAST_TICK_MS);
-  console.log(`[village] Fast tick started: ${FAST_TICK_MS}ms interval`);
+  // Fast tick only for grid games (survival)
+  if (isGridGame) {
+    const fastTickMs = gameConfig.raw.autopilot?.fastTickMs || 1000;
+    fastTickTimer = setInterval(() => fastTick(), fastTickMs);
+    console.log(`[village] Fast tick started: ${fastTickMs}ms interval`);
+  }
 }
 
 // --- Graceful shutdown ---
@@ -1120,6 +1127,7 @@ await loadState();
 await recoverParticipants();
 if (!isGridGame) {
   initNPCs(state, participants, gameConfig);
+  probeAPIRouter();
 }
 
 server.listen(PORT, '127.0.0.1', () => {

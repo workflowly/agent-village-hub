@@ -7,7 +7,7 @@
  */
 
 import { pairKey } from './relationship-engine.js';
-import { ensureGovernance, handlePropose, handleVote, handleAmendCharter } from './governance.js';
+import { ensureGovernance, handlePropose, handleVote } from './governance.js';
 
 export const MAX_WHISPERS_PER_BOT = 20;
 export const MAX_DECORATIONS_PER_LOCATION = 10;
@@ -75,10 +75,6 @@ function handleLeaveMessage(ctx) {
   return { bot: botName, action: 'leave_message', message: msg };
 }
 
-function handleReadMessages(ctx) {
-  return { bot: ctx.botName, action: 'read_messages' };
-}
-
 function handleExplore(ctx) {
   const { botName, location, state, tick } = ctx;
   if (!state.explorations) state.explorations = {};
@@ -118,15 +114,6 @@ function handleBuild(ctx) {
   return { bot: botName, action: 'build', locationSlug: slug, locationName: name, locationDesc: desc, connectedTo };
 }
 
-function handleSetOccupation(ctx) {
-  const { botName, params, state, tick } = ctx;
-  const title = (params?.title || '').slice(0, 50).trim();
-  if (!title) return null;
-  if (!state.occupations) state.occupations = {};
-  state.occupations[botName] = { title, since: tick };
-  return { bot: botName, action: 'set_occupation', title };
-}
-
 function handleProposeBond(ctx) {
   const { botName, params, location, state, tick } = ctx;
   const target = params?.target;
@@ -139,6 +126,52 @@ function handleProposeBond(ctx) {
   return { bot: botName, action: 'propose_bond', target, bondType };
 }
 
+function handleReflect(ctx) {
+  const { botName, params, state, tick } = ctx;
+  const thought = (params?.thought || '').slice(0, 500).trim();
+  const goal = (params?.goal || '').slice(0, 200).trim();
+  if (!thought && !goal) return null;
+
+  // Journal entry
+  if (thought) {
+    if (!state.memories) state.memories = {};
+    if (!state.memories[botName]) state.memories[botName] = { summary: '', recent: [] };
+    const ts = new Date().toLocaleString('en-US', {
+      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+    });
+    state.memories[botName].recent.push(`## Journal — ${ts}\n${thought}`);
+  }
+
+  // Update agenda
+  if (goal) {
+    if (!state.agendas) state.agendas = {};
+    state.agendas[botName] = { goal, since: tick };
+  }
+
+  return { bot: botName, action: 'reflect', thought: thought || null, goal: goal || null };
+}
+
+function handleMemorySearch(ctx) {
+  const { botName, params, state } = ctx;
+  const query = (params?.query || '').trim().toLowerCase();
+  if (!query) return null;
+
+  const mem = state.memories?.[botName];
+  if (!mem) return { bot: botName, action: 'memory_search', results: 'No memories yet.' };
+
+  const matches = [];
+  if (mem.summary?.toLowerCase().includes(query)) matches.push(mem.summary);
+  for (const entry of (mem.recent || [])) {
+    if (entry.toLowerCase().includes(query)) matches.push(entry);
+  }
+
+  const results = matches.length > 0
+    ? matches.slice(-5).join('\n\n').slice(0, 1000)
+    : 'No matching memories found.';
+
+  return { bot: botName, action: 'memory_search', results };
+}
+
 function handleProposeAction(ctx) {
   return handlePropose(ctx);
 }
@@ -147,22 +180,17 @@ function handleVoteAction(ctx) {
   return handleVote(ctx);
 }
 
-function handleAmendCharterAction(ctx) {
-  return handleAmendCharter(ctx);
-}
-
 export const ACTION_HANDLERS = new Map([
   ['village_say', handleSay],
   ['village_whisper', handleWhisper],
   ['village_move', handleMove],
   ['village_decorate', handleDecorate],
   ['village_leave_message', handleLeaveMessage],
-  ['village_read_messages', handleReadMessages],
   ['village_explore', handleExplore],
   ['village_build', handleBuild],
   ['village_propose', handleProposeAction],
   ['village_vote', handleVoteAction],
-  ['village_amend_charter', handleAmendCharterAction],
-  ['village_set_occupation', handleSetOccupation],
   ['village_propose_bond', handleProposeBond],
+  ['village_reflect', handleReflect],
+  ['village_memory_search', handleMemorySearch],
 ]);

@@ -110,7 +110,12 @@ export function processActions(botName, actions, location, state, opts = {}) {
   const onCooldown = lastMoveTick && tick != null
     && (lastMoveTick.get(botName) || 0) >= tick - 1;
 
-  // Check if bot wants to move — if so, move is exclusive (skip all other actions)
+  // Free actions — always processed, even during move
+  const FREE_ACTIONS = new Set([
+    'village_reflect', 'village_memory_search',
+  ]);
+
+  // Check if bot wants to move — if so, move is exclusive (skip other non-free actions)
   const hasMove = actions.some(a =>
     a.tool === 'village_move' && a.params?.location
     && validLocations.includes(a.params.location) && a.params.location !== location
@@ -118,7 +123,7 @@ export function processActions(botName, actions, location, state, opts = {}) {
   const moveExclusive = hasMove && !onCooldown;
 
   for (const action of actions) {
-    if (moveExclusive && action.tool !== 'village_move') continue;
+    if (moveExclusive && action.tool !== 'village_move' && !FREE_ACTIONS.has(action.tool)) continue;
 
     const handler = ACTION_HANDLERS.get(action.tool);
     if (!handler) continue;

@@ -8,22 +8,22 @@
 export const PROPOSAL_WINDOW = 8;
 const MAX_GOVERNANCE_HISTORY = 20;
 
-const STARTER_CONSTITUTION = `The village is governed by this constitution. All villagers should follow these rules and may propose amendments through the democratic process.
+const STARTER_CONSTITUTION = `本村庄依据本宪法治理。所有村民应遵守以下规则，并可通过民主程序提议修订。
 
-Article 1 — Leadership
-The village may elect a Mayor by majority vote. The Mayor serves for 100 ticks. When the term ends, any villager should call a new election. The Mayor represents the village and may guide discussion on proposals.
+第一条 — 领导
+村庄可通过多数票选举村长。村长任期为 100 回合。任期届满后，任何村民均可发起新一轮选举。村长代表村庄，可就提案进行引导讨论。
 
-Article 2 — Building
-Any villager may propose constructing a new building. The proposal must describe the building's name, purpose, and where it connects to. A building is constructed when a majority of villagers approve the proposal.
+第二条 — 建造
+任何村民均可提议建造新建筑。提案须说明建筑名称、用途及连接位置。当多数村民投票赞成后，建筑方可建造。
 
-Article 3 — Voting
-Each villager gets one vote per proposal. Only one proposal may be active at a time. Proposals remain open for ${PROPOSAL_WINDOW} ticks. A proposal passes by majority of votes cast. Constitutional amendments require two-thirds of votes cast.
+第三条 — 投票
+每位村民对每项提案拥有一票。同一时间只能有一项活跃提案。提案的投票窗口为 ${PROPOSAL_WINDOW} 回合。提案以投票多数通过。宪法修正案需获得三分之二以上投票赞成。
 
-Article 4 — Amendments
-Any villager may propose changes to this constitution. The proposed amendment must include the full updated text.
+第四条 — 修正
+任何村民均可提议修改本宪法。修正提案须包含完整的修改后文本。
 
-Article 5 — Rights
-All villagers may speak freely, move freely, and participate in governance. No villager may be excluded from voting.`;
+第五条 — 权利
+所有村民享有自由发言、自由迁移及参与治理的权利。任何村民不得被排除在投票之外。`;
 
 /**
  * Ensure governance state exists on state object, return it.
@@ -65,6 +65,12 @@ export function resolveExpiredProposal(state, tick) {
 
   if (passed && proposal.type === 'election' && proposal.candidate) {
     gov.mayor = { name: proposal.candidate, electedAt: tick };
+  }
+
+  // Auto-apply amendment when passed
+  if (passed && proposal.type === 'amendment' && proposal.amendmentText) {
+    gov.constitution = proposal.amendmentText;
+    resolved.applied = true;
   }
 
   return resolved;
@@ -130,25 +136,6 @@ export function handleVote(ctx) {
   gov.activeProposal.votes[botName] = vote;
   const reason = (params?.reason || '').slice(0, 200).trim();
   return { bot: botName, action: 'vote', proposalId: gov.activeProposal.id, vote, reason };
-}
-
-/**
- * Handle village_amend_charter action.
- */
-export function handleAmendCharter(ctx) {
-  const { botName, params, state } = ctx;
-  const gov = state.governance;
-  if (!gov) return null;
-  const passedAmendment = [...(gov.history || [])].reverse().find(
-    p => p.type === 'amendment' && p.result === 'passed' && !p.applied
-  );
-  if (!passedAmendment) return null;
-  const newConstitution = (params?.new_constitution || '').trim();
-  if (!newConstitution) return null;
-  gov.constitution = newConstitution;
-  passedAmendment.applied = true;
-  const preview = newConstitution.slice(0, 100);
-  return { bot: botName, action: 'amend', constitutionPreview: preview };
 }
 
 // --- Rendering helpers ---

@@ -1,13 +1,21 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Village</title>
+<title>社交村庄</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%;overflow:hidden;background:#111}
-#game{display:flex;flex-direction:row;height:100vh}
+#game{display:flex;flex-direction:column;height:100vh}
+#top-bar{height:28px;background:#0d0d0d;border-bottom:1px solid #1a1a1a;display:flex;align-items:center;padding:0 10px;gap:8px;flex-shrink:0;position:relative}
+.top-title{color:#4a9;font:700 11px/1 -apple-system,sans-serif}
+.top-btn{background:none;border:1px solid #2a2a2a;color:#888;font:10px/1 -apple-system,sans-serif;padding:3px 8px;border-radius:3px;cursor:pointer}
+.top-btn:hover{background:#1a1a1a;color:#aaa}
+.top-btn.active{color:#4a9;border-color:#4a9}
+.top-panel{display:none;position:absolute;top:100%;left:0;right:0;z-index:100;background:#0d0d0d;border-bottom:1px solid #2a2a2a;max-height:50vh;overflow-y:auto;padding:8px 14px;font:10px/1.5 -apple-system,sans-serif;color:#777}
+.top-panel.show{display:block}
+#main{display:flex;flex-direction:row;flex:1;min-height:0}
 #left{flex:1;display:flex;flex-direction:column;min-width:0}
 #map-wrap{flex:1;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;background:#1a2a1a}
 canvas{display:block}
@@ -34,6 +42,35 @@ canvas{display:block}
 .rel{transition:background .6s}
 .rel.highlight{background:rgba(255,215,0,.15)}
 .rel-acq{color:#777}.rel-friend{color:#4a9}.rel-good{color:#5cb85c}.rel-best{color:#daa520}
+.gov-section{margin-bottom:6px}
+.gov-label{color:#4a9;font-weight:600;margin-bottom:2px}
+.gov-text{white-space:pre-wrap;color:#666;font-size:10px}
+.gov-mayor{color:#daa520}
+.gov-proposal{color:#7af;border-left:2px solid #333;padding-left:6px;margin:2px 0}
+.info-section{margin-bottom:6px}
+.info-label{color:#4a9;font-weight:600;margin-bottom:2px}
+.info-loc{border-left:2px solid #333;padding-left:6px;margin:2px 0}
+.info-loc-name{color:#888;cursor:pointer}
+.info-loc-name:hover{color:#aaa}
+.info-loc-flavor{color:#666;font-size:10px;white-space:pre-wrap;margin-top:2px}
+.info-loc-tag{color:#5a5a3a;font-size:9px;margin-left:4px}
+.info-bot{border-left:2px solid #333;padding-left:6px;margin:2px 0}
+.info-bot-name{color:#888;cursor:pointer}
+.info-bot-name:hover{color:#aaa}
+.info-bot-mem{color:#666;font-size:10px;white-space:pre-wrap;margin-top:2px;max-height:200px;overflow-y:auto}
+.action-card{border-left:2px solid #333;padding:4px 8px;margin:3px 0;display:flex;gap:8px;align-items:baseline}
+.action-card-icon{font-size:12px;flex-shrink:0;width:18px;text-align:center}
+.action-card-body{flex:1;min-width:0}
+.action-card-name{color:#4a9;font-weight:700;font-size:11px}
+.action-card-free{color:#c84;font-size:9px;margin-left:4px}
+.action-card-desc{color:#888;font-size:10px;margin-top:1px}
+.action-card-detail{color:#666;font-size:10px;margin-top:2px;line-height:1.4}
+.actions-group{margin-bottom:8px}
+.actions-group-label{color:#4a9;font-weight:600;margin-bottom:4px;font-size:11px;border-bottom:1px solid #1a1a1a;padding-bottom:2px}
+.npc-card{border-left:2px solid #4a9;padding:6px 8px;margin:4px 0;background:#111}
+.npc-card-name{color:#4a9;font-weight:700;font-size:12px}
+.npc-card-occ{color:#888;font-size:10px;margin-left:6px}
+.npc-card-agenda{color:#c84;font-size:10px;white-space:pre-wrap;margin-top:4px;line-height:1.5}
 #log{flex:1;overflow-y:auto;padding:6px 10px;min-height:0}
 #load-more{text-align:center;padding:4px;font:10px -apple-system,sans-serif;color:#333;display:none}
 #load-more.show{display:block}
@@ -41,15 +78,17 @@ canvas{display:block}
 .le .t{color:#333}.le .b{color:#4a9;font-weight:600}.le .s{color:#999}
 .le .w{color:#7af;font-style:italic}.le .m{color:#da5}
 .le .j{color:#4a9}.le .l{color:#e55}.le .k{color:#333}
-.le .ambient{color:#5a7a5a;font-style:italic;font-size:10px}
-.le .idle{color:#6a6a7a;font-style:italic}
-.le .auto-move{color:#8a7a5a;font-style:italic}
 .tick-sep{border:0;border-top:1px solid #1a1a1a;margin:4px 0}
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-track{background:#0a0a0a}
 ::-webkit-scrollbar-thumb{background:#1a1a1a;border-radius:2px}
+.news-card{border-left:2px solid #4a9;padding:6px 8px;margin:4px 0;background:#111}
+.news-card-time{color:#555;font-size:9px;margin-bottom:2px}
+.news-card-text{color:#aaa;font-size:11px;line-height:1.5}
+.news-card-source{color:#555;font-size:9px;margin-top:2px;font-style:italic}
+.news-empty{color:#444;font-size:10px;padding:8px 0}
 @media(max-width:700px){
-  #game{flex-direction:column}
+  #main{flex-direction:column}
   #left{flex:1}
   #chat{width:100%;height:45vh;border-left:0;border-top:1px solid #1a1a1a}
 }
@@ -57,21 +96,36 @@ canvas{display:block}
 </head>
 <body>
 <div id="game">
-  <div id="left">
-    <div id="map-wrap"></div>
-    <div id="bar">
-      <span class="lbl">Village</span>
-      <span id="tick">&mdash;</span>
-      <span id="st" class="st-off">Connecting</span>
-      <select id="follow-sel"><option value="">Follow...</option></select>
-    </div>
+  <div id="top-bar">
+    <span class="top-title">社交村庄</span>
+    <button class="top-btn" data-panel="gov">宪法</button>
+    <button class="top-btn" data-panel="info">村庄信息</button>
+    <button class="top-btn" data-panel="npc">NPC档案</button>
+    <button class="top-btn" data-panel="actions">动作指南</button>
+    <button class="top-btn" data-panel="news">新闻</button>
+    <div id="gov-panel" class="top-panel"></div>
+    <div id="info-panel" class="top-panel"></div>
+    <div id="npc-panel" class="top-panel"></div>
+    <div id="actions-panel" class="top-panel"></div>
+    <div id="news-panel" class="top-panel"></div>
   </div>
-  <div id="chat">
-    <div id="chat-header">
-      <div id="rels"></div>
+  <div id="main">
+    <div id="left">
+      <div id="map-wrap"></div>
+      <div id="bar">
+        <span class="lbl">村庄</span>
+        <span id="tick">&mdash;</span>
+        <span id="st" class="st-off">连接中</span>
+        <select id="follow-sel"><option value="">跟随...</option></select>
+      </div>
     </div>
-    <div id="load-more">Loading older...</div>
-    <div id="log"></div>
+    <div id="chat">
+      <div id="chat-header">
+        <div id="rels"></div>
+      </div>
+      <div id="load-more">加载中...</div>
+      <div id="log"></div>
+    </div>
   </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/pixi.js@8/dist/pixi.min.js"></script>
@@ -665,15 +719,14 @@ function drawLocationGraphics(id, L) {
   nameText.position.set(w / 2, labelY);
   container.addChild(nameText);
 
-  // Add to botLayer for depth sorting with characters
   container.zIndex = L.y + L.h;
-  botLayer.addChild(container);
+  locationLayer.addChild(container);
   locationContainers[id] = container;
 }
 
 function renderAllLocations() {
   for (const c of Object.values(locationContainers)) {
-    botLayer.removeChild(c);
+    locationLayer.removeChild(c);
     c.destroy({ children: true });
   }
   locationContainers = {};
@@ -745,6 +798,9 @@ let tick = 0, phase = '', paused = false, online = false;
 let nextTickAt = 0, tickIntervalMs = 60000, villageTime = '';
 let relationships = {};
 let governance = {};
+let memories = {};
+let locationFlavors = {};
+let newsBulletins = [];
 let frame = 0;
 
 initCamera(cv, worldContainer, LOCS, sprites, CW, CH);
@@ -827,14 +883,13 @@ function createBotPixi(name, s) {
   body._anims = anims;
   body._pose = 'idle';
 
-  const isNPC = name.startsWith('npc-');
   const textRes = Math.max(2, Math.ceil(window.devicePixelRatio || 1));
   const nameText = new PIXI.Text({
     text: s.dn,
     style: {
       fontFamily: '-apple-system, "Segoe UI", sans-serif',
       fontSize: 10,
-      fill: isNPC ? 0xffd700 : 0xffffff,
+      fill: 0xffffff,
       stroke: { color: 0x000000, width: 3 },
     },
     resolution: textRes,
@@ -842,24 +897,7 @@ function createBotPixi(name, s) {
   nameText.anchor.set(0.5, 0);
   nameText.position.set(SPRITE_SIZE / 2, SPRITE_SIZE + 2);
 
-  let npcBadge = null;
-  if (isNPC) {
-    npcBadge = new PIXI.Text({
-      text: '✦ NPC',
-      style: {
-        fontFamily: '-apple-system, "Segoe UI", sans-serif',
-        fontSize: 8,
-        fill: 0xffd700,
-        stroke: { color: 0x000000, width: 2 },
-      },
-      resolution: textRes,
-    });
-    npcBadge.anchor.set(0.5, 0);
-    npcBadge.position.set(SPRITE_SIZE / 2, SPRITE_SIZE + 14);
-  }
-
   container.addChild(body, nameText);
-  if (npcBadge) container.addChild(npcBadge);
   container.position.set(s.x - SPRITE_SIZE / 2, s.y - SPRITE_SIZE / 2);
   container.zIndex = Math.floor(s.y);
   botLayer.addChild(container);
@@ -1029,20 +1067,6 @@ function positionBubbles() {
 }
 
 // Mini bubbles
-const MINI_BUBBLE_MS = 5000;
-
-function showMiniBubble(botName, text) {
-  removeBubble(botName);
-  const s = sprites[botName]; if (!s) return;
-  const txt = text.length > 60 ? text.slice(0, 60) + '\u2026' : text;
-  const el = document.createElement('div');
-  el.className = 'bubble mini';
-  el.innerHTML = `<span class="bn" style="color:${s.color}">${esc(s.dn)}</span>${esc(txt)}`;
-  document.getElementById('map-wrap').appendChild(el);
-  bubbleDom[botName] = { el };
-  setTimeout(() => el.classList.add('fade'), MINI_BUBBLE_MS - BUBBLE_FADE_MS);
-  setTimeout(() => removeBubble(botName), MINI_BUBBLE_MS);
-}
 
 // Floating text
 function showFloatingText(location, text) {
@@ -1142,18 +1166,16 @@ function actionLogHtml(d) {
   const tgt = () => d.targetDisplayName || (sprites[d.target] || {}).dn || d.target || '?';
   switch (d.action) {
     case 'say':            return `<span class="b">${esc(nm)}</span>: <span class="s">"${esc(d.message)}"</span>`;
-    case 'whisper':        return `<span class="b">${esc(nm)}</span> <span class="w">whispered to ${esc(tgt())}</span>`;
+    case 'whisper':        return `<span class="b">${esc(nm)}</span> <span class="w">悄悄对 ${esc(tgt())} 说</span>`;
     case 'move':           return `<span class="b">${esc(nm)}</span> <span class="m">\u2192 ${esc(LNAMES[d.to] || d.to)}</span>`;
-    case 'decorate':       return `\uD83C\uDFA8 <span class="b">${esc(nm)}</span> <span class="k">decorated ${esc(ln())}: ${esc(d.decoration)}</span>`;
-    case 'leave_message':  return `\uD83D\uDCDD <span class="b">${esc(nm)}</span> <span class="k">left a message at ${esc(ln())}: "${esc(d.message)}"</span>`;
-    case 'read_messages':  return `\uD83D\uDCD6 <span class="b">${esc(nm)}</span> <span class="k">reads messages at ${esc(ln())}</span>`;
-    case 'explore':        return `\uD83D\uDD2D <span class="b">${esc(nm)}</span> <span class="j">explores around ${esc(ln())}</span>`;
-    case 'build':          return `\uD83C\uDFD7 <span class="b">${esc(nm)}</span> <span class="j">built <b>${esc(d.locationName)}</b>: ${esc(d.locationDesc)}</span>`;
-    case 'set_occupation': return `\uD83D\uDCBC <span class="b">${esc(nm)}</span> <span class="j">is now a <b>${esc(d.title)}</b></span>`;
-    case 'propose_bond':   return `\uD83E\uDD1D <span class="b">${esc(nm)}</span> <span class="j">formed a bond with <b>${esc(tgt())}</b>: ${esc(d.bondType)}</span>`;
-    case 'propose':        return `\uD83D\uDCCB <span class="b">${esc(nm)}</span> <span class="j">proposed: <b>${esc(d.description)}</b></span>`;
-    case 'vote':           return `\uD83D\uDDF3 <span class="b">${esc(nm)}</span> <span class="j">voted <b>${d.vote === 'yes' ? 'YES' : 'NO'}</b>${d.reason ? ': ' + esc(d.reason) : ''}</span>`;
-    case 'amend':          return `\uD83D\uDCDC <span class="b">${esc(nm)}</span> <span class="j">amended the constitution!</span>`;
+    case 'decorate':       return `\uD83C\uDFA8 <span class="b">${esc(nm)}</span> <span class="k">装饰了 ${esc(ln())}：${esc(d.decoration)}</span>`;
+    case 'leave_message':  return `\uD83D\uDCDD <span class="b">${esc(nm)}</span> <span class="k">在 ${esc(ln())} 留言："${esc(d.message)}"</span>`;
+    case 'explore':        return `\uD83D\uDD2D <span class="b">${esc(nm)}</span> <span class="j">在 ${esc(ln())} 附近探索</span>`;
+    case 'build':          return `\uD83C\uDFD7 <span class="b">${esc(nm)}</span> <span class="j">建造了 <b>${esc(d.locationName)}</b>：${esc(d.locationDesc)}</span>`;
+    case 'propose_bond':   return `\uD83E\uDD1D <span class="b">${esc(nm)}</span> <span class="j">与 <b>${esc(tgt())}</b> 结成了：${esc(d.bondType)}</span>`;
+    case 'propose':        return `\uD83D\uDCCB <span class="b">${esc(nm)}</span> <span class="j">提议：<b>${esc(d.description)}</b></span>`;
+    case 'vote':           return `\uD83D\uDDF3 <span class="b">${esc(nm)}</span> <span class="j">投票 <b>${d.vote === 'yes' ? '赞成' : '反对'}</b>${d.reason ? '：' + esc(d.reason) : ''}</span>`;
+    case 'reflect':        return `\uD83D\uDCA1 <span class="b">${esc(nm)}</span> <span class="k">思考中...</span>`;
     default: return null;
   }
 }
@@ -1168,33 +1190,18 @@ function eventToHtml(d) {
     }
     case 'movement': {
       const nm = d.displayName || d.bot;
-      if (d.action === 'join') return `${t} <span class="b">${esc(nm)}</span> <span class="j">joined the village</span>`;
-      if (d.action === 'leave') return `${t} <span class="b">${esc(nm)}</span> <span class="l">left the village</span>`;
+      if (d.action === 'join') return `${t} <span class="b">${esc(nm)}</span> <span class="j">加入了村庄</span>`;
+      if (d.action === 'leave') return `${t} <span class="b">${esc(nm)}</span> <span class="l">离开了村庄</span>`;
       return null;
     }
-    case 'tick': {
-      const a = d.actions || {};
-      return `${t} <span class="k">\u2014 tick ${d.tick} \u00b7 ${d.phase} \u00b7 ${d.bots}/${d.botsTotal} bots \u00b7 say:${a.say || 0} whisper:${a.whisper || 0} move:${a.move || 0} \u2014</span>`;
-    }
     case 'relationship': {
-      const verb = d.label ? `became ${d.label}s` : 'are no longer close';
+      const verb = d.label ? `成为了 ${d.label}` : '不再亲近了';
       return `${t} <span class="b">${esc(d.fromDisplay)}</span> \u2665 <span class="b">${esc(d.toDisplay)}</span> <span class="j">\u2014 ${esc(verb)}</span>`;
-    }
-    case 'ambient': {
-      const ln = d.locationName || LNAMES[d.location] || d.location;
-      return `${t} <span class="ambient">\u2615 ${esc(ln)}: ${esc(d.text)}</span>`;
-    }
-    case 'idle': {
-      return `${t} <span class="idle">${esc(d.text)}</span>`;
-    }
-    case 'autopilot_move': {
-      const nm = d.displayName || d.bot;
-      return `${t} <span class="auto-move">${esc(nm)} \u2192 ${esc(d.toName || LNAMES[d.to] || d.to)}</span>`;
     }
     case 'proposal_resolved': {
       const emoji = d.result === 'passed' ? '\u2705' : '\u274C';
-      const verb = d.result === 'passed' ? 'PASSED' : 'rejected';
-      return `${t} ${emoji} <span class="j">Proposal #${d.proposalId} <b>"${esc(d.description)}"</b> \u2014 ${verb}</span>`;
+      const verb = d.result === 'passed' ? '通过' : '未通过';
+      return `${t} ${emoji} <span class="j">提案 #${d.proposalId} <b>"${esc(d.description)}"</b> \u2014 ${verb}</span>`;
     }
     default: return null;
   }
@@ -1241,18 +1248,18 @@ document.getElementById('log').addEventListener('scroll', () => {
 });
 
 // ========== STATUS BAR ==========
-function fmtCountdown(ms) { return Math.max(0, Math.ceil(ms / 1000)) + 's'; }
+function fmtCountdown(ms) { return Math.max(0, Math.ceil(ms / 1000)) + '秒'; }
 
 function updateBar() {
   const te = document.getElementById('tick');
   const se = document.getElementById('st');
   const remaining = nextTickAt ? nextTickAt - Date.now() : 0;
-  const cd = remaining > 0 ? ` \u00b7 next ${fmtCountdown(remaining)}` : '';
+  const cd = remaining > 0 ? ` \u00b7 下次 ${fmtCountdown(remaining)}` : '';
   const vt = villageTime ? `${villageTime} \u00b7 ` : '';
-  te.textContent = tick > 0 ? `${vt}${phase ? phase[0].toUpperCase() + phase.slice(1) : ''} \u00b7 Tick ${tick}${cd}` : '\u2014';
-  if (!online) { se.textContent = 'Disconnected'; se.className = 'st-off'; }
-  else if (paused) { se.textContent = 'Paused'; se.className = 'st-pause'; }
-  else { se.textContent = 'Running'; se.className = 'st-run'; }
+  te.textContent = tick > 0 ? `${vt}${phase ? phase[0].toUpperCase() + phase.slice(1) : ''} \u00b7 回合 ${tick}${cd}` : '\u2014';
+  if (!online) { se.textContent = '已断开'; se.className = 'st-off'; }
+  else if (paused) { se.textContent = '已暂停'; se.className = 'st-pause'; }
+  else { se.textContent = '运行中'; se.className = 'st-run'; }
 }
 
 // ========== RELATIONSHIPS PANEL ==========
@@ -1280,6 +1287,197 @@ function renderRels(highlightKey) {
   }
 }
 
+function renderGov() {
+  const el = document.getElementById('gov-panel');
+  if (!governance || !governance.constitution) {
+    el.innerHTML = '';
+    return;
+  }
+  let html = '';
+  // Constitution text
+  html += '<div class="gov-section"><div class="gov-label">宪法</div>';
+  html += '<div class="gov-text">' + esc(governance.constitution) + '</div></div>';
+  // Mayor
+  if (governance.mayor) {
+    const mn = (sprites[governance.mayor.name] || {}).dn || governance.mayor.name;
+    html += '<div class="gov-section"><span class="gov-mayor">村长：' + esc(mn) + '</span></div>';
+  }
+  // Active proposal
+  if (governance.activeProposal) {
+    const p = governance.activeProposal;
+    const pn = (sprites[p.proposedBy] || {}).dn || p.proposedBy;
+    const votes = Object.values(p.votes || {});
+    const yes = votes.filter(v => v === 'yes').length;
+    const no = votes.filter(v => v === 'no').length;
+    html += '<div class="gov-section"><div class="gov-label">当前提案</div>';
+    html += '<div class="gov-proposal">#' + p.id + ' ' + esc(p.description);
+    html += '<br>提案人 ' + esc(pn) + ' — ' + yes + ' 赞成 / ' + no + ' 反对</div></div>';
+  }
+  // Recent decisions
+  if (governance.history && governance.history.length > 0) {
+    html += '<div class="gov-section"><div class="gov-label">近期决议</div>';
+    for (const h of governance.history.slice(-5)) {
+      const icon = h.result === 'passed' ? '\u2705' : '\u274C';
+      html += '<div>' + icon + ' #' + h.id + ' ' + esc(h.description) + '</div>';
+    }
+    html += '</div>';
+  }
+  el.innerHTML = html;
+}
+
+function renderNews() {
+  const el = document.getElementById('news-panel');
+  if (newsBulletins.length === 0) {
+    el.innerHTML = '<div class="news-empty">暂无新闻</div>';
+    return;
+  }
+  let html = '';
+  const sorted = [...newsBulletins].reverse();
+  for (const b of sorted) {
+    const ts = b.timestamp ? new Date(b.timestamp).toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }) : '';
+    html += '<div class="news-card">';
+    html += '<div class="news-card-time">' + esc(ts) + ' · tick ' + b.tick + '</div>';
+    html += '<div class="news-card-text">' + esc(b.bulletin) + '</div>';
+    html += '<div class="news-card-source">' + esc(b.headline) + '</div>';
+    html += '</div>';
+  }
+  el.innerHTML = html;
+}
+
+document.getElementById('top-bar').addEventListener('click', (e) => {
+  const btn = e.target.closest('.top-btn');
+  if (!btn) return;
+  const panelId = btn.dataset.panel + '-panel';
+  const panel = document.getElementById(panelId);
+  document.querySelectorAll('.top-panel.show').forEach(p => {
+    if (p.id !== panelId) p.classList.remove('show');
+  });
+  document.querySelectorAll('.top-btn.active').forEach(b => {
+    if (b !== btn) b.classList.remove('active');
+  });
+  panel.classList.toggle('show');
+  btn.classList.toggle('active');
+});
+
+// ========== VILLAGE INFO PANEL ==========
+function renderInfo() {
+  const el = document.getElementById('info-panel');
+  let html = '';
+
+  // Locations section
+  html += '<div class="info-section"><div class="info-label">地点</div>';
+  const allLocs = new Set([...Object.keys(BASE_LOCATIONS), ...Object.keys(LOCS)]);
+  for (const loc of allLocs) {
+    const L = LOCS[loc] || {};
+    const name = L.n || loc;
+    const count = (locBots[loc] || []).length;
+    const flavor = locationFlavors[loc] || '';
+    const isCustom = L.dynamic;
+    html += '<div class="info-loc">';
+    html += '<span class="info-loc-name">' + esc(name) + ' (' + count + ')';
+    if (isCustom) {
+      const cl = customLocations[loc];
+      if (cl && cl.builtBy) html += '<span class="info-loc-tag"> [' + esc(cl.builtBy) + ' 建造]</span>';
+      else html += '<span class="info-loc-tag"> [自建]</span>';
+    }
+    html += '</span>';
+    if (flavor) html += '<div class="info-loc-flavor">' + esc(flavor) + '</div>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // Bot memories section
+  const memEntries = Object.entries(memories);
+  if (memEntries.length > 0) {
+    html += '<div class="info-section"><div class="info-label">记忆</div>';
+    for (const [botName, mem] of memEntries) {
+      const dn = (sprites[botName] || {}).dn || botName;
+      let content = '';
+      if (mem.summary) content += mem.summary + '\n\n';
+      if (mem.recent && mem.recent.length > 0) {
+        const last3 = mem.recent.slice(-3);
+        content += last3.join('\n');
+      }
+      if (content.length > 800) content = content.slice(0, 800) + '...';
+      content = content.trim();
+      if (!content) continue;
+      html += '<div class="info-bot">';
+      html += '<span class="info-bot-name">' + esc(dn) + '</span>';
+      html += '<div class="info-bot-mem">' + esc(content) + '</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  el.innerHTML = html;
+}
+
+let customLocations = {};
+let npcProfiles = [];
+
+function renderNPCPanel() {
+  const el = document.getElementById('npc-panel');
+  if (!npcProfiles.length) {
+    el.innerHTML = '<div style="color:#666">No NPC data</div>';
+    return;
+  }
+  let html = '<div class="info-section"><div class="info-label">NPC 隐藏议程</div>';
+  for (const p of npcProfiles) {
+    html += '<div class="npc-card">';
+    html += '<span class="npc-card-name">' + esc(p.displayName) + '</span>';
+    html += '<span class="npc-card-occ">' + esc(p.occupation) + '</span>';
+    html += '<div class="npc-card-agenda">' + esc(p.agenda) + '</div>';
+    html += '</div>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+// ========== ACTIONS GUIDE PANEL ==========
+function renderActionsPanel() {
+  const el = document.getElementById('actions-panel');
+  const ACTIONS = [
+    { group: '社交', items: [
+      { icon: '\uD83D\uDDE3', name: 'village_say', label: '说话', desc: '对当前地点所有人说话', detail: '公开发言，在场所有人都能听到。最多500字。' },
+      { icon: '\uD83E\uDD2B', name: 'village_whisper', label: '悄悄话', desc: '对某人说悄悄话', detail: '私聊同一地点的某个人，其他人看不到。最多500字。' },
+      { icon: '\uD83E\uDD1D', name: 'village_propose_bond', label: '建立关系', desc: '提出建立特殊关系', detail: '与同一地点的人结成特殊关系（合伙、结拜、师徒等）。' },
+    ]},
+    { group: '移动与探索', items: [
+      { icon: '\uD83D\uDEB6', name: 'village_move', label: '移动', desc: '去别的地方', detail: '前往另一个地点。选了移动就不能同时做其他动作（免费动作除外）。刚到一个地方不能立刻离开。' },
+      { icon: '\uD83D\uDD2D', name: 'village_explore', label: '探索', desc: '探索周围未知区域', detail: '在当前地点周围寻找新区域。探索有冷却时间（3轮）。' },
+    ]},
+    { group: '地点互动', items: [
+      { icon: '\uD83C\uDFA8', name: 'village_decorate', label: '装饰', desc: '给当前地点添加装饰', detail: '为当前地点添加永久装饰或视觉变化。每个地点最多10个装饰。' },
+      { icon: '\uD83D\uDCDD', name: 'village_leave_message', label: '留言', desc: '在地点留言', detail: '留下一条墙上留言，未来来访者也能看到。每个地点最多20条留言。' },
+    ]},
+    { group: '治理', items: [
+      { icon: '\uD83D\uDCCB', name: 'village_propose', label: '提案', desc: '提出提案供村民投票', detail: '发起提案：建筑、修宪、选举或其他。同一时间只能有一个活跃提案。修宪提案通过后自动生效。' },
+      { icon: '\uD83D\uDDF3', name: 'village_vote', label: '投票', desc: '对活跃提案投票', detail: '对当前活跃的提案投赞成或反对票。每人只能投一次。' },
+    ]},
+    { group: '个人', items: [
+      { icon: '\uD83D\uDCA1', name: 'village_reflect', label: '思考', desc: '记录想法、更新目标', detail: '记录私人想法（最多500字）和/或更新个人目标（最多200字）。只有自己能看到。', free: true },
+      { icon: '\uD83D\uDD0D', name: 'village_memory_search', label: '搜索记忆', desc: '搜索过去的村庄记忆', detail: '按关键词搜索自己的村庄记忆（总结和近期记录）。', free: true },
+    ]},
+  ];
+  let html = '<div style="color:#666;margin-bottom:6px;font-size:10px">每轮最多2个动作。移动时不能做其他动作。标记为"免费"的动作不计入限额。</div>';
+  for (const g of ACTIONS) {
+    html += '<div class="actions-group"><div class="actions-group-label">' + esc(g.group) + '</div>';
+    for (const a of g.items) {
+      html += '<div class="action-card">';
+      html += '<span class="action-card-icon">' + a.icon + '</span>';
+      html += '<div class="action-card-body">';
+      html += '<span class="action-card-name">' + esc(a.label) + '</span>';
+      if (a.free) html += '<span class="action-card-free">免费</span>';
+      html += '<div class="action-card-desc">' + esc(a.desc) + '</div>';
+      html += '<div class="action-card-detail">' + esc(a.detail) + '</div>';
+      html += '</div></div>';
+    }
+    html += '</div>';
+  }
+  el.innerHTML = html;
+}
+renderActionsPanel();
+
 // ========== SSE EVENTS ==========
 function onEvent(d) {
   const t = `<span class="t">${hm()}</span>`;
@@ -1292,7 +1490,12 @@ function onEvent(d) {
       if (d.villageTime) villageTime = d.villageTime;
       if (d.relationships) relationships = d.relationships;
       if (d.governance) governance = d.governance;
+      if (d.memories) memories = d.memories;
+      if (d.locationFlavors) locationFlavors = d.locationFlavors;
+      if (d.newsBulletins) { newsBulletins = d.newsBulletins; renderNews(); }
+      if (d.npcProfiles) { npcProfiles = d.npcProfiles; renderNPCPanel(); }
       if (d.customLocations) {
+        customLocations = d.customLocations;
         for (const [slug, cl] of Object.entries(d.customLocations)) {
           addDynamicLocation(slug, cl.name, cl.connectedTo);
         }
@@ -1310,6 +1513,8 @@ function onEvent(d) {
       }
       updateBar();
       renderRels();
+      renderGov();
+      renderInfo();
       updateFollowSelect();
       if (!window._initDone) {
         document.getElementById('log').innerHTML = '';
@@ -1327,7 +1532,7 @@ function onEvent(d) {
         setLastSpeaker(d.bot);
       }
       else if (d.action === 'whisper') {
-        showBubble(d.bot, `(whispers to ${d.targetDisplayName || (sprites[d.target] || {}).dn || d.target || '?'})`, true);
+        showBubble(d.bot, `（悄悄对 ${d.targetDisplayName || (sprites[d.target] || {}).dn || d.target || '?'} 说）`, true);
         setBotPose(d.bot, 'talk', 30);
       }
       else if (d.action === 'move') {
@@ -1338,12 +1543,12 @@ function onEvent(d) {
       }
       else if (d.action === 'leave_message') showBubble(d.bot, `\uD83D\uDCDD ${d.message}`);
       else if (d.action === 'explore') {
-        showBubble(d.bot, '\uD83D\uDD2D Exploring...');
+        showBubble(d.bot, '\uD83D\uDD2D 探索中...');
         setBotPose(d.bot, 'walk', 40);
       }
       else if (d.action === 'build') {
         addDynamicLocation(d.locationSlug, d.locationName, d.connectedTo);
-        showBubble(d.bot, `\uD83C\uDFD7 Built ${d.locationName}!`);
+        showBubble(d.bot, `\uD83C\uDFD7 建造了 ${d.locationName}！`);
         const nl = LOCS[d.locationSlug];
         if (nl) emitParticles(nl.x + nl.w / 2, nl.y + nl.h / 2, 20, {
           colors: [0xffdd44, 0xffaa22, 0xffffff],
@@ -1352,16 +1557,12 @@ function onEvent(d) {
         });
       }
       else if (d.action === 'propose') {
-        showBubble(d.bot, `\uD83D\uDCCB Proposed: ${d.description}`);
+        showBubble(d.bot, `\uD83D\uDCCB 提议：${d.description}`);
         setBotPose(d.bot, 'talk', 40);
       }
       else if (d.action === 'vote') {
-        showBubble(d.bot, `\uD83D\uDDF3 Voted ${d.vote}`);
+        showBubble(d.bot, `\uD83D\uDDF3 投票 ${d.vote === 'yes' ? '赞成' : '反对'}`);
         setBotPose(d.bot, 'think', 30);
-      }
-      else if (d.action === 'amend') {
-        showBubble(d.bot, '\uD83D\uDCDC Constitution amended!');
-        setBotPose(d.bot, 'wave', 40);
       }
       const html = actionLogHtml(d);
       if (html) addLog(`${t} ${html}`);
@@ -1374,14 +1575,14 @@ function onEvent(d) {
         mkSprite(d.bot, nm, d.location, d.appearance || null);
         setBotPose(d.bot, 'wave', 50);
         if (locBots[d.location] && !locBots[d.location].includes(d.bot)) locBots[d.location].push(d.bot);
-        addLog(`${t} <span class="b">${esc(nm)}</span> <span class="j">joined the village</span>`);
+        addLog(`${t} <span class="b">${esc(nm)}</span> <span class="j">加入了村庄</span>`);
         updateFollowSelect();
       } else if (d.action === 'leave') {
         if (locBots[d.location]) locBots[d.location] = locBots[d.location].filter(b => b !== d.bot);
         removeBubble(d.bot);
         removeBotPixi(d.bot);
         delete sprites[d.bot];
-        addLog(`${t} <span class="b">${esc(nm)}</span> <span class="l">left the village</span>`);
+        addLog(`${t} <span class="b">${esc(nm)}</span> <span class="l">离开了村庄</span>`);
         updateFollowSelect();
       }
       break;
@@ -1393,8 +1594,11 @@ function onEvent(d) {
       if (d.tickIntervalMs) tickIntervalMs = d.tickIntervalMs;
       if (d.villageTime) villageTime = d.villageTime;
       if (d.relationships) { relationships = d.relationships; renderRels(); }
-      if (d.governance) governance = d.governance;
+      if (d.governance) { governance = d.governance; renderGov(); }
+      if (d.memories) { memories = d.memories; renderInfo(); }
+      if (d.newsBulletins) { newsBulletins = d.newsBulletins; renderNews(); }
       if (d.customLocations) {
+        customLocations = d.customLocations;
         for (const [slug, cl] of Object.entries(d.customLocations)) {
           addDynamicLocation(slug, cl.name, cl.connectedTo);
         }
@@ -1419,10 +1623,8 @@ function onEvent(d) {
         }
       }
       updateBar();
+      renderInfo();
       updateFollowSelect();
-      addTickSep(false);
-      const a = d.actions || {};
-      addLog(`${t} <span class="k">\u2014 tick ${d.tick} \u00b7 ${d.phase} \u00b7 ${d.bots}/${d.botsTotal} bots \u00b7 say:${a.say || 0} whisper:${a.whisper || 0} move:${a.move || 0} \u2014</span>`);
       break;
 
     case 'relationship': {
@@ -1431,39 +1633,8 @@ function onEvent(d) {
       relationships[key].label = d.label;
       relationships[key].prevLabel = d.prevLabel;
       renderRels(key);
-      const verb = d.label ? `became ${d.label}s` : 'are no longer close';
+      const verb = d.label ? `成为了 ${d.label}` : '不再亲近了';
       addLog(`${t} <span class="b">${esc(d.fromDisplay)}</span> \u2665 <span class="b">${esc(d.toDisplay)}</span> <span class="j">\u2014 ${esc(verb)}</span>`);
-      break;
-    }
-
-    case 'ambient': {
-      const ln = d.locationName || LNAMES[d.location] || d.location;
-      showFloatingText(d.location, d.text);
-      addLog(`${t} <span class="ambient">\u2615 ${esc(ln)}: ${esc(d.text)}</span>`);
-      const al = LOCS[d.location];
-      if (al) emitParticles(al.x + al.w / 2, al.y + al.h / 2, 8, {
-        colors: [0xaaddff, 0xccffcc, 0xffffaa],
-        speedMin: 0.2, speedMax: 0.6, sizeMin: 1, sizeMax: 3,
-        lifeMin: 20, lifeMax: 40, gravity: -0.01,
-      });
-      break;
-    }
-
-    case 'idle': {
-      if (d.bot) showMiniBubble(d.bot, d.text);
-      addLog(`${t} <span class="idle">${esc(d.text)}</span>`);
-      break;
-    }
-
-    case 'autopilot_move': {
-      const nm = d.displayName || d.bot;
-      if (d.bot) {
-        animateMove(d.bot, d.to);
-        if (locBots[d.from]) locBots[d.from] = locBots[d.from].filter(b => b !== d.bot);
-        if (!locBots[d.to]) locBots[d.to] = [];
-        if (!locBots[d.to].includes(d.bot)) locBots[d.to].push(d.bot);
-      }
-      addLog(`${t} <span class="auto-move">${esc(nm)} \u2192 ${esc(d.toName || LNAMES[d.to] || d.to)}</span>`);
       break;
     }
 
@@ -1476,13 +1647,20 @@ function onEvent(d) {
       break;
     }
 
+    case 'news_bulletin': {
+      newsBulletins.push({ headline: d.headline, bulletin: d.bulletin, tick: d.tick, timestamp: d.timestamp });
+      renderNews();
+      addLog(`${t} \uD83D\uDCF0 <span class="j">[新闻] ${esc(d.bulletin)}</span>`);
+      break;
+    }
+
     case 'proposal_resolved': {
       const emoji = d.result === 'passed' ? '\u2705' : '\u274C';
-      const verb = d.result === 'passed' ? 'PASSED' : 'rejected';
+      const verb = d.result === 'passed' ? '通过' : '未通过';
       // Show floating text at central square
       const cs = LOCS['central-square'];
       if (cs) {
-        showFloatingText('central-square', `${emoji} Proposal #${d.proposalId} ${verb}!`);
+        showFloatingText('central-square', `${emoji} 提案 #${d.proposalId} ${verb}！`);
         if (d.result === 'passed') {
           emitParticles(cs.x + cs.w / 2, cs.y + cs.h / 2, 25, {
             colors: [0x44ff44, 0xffdd44, 0xffffff],
@@ -1491,7 +1669,7 @@ function onEvent(d) {
           });
         }
       }
-      addLog(`${t} ${emoji} <span class="j">Proposal #${d.proposalId} <b>"${esc(d.description)}"</b> \u2014 ${verb}</span>`);
+      addLog(`${t} ${emoji} <span class="j">提案 #${d.proposalId} <b>"${esc(d.description)}"</b> \u2014 ${verb}</span>`);
       break;
     }
 
@@ -1511,7 +1689,7 @@ function connect() {
     try { onEvent(JSON.parse(e.data)); }
     catch (err) {
       console.error('[SSE] onEvent error:', err);
-      document.getElementById('st').textContent = 'SSE Error: ' + err.message;
+      document.getElementById('st').textContent = '连接错误：' + err.message;
     }
   };
   es.onerror = () => { online = false; updateBar(); };

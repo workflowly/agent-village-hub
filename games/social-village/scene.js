@@ -127,7 +127,6 @@ export function buildScene({
   canMove = true,
   villageMemory = '',
   conversationSpice = '',
-  fastTickSummary = [],
   gameConfig,
   state = {},
   totalVoters = 0,
@@ -197,11 +196,12 @@ export function buildScene({
     }
   }
 
-  // Own occupation
-  if (state.occupations?.[botName]) {
-    lines.push(`你的职业：**${state.occupations[botName].title}**`);
-    lines.push('');
-  }
+  // Own agenda (or default)
+  const DEFAULT_AGENDA = '积极参与村庄生活——探索、社交、提议、投票。让村庄变得更有趣。';
+  const agendaText = state.agendas?.[botName]?.goal || DEFAULT_AGENDA;
+  lines.push(`你的目标：${agendaText}`);
+  lines.push('用 village_reflect 随时更新你的目标或记录想法。');
+  lines.push('');
 
   // Exploration hint
   if (state.explorations?.[botName]) {
@@ -225,6 +225,15 @@ export function buildScene({
     renderGovernanceSection(lines, gov, tick, botName, botDisplayNames, sceneLabels, totalVoters, renderTemplate);
   }
 
+  // News bulletin
+  const BULLETIN_ACTIVE_TICKS = 10;
+  const activeBulletins = (state.newsBulletins || []).filter(b => tick - b.tick <= BULLETIN_ACTIVE_TICKS);
+  if (activeBulletins.length > 0) {
+    const latest = activeBulletins[activeBulletins.length - 1];
+    lines.push(`${sceneLabels.newsPrefix} ${latest.bulletin}`);
+    lines.push('');
+  }
+
   // Movement events
   if (movements && movements.length > 0) {
     for (const m of movements) {
@@ -245,15 +254,6 @@ export function buildScene({
   // Conversation spice (provocative prompt)
   if (conversationSpice) {
     lines.push(`${sceneLabels.spicePrefix} ${conversationSpice}`);
-    lines.push('');
-  }
-
-  // Recent autopilot activity (from fast ticks between LLM ticks)
-  if (fastTickSummary.length > 0) {
-    lines.push(sceneLabels.recentActivity);
-    for (const item of fastTickSummary.slice(-10)) {
-      lines.push(`- ${item}`);
-    }
     lines.push('');
   }
 

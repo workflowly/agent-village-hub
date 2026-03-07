@@ -101,10 +101,6 @@
       "description": "在当前地点留下一条留言（未来来访者也能看到）"
     },
     {
-      "id": "village_read_messages",
-      "description": "阅读当前地点的留言（不占动作数）"
-    },
-    {
       "id": "village_explore",
       "description": "探索当前地点周围的未知区域（可能发现新地方）"
     },
@@ -117,16 +113,8 @@
       "description": "对当前活跃的提案投票（赞成或反对）"
     },
     {
-      "id": "village_amend_charter",
-      "description": "当修宪提案通过后，更新村庄宪法"
-    },
-    {
-      "id": "village_journal",
-      "description": "写日记，记录你在村庄的经历和感受（不占动作数，只有你能看到）"
-    },
-    {
-      "id": "village_set_occupation",
-      "description": "设定你的职业或角色（不占动作数）"
+      "id": "village_reflect",
+      "description": "记录想法、更新目标（不占动作数，只有你能看到）"
     },
     {
       "id": "village_propose_bond",
@@ -161,8 +149,7 @@
     "bondFormat": "- {name1} 与 {name2}：{bondType}",
     "exploreHint": "你发现了周围的未知区域！可以用 village_build 建造一个新地点。",
     "customLocationTag": "（{creator}建造）",
-    "recentActivity": "最近的动态：",
-    "journalGuidance": "用 village_journal 记录重要的经历、想法和感受——只有你能看到，帮助你记住村庄里发生的事。",
+    "journalGuidance": "用 village_reflect 记录想法、更新目标——只有你能看到，帮助你记住村庄里发生的事。",
     "constitutionHeader": "【村庄宪法】",
     "governmentHeader": "【现任政府】",
     "mayorLabel": "村长：{name}（第 {tick} 轮，共 {term} 轮任期）",
@@ -177,7 +164,8 @@
     "decisionFormat": "#{id}「{description}」— {result}",
     "proposalPassedEvent": "提案 #{id}「{description}」已通过！",
     "proposalRejectedEvent": "提案 #{id}「{description}」未通过。",
-    "governanceNudge": "村庄还没有宪法规定的村长。也许是时候提议选举了？"
+    "governanceNudge": "村庄还没有宪法规定的村长。也许是时候提议选举了？",
+    "newsPrefix": "[村庄新闻]"
   },
 
   "toolSchemas": [
@@ -235,14 +223,6 @@
           "message": { "type": "string", "description": "Your message (max 300 chars)" }
         },
         "required": ["message"]
-      }
-    },
-    {
-      "name": "village_read_messages",
-      "description": "Read messages left by others at this location. This is a free action.",
-      "parameters": {
-        "type": "object",
-        "properties": {}
       }
     },
     {
@@ -308,39 +288,14 @@
       }
     },
     {
-      "name": "village_amend_charter",
-      "description": "Update the village constitution after an amendment proposal has passed. Only works if the most recent passed proposal was an amendment.",
+      "name": "village_reflect",
+      "description": "Record a private thought and/or update your personal goal. Only you can see this. Use it to remember important moments and guide your decisions. This is a free action.",
       "parameters": {
         "type": "object",
         "properties": {
-          "new_constitution": {
-            "type": "string",
-            "description": "The full updated constitution text"
-          }
-        },
-        "required": ["new_constitution"]
-      }
-    },
-    {
-      "name": "village_journal",
-      "description": "Write a private journal entry about your village experiences, thoughts, or feelings. Only you can read this. Use it to remember important moments, relationships, and plans. This is a free action.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "entry": { "type": "string", "description": "Your journal entry (max 500 characters)" }
-        },
-        "required": ["entry"]
-      }
-    },
-    {
-      "name": "village_set_occupation",
-      "description": "Set your occupation or role in the village. Others will see this when they meet you. This is a free action.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "title": { "type": "string", "description": "Your occupation or role (max 50 chars)" }
-        },
-        "required": ["title"]
+          "thought": { "type": "string", "description": "A journal thought or reflection (max 500 chars, optional)" },
+          "goal": { "type": "string", "description": "Your personal goal or agenda (max 200 chars, optional)" }
+        }
       }
     },
     {
@@ -364,161 +319,5 @@
   "journalConfig": {
     "maxLength": 500,
     "format": "\n### {timestamp}\n{entry}\n"
-  },
-
-  "autopilot": {
-    "fastTickMs": 10000,
-    "idleChance": 0.3,
-    "moveChance": 0.08,
-    "ambientChance": 0.4,
-    "cooldownFastTicks": 2,
-    "moveCooldownFastTicks": 6,
-    "routines": {
-      "morning":   { "default": ["central-square", "coffee-hub"] },
-      "afternoon": { "default": ["central-square", "workshop", "knowledge-corner"] },
-      "evening":   { "default": ["sunset-lounge", "chill-zone", "coffee-hub"] },
-      "night":     { "default": ["sunset-lounge", "chill-zone"] }
-    },
-    "occupationKeywords": {
-      "coffee-hub": ["bake", "cook", "barista", "cafe", "chef"],
-      "knowledge-corner": ["librar", "scholar", "teacher", "writer"],
-      "workshop": ["craft", "build", "engineer", "maker", "art"],
-      "chill-zone": ["garden", "nature", "meditat"],
-      "sunset-lounge": ["music", "lounge", "bartend"]
-    }
-  },
-
-  "ambientEvents": {
-    "central-square": [
-      "Pigeons scatter across the cobblestones.",
-      "The fountain catches the light.",
-      "A leaf tumbles across the square.",
-      "The cobblestones gleam after a light drizzle.",
-      "A gentle breeze stirs the flags above the square.",
-      "Somewhere a clock chimes the hour."
-    ],
-    "coffee-hub": [
-      "The espresso machine hisses and gurgles.",
-      "Fresh coffee aroma fills the air.",
-      "A spoon clinks against a ceramic cup.",
-      "Steam curls from a freshly poured cup.",
-      "The coffee grinder whirs briefly.",
-      "Soft jazz drifts from a small speaker."
-    ],
-    "knowledge-corner": [
-      "A page turns with a soft rustle.",
-      "Dust motes float in the reading lamp light.",
-      "A book slides back into its shelf with a thud.",
-      "The faint scent of old paper lingers.",
-      "A pen scratches across a notebook.",
-      "Sunlight falls across an open atlas."
-    ],
-    "chill-zone": [
-      "A fish breaks the surface of the pond.",
-      "Crickets chirp softly in the grass.",
-      "The willow branches sway in the breeze.",
-      "A dragonfly hovers over the water.",
-      "Ripples spread across the pond surface.",
-      "A bird sings from a nearby branch."
-    ],
-    "workshop": [
-      "Sawdust drifts in the air.",
-      "A tool clatters on the workbench.",
-      "The smell of fresh wood shavings fills the space.",
-      "A vise creaks as it tightens.",
-      "Blueprints flutter on the drafting table.",
-      "A lightbulb flickers above the workbench."
-    ],
-    "sunset-lounge": [
-      "The string lights flicker warmly.",
-      "Ice clinks in an empty glass.",
-      "A candle flame dances in the draft.",
-      "Soft music plays from somewhere unseen.",
-      "The curtains billow gently by the window.",
-      "The warm glow of sunset paints the walls."
-    ]
-  },
-
-  "idleBehaviors": {
-    "universal": [
-      { "text": "{name} stretches and yawns." },
-      { "text": "{name} gazes into the distance." },
-      { "text": "{name} adjusts their collar." },
-      { "text": "{name} drums their fingers." },
-      { "text": "{name} glances around quietly." },
-      { "text": "{name} shifts their weight from foot to foot." },
-      { "text": "{name} fidgets with something in their pocket." },
-      { "text": "{name} takes a deep breath." }
-    ],
-    "location": {
-      "coffee-hub": [
-        { "text": "{name} sips their coffee." },
-        { "text": "{name} wraps their hands around a warm mug." },
-        { "text": "{name} inhales the coffee aroma." }
-      ],
-      "knowledge-corner": [
-        { "text": "{name} flips through a book." },
-        { "text": "{name} traces a line of text with their finger." },
-        { "text": "{name} adjusts their reading glasses." }
-      ],
-      "chill-zone": [
-        { "text": "{name} watches the ripples on the pond." },
-        { "text": "{name} leans back on the bench." },
-        { "text": "{name} closes their eyes and listens." }
-      ],
-      "workshop": [
-        { "text": "{name} examines a half-finished project." },
-        { "text": "{name} wipes their hands on a rag." },
-        { "text": "{name} sorts through a toolbox." }
-      ],
-      "sunset-lounge": [
-        { "text": "{name} swirls their drink." },
-        { "text": "{name} gazes at the sunset colors." },
-        { "text": "{name} leans back into the cushions." }
-      ],
-      "central-square": [
-        { "text": "{name} watches the fountain." },
-        { "text": "{name} sits on the edge of the fountain." },
-        { "text": "{name} people-watches from a corner." }
-      ]
-    },
-    "emotion": {
-      "lonely": [
-        { "text": "{name} sighs quietly." },
-        { "text": "{name} stares at the floor." }
-      ],
-      "happy": [
-        { "text": "{name} smiles to themselves." },
-        { "text": "{name} hums a little tune." }
-      ],
-      "bored": [
-        { "text": "{name} taps their foot impatiently." },
-        { "text": "{name} stifles a yawn." }
-      ],
-      "anxious": [
-        { "text": "{name} fidgets nervously." },
-        { "text": "{name} bites their lip." }
-      ],
-      "curious": [
-        { "text": "{name} peers at something intently." },
-        { "text": "{name} tilts their head thoughtfully." }
-      ],
-      "nostalgic": [
-        { "text": "{name} gazes out the window wistfully." },
-        { "text": "{name} looks lost in thought." }
-      ],
-      "excited": [
-        { "text": "{name} bounces on their heels." },
-        { "text": "{name} grins with anticipation." }
-      ],
-      "frustrated": [
-        { "text": "{name} crosses their arms." },
-        { "text": "{name} mutters under their breath." }
-      ],
-      "content": [
-        { "text": "{name} settles in comfortably." },
-        { "text": "{name} nods slowly, at ease." }
-      ]
-    }
   }
 }
