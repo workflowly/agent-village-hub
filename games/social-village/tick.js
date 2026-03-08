@@ -17,7 +17,7 @@ import {
   enforceExiles,
   checkViolations,
 } from './logic.js';
-import { buildMemoryEntry, appendVillageMemory } from '../../memory.js';
+import { buildMemoryEntry, buildWitnessEntry, appendVillageMemory } from '../../memory.js';
 import { rollNewsBulletin } from './news.js';
 
 function buildV2Payload(scene, gameConfig, location, state, botName) {
@@ -354,43 +354,48 @@ export async function socialTick(ctx) {
     });
   }
 
-  // Build memory entries for all bots that participated
+  // Build witness memory entries for all non-NPC bots that received a scene.
+  // Every tick is recorded — even silent ones — so bots have a full world log,
+  // not just a log of ticks where they happened to act.
   const timestamp = new Date().toISOString();
-  for (const { botName, response, loc } of allResults) {
-    if (!response || !response.actions) continue;
-    const locEvents = allEvents.get(loc) || [];
-    if (locEvents.length === 0) continue;
+  for (const { botName, loc } of allSceneRequests) {
+    const pInfo = participants.get(botName);
+    if (!pInfo || pInfo.npc) continue;
 
+    const locEvents = allEvents.get(loc) || [];
     const locName = gameConfig.locationNames[loc] || state.customLocations?.[loc]?.name || loc;
-    const entry = buildMemoryEntry({
+
+    // Other bots present at this location (display names)
+    const botsPresent = (state.locations[loc] || [])
+      .filter(b => b !== botName)
+      .map(b => displayNames[b] || b);
+
+    const entry = buildWitnessEntry({
       location: locName,
       timestamp,
+      botName,
+      botsPresent,
       events: locEvents.map(ev => ({
         ...ev,
         displayName: displayNames[ev.bot] || ev.bot,
         targetDisplayName: ev.target ? (displayNames[ev.target] || ev.target) : undefined,
       })),
-      botName,
+      activeProposal: state.governance?.activeProposal || null,
     });
 
-    if (entry) {
-      if (!state.memories[botName]) state.memories[botName] = { summary: '', recent: [] };
-      state.memories[botName].recent.push(entry);
+    if (!state.memories[botName]) state.memories[botName] = { summary: '', recent: [] };
+    state.memories[botName].recent.push(entry);
 
-      // Filesystem sync for non-NPC bots
-      const pInfo = participants.get(botName);
-      if (pInfo && !pInfo.npc) {
-        if (pInfo.remote) {
-          // Cache for delivery in next tick's payload → plugin writes locally
-          pendingRemoteMemory.set(botName, entry);
-          console.log(`[memory] Queued memoryEntry for remote ${botName} (${entry.length} chars)`);
-        } else {
-          appendVillageMemory(botName, entry, { filename: MEMORY_FILENAME }).catch(err => {
-            console.error(`[memory] Failed to sync ${botName}: ${err.message}`);
-          });
-          console.log(`[memory] Wrote memoryEntry for local ${botName} (${entry.length} chars)`);
-        }
-      }
+    // Filesystem sync
+    if (pInfo.remote) {
+      // Cache for delivery in next tick's payload → plugin writes locally
+      pendingRemoteMemory.set(botName, entry);
+      console.log(`[memory] Queued witness entry for remote ${botName} (${entry.length} chars)`);
+    } else {
+      appendVillageMemory(botName, entry, { filename: MEMORY_FILENAME }).catch(err => {
+        console.error(`[memory] Failed to sync ${botName}: ${err.message}`);
+      });
+      console.log(`[memory] Wrote witness entry for local ${botName} (${entry.length} chars)`);
     }
   }
 

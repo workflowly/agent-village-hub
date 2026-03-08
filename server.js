@@ -421,9 +421,20 @@ async function recoverParticipants() {
 
   // Third pass: restore remote bots from remoteParticipants that aren't in state.locations
   // (e.g. bot timed out before server restart — removed from locations but kept in remoteParticipants)
+  // Also upgrades bots that were recovered as local in the first pass but belong to remoteParticipants —
+  // remoteParticipants is an explicit operator declaration and takes precedence over local container discovery.
   if (state.remoteParticipants && !isGridGame) {
     for (const [botName, entry] of Object.entries(state.remoteParticipants)) {
-      if (participants.has(botName)) continue; // already recovered
+      if (participants.has(botName)) {
+        // Already recovered as local — upgrade to remote if needed
+        const existing = participants.get(botName);
+        if (!existing.remote) {
+          existing.remote = true;
+          existing.port = null;
+          console.log(`[village] Recovery: ${botName} upgraded to remote (explicit remoteParticipants entry)`);
+        }
+        continue;
+      }
       let remoteAppearance = null;
       try {
         const occupation = state.occupations?.[botName]?.title || null;
