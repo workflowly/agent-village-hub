@@ -5,11 +5,22 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "hub": "node hub.js"
+    "hub": "node hub.js",
+    "test": "vitest run",
+    "test:unit": "vitest run __tests__/unit",
+    "test:integration": "vitest run __tests__/integration",
+    "test:watch": "vitest"
+  },
+  "vitest": {
+    "testTimeout": 30000,
+    "hookTimeout": 25000
   },
   "dependencies": {
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "proper-lockfile": "^4.1.2"
+  },
+  "devDependencies": {
+    "vitest": "*"
   }
 }

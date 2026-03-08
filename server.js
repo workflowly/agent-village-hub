@@ -13,19 +13,12 @@
 
 import { createServer } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
-import { readFile, writeFile, rename, copyFile, mkdir, readdir } from 'node:fs/promises';
+import { readFile, writeFile, rename, copyFile, mkdir, readdir, stat } from 'node:fs/promises';
 import { appendFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadGame } from './game-loader.js';
-import { advanceClock as advanceClockImpl, readBotDailyCost as readBotDailyCostImpl } from './games/social-village/logic.js';
-import { getVillageTime } from './games/social-village/scene.js';
-import { generateWorld, placeInitialResources, mulberry32, randomEdgeTile } from './games/survival/world.js';
-import { getDayPhase } from './games/survival/scene.js';
-import { survivalTick, fastTick as survivalFastTick } from './games/survival/tick.js';
-import { socialTick } from './games/social-village/tick.js';
-import { initNPCs, runNPCTick, probeAPIRouter, getNPCProfiles } from './games/social-village/npcs.js';
-import { generateAppearance } from './games/social-village/appearance.js';
+import { readBotDailyCost as readBotDailyCostImpl } from './games/social-village/logic.js'; // TODO: move to lib/
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -33,6 +26,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const VILLAGE_GAME = process.env.VILLAGE_GAME || 'social-village';
 const gameConfig = loadGame(join(__dirname, 'games', VILLAGE_GAME, 'schema.json'));
 console.log(`[village] Loaded game: ${gameConfig.raw.id} (${gameConfig.raw.name})`);
+
+// --- Load game adapter ---
+const gameAdapter = await import(`./games/${VILLAGE_GAME}/adapter.js`);
 
 // --- Config ---
 const PORT = parseInt(process.env.VILLAGE_PORT || '7001', 10);
@@ -46,11 +42,10 @@ const MAX_CONSECUTIVE_FAILURES_REMOTE = 5;
 const PORTAL_URL = process.env.VILLAGE_RELAY_URL || 'http://127.0.0.1:3000';
 const EMPTY_CLEAR_TICKS = 3;
 
-const isGridGame = gameConfig.isGridGame;
-const TICK_INTERVAL_MS = parseInt(process.env.VILLAGE_TICK_INTERVAL || (isGridGame ? '45000' : '120000'), 10);
+const TICK_INTERVAL_MS = parseInt(process.env.VILLAGE_TICK_INTERVAL || (gameAdapter.hasFastTick ? '45000' : '120000'), 10);
 const _dataDir = process.env.VILLAGE_DATA_DIR;
 const STATE_FILE = _dataDir ? join(_dataDir, `state-${VILLAGE_GAME}.json`) : join(__dirname, `state-${VILLAGE_GAME}.json`);
-const MEMORY_FILENAME = isGridGame ? 'survival.md' : 'village.md';
+const MEMORY_FILENAME = gameAdapter.memoryFilename;
 const USAGE_FILE = process.env.VILLAGE_USAGE_FILE || null;
 const LOGS_DIR = _dataDir ? join(_dataDir, 'logs') : join(__dirname, 'logs');
 
@@ -59,16 +54,7 @@ let logDate = '';   // 'YYYY-MM-DD'
 let logFile = '';   // full path to current day's .jsonl
 
 // --- State ---
-let state = {
-  locations: {},
-  whispers: {},
-  publicLogs: {},
-  clock: { tick: 0, phase: 'morning', ticksInPhase: 0 },
-  emptyTicks: {},
-  locationState: {},
-  customLocations: {},
-  occupations: {},
-};
+let state = {};
 
 let tickInProgress = false;
 let nextTickAt = 0;
@@ -85,128 +71,23 @@ const lastMoveTick = new Map();  // botName → tick number of last move (cooldo
 // --- Load/Save state ---
 
 async function loadState() {
-  function applySocialState(loaded, source) {
-    state = {
-      locations: loaded.locations || {},
-      whispers: loaded.whispers || {},
-      publicLogs: loaded.publicLogs || {},
-      clock: loaded.clock || { tick: 0, phase: 'morning', ticksInPhase: 0 },
-      emptyTicks: loaded.emptyTicks || {},
-      villageCosts: loaded.villageCosts || {},
-      locationState: loaded.locationState || {},
-      customLocations: loaded.customLocations || {},
-      remoteParticipants: loaded.remoteParticipants || {},
-      occupations: loaded.occupations || {},
-      memories: loaded.memories || {},
-      agendas: loaded.agendas || {},
-      newsBulletins: loaded.newsBulletins || [],
-      exiles: loaded.exiles || {},
-      fastTickSummary: loaded.fastTickSummary || {},
-      autopilotState: loaded.autopilotState || { ambientCooldowns: {}, moveCooldowns: {} },
-    };
-    // Initialize schema locations
-    for (const loc of gameConfig.locationSlugs) {
-      if (!state.locations[loc]) state.locations[loc] = [];
-      if (!state.publicLogs[loc]) state.publicLogs[loc] = [];
-      if (!state.emptyTicks[loc]) state.emptyTicks[loc] = 0;
-    }
-    // Initialize custom locations (built by bots)
-    for (const loc of Object.keys(state.customLocations)) {
-      if (!state.locations[loc]) state.locations[loc] = [];
-      if (!state.publicLogs[loc]) state.publicLogs[loc] = [];
-      if (!state.emptyTicks[loc]) state.emptyTicks[loc] = 0;
-    }
-    // Migration: remove deprecated state
-    delete state.emotions;
-    delete state.stagnation;
-    delete state.eventState;
-    delete state.autopilotState;
-    delete state.fastTickSummary;
-    delete state.relationships;
-    delete state.bonds;
-    delete state.spiceState;
-    delete state.explorations;
-    console.log(`[village] State loaded from ${source}: tick=${state.clock.tick} phase=${state.clock.phase} customLocations=${Object.keys(state.customLocations).length}`);
-  }
-
-  function applyGridState(loaded, source) {
-    state = {
-      terrain: loaded.terrain || '',
-      tileData: loaded.tileData || {},
-      bots: loaded.bots || {},
-      recentEvents: loaded.recentEvents || [],
-      clock: loaded.clock || { tick: 0, dayTick: 0 },
-      worldSeed: loaded.worldSeed || gameConfig.raw.world.seed,
-      villageCosts: loaded.villageCosts || {},
-    };
-    // Round state for scoring
-    state.round = loaded.round || {
-      number: 1,
-      ticksRemaining: gameConfig.raw.scoring?.roundLength || 50,
-      scores: {},
-      roundHistory: [],
-    };
-    // Diplomacy state
-    state.diplomacy = loaded.diplomacy || { alliances: {}, proposals: {}, betrayals: [] };
-    console.log(`[village] Grid state loaded from ${source}: tick=${state.clock.tick} bots=${Object.keys(state.bots).length}`);
-  }
-
-  const applyState = isGridGame ? applyGridState : applySocialState;
-
   // Try primary state file
   try {
     const raw = await readFile(STATE_FILE, 'utf-8');
-    applyState(JSON.parse(raw), STATE_FILE);
+    state = gameAdapter.loadState(JSON.parse(raw), gameConfig);
     return;
   } catch { /* primary failed or missing */ }
 
   // Fallback to backup
   try {
     const bakRaw = await readFile(STATE_FILE + '.bak', 'utf-8');
-    applyState(JSON.parse(bakRaw), STATE_FILE + '.bak');
+    state = gameAdapter.loadState(JSON.parse(bakRaw), gameConfig);
     console.warn('[village] Primary state was corrupt/missing — recovered from backup');
     return;
   } catch { /* backup also failed */ }
 
   // Initialize fresh state
-  if (isGridGame) {
-    console.log('[village] Generating world...');
-    const worldConfig = gameConfig.raw.world;
-    const rng = mulberry32(worldConfig.seed);
-    const { terrain } = generateWorld(worldConfig);
-    const tileData = placeInitialResources(terrain, worldConfig, rng);
-    state = {
-      terrain,
-      tileData,
-      bots: {},
-      recentEvents: [],
-      clock: { tick: 0, dayTick: 0 },
-      worldSeed: worldConfig.seed,
-      villageCosts: {},
-      round: {
-        number: 1,
-        ticksRemaining: gameConfig.raw.scoring?.roundLength || 50,
-        scores: {},
-        roundHistory: [],
-      },
-      diplomacy: { alliances: {}, proposals: {}, betrayals: [] },
-    };
-    const resourceCount = Object.keys(tileData).length;
-    console.log(`[village] World generated: ${worldConfig.width}x${worldConfig.height}, ${resourceCount} resource tiles`);
-  } else {
-    for (const loc of gameConfig.locationSlugs) {
-      state.locations[loc] = [];
-      state.publicLogs[loc] = [];
-      state.emptyTicks[loc] = 0;
-    }
-    state.locationState = {};
-    state.customLocations = {};
-    state.occupations = {};
-    state.memories = {};
-    state.agendas = {};
-    state.newsBulletins = [];
-    state.exiles = {};
-  }
+  state = await gameAdapter.initState(gameConfig);
   console.log('[village] Fresh state initialized');
 }
 
@@ -281,100 +162,15 @@ function removeBot(botName, reason) {
   const displayName = participants.get(botName)?.displayName || botName;
   participants.delete(botName);
   failureCounts.delete(botName);
-
-  if (isGridGame) {
-    // Grid game: remove from bots map
-    if (state.bots[botName]) {
-      broadcastEvent({
-        type: 'survival_event', bot: botName, displayName,
-        action: 'leave', tick: state.clock.tick,
-      });
-      delete state.bots[botName];
-    }
-  } else {
-    // Social game: remove from all locations (including custom)
-    for (const loc of allLocationSlugs()) {
-      if (!state.locations[loc]) continue;
-      const idx = state.locations[loc].indexOf(botName);
-      if (idx !== -1) {
-        state.locations[loc].splice(idx, 1);
-        broadcastEvent({
-          type: 'movement', bot: botName, displayName,
-          action: 'leave', location: loc, tick: state.clock.tick,
-        });
-        state.publicLogs[loc]?.push({
-          bot: botName, action: 'say',
-          message: `*${displayName} has left the village.*`,
-        });
-      }
-    }
-
-    // Clean up pending whispers
-    delete state.whispers[botName];
-  }
-
+  gameAdapter.removeBot(state, botName, displayName, broadcastEvent);
   console.log(`[village] ${botName} removed (${reason})`);
 }
 
 // --- Startup recovery: rebuild participants from state.json ---
 
 async function recoverParticipants() {
-  // Collect all bot names currently in state
-  const botsInState = new Set();
-  if (isGridGame) {
-    for (const name of Object.keys(state.bots)) botsInState.add(name);
-  } else {
-    for (const loc of allLocationSlugs()) {
-      for (const name of (state.locations[loc] || [])) botsInState.add(name);
-    }
-  }
-
-  if (botsInState.size === 0) {
-    console.log('[village] Recovery: no bots in state');
-    return;
-  }
-
-  console.log(`[village] Recovery: checking ${botsInState.size} bot(s) from state...`);
-
-  // Restore remote participants from state.remoteParticipants.
-  // Bots in state.locations but not in remoteParticipants were removed before the last save — drop them.
-  const toRemove = [];
-  for (const botName of botsInState) {
-    if (botName.startsWith('npc-')) continue; // NPCs re-initialized by initNPCs
-    const entry = state.remoteParticipants?.[botName];
-    if (!entry) {
-      toRemove.push(botName);
-      continue;
-    }
-    let appearance = null;
-    if (!isGridGame) {
-      try {
-        const occupation = state.occupations?.[botName]?.title || null;
-        appearance = await generateAppearance(botName, occupation);
-      } catch { /* non-critical */ }
-    }
-    participants.set(botName, { displayName: entry.displayName || botName, appearance });
-    console.log(`[village] Recovery: ${botName} OK (remote)`);
-  }
-
-  // Also restore remote bots that timed out before restart (in remoteParticipants but not in locations)
-  if (state.remoteParticipants && !isGridGame) {
-    for (const [botName, entry] of Object.entries(state.remoteParticipants)) {
-      if (participants.has(botName)) continue;
-      if (botName.startsWith('npc-')) continue;
-      let appearance = null;
-      try {
-        const occupation = state.occupations?.[botName]?.title || null;
-        appearance = await generateAppearance(botName, occupation);
-      } catch { /* non-critical */ }
-      participants.set(botName, { displayName: entry.displayName || botName, appearance });
-      state.locations[gameConfig.spawnLocation].push(botName);
-      console.log(`[village] Recovery: ${botName} restored (re-placed at ${gameConfig.spawnLocation})`);
-    }
-  }
-
-  for (const botName of toRemove) removeBot(botName, 'recovery: not in remoteParticipants');
-
+  const toRemove = await gameAdapter.recoverParticipants(state, participants, gameConfig);
+  for (const botName of (toRemove || [])) removeBot(botName, 'recovery: not in remoteParticipants');
   console.log(`[village] Recovery complete: ${participants.size} active participant(s)`);
 }
 
@@ -442,15 +238,10 @@ function broadcastEvent(event) {
   }
 }
 
-// --- Advance clock (delegated to logic.js) ---
+// --- Advance clock ---
 
 function advanceClock() {
-  if (isGridGame) {
-    state.clock.tick++;
-    state.clock.dayTick = state.clock.tick % gameConfig.raw.dayNight.cycleTicks;
-  } else {
-    advanceClockImpl(state.clock, TICKS_PER_PHASE, gameConfig.phases);
-  }
+  gameAdapter.advanceClock(state, gameConfig, TICKS_PER_PHASE);
 }
 
 // --- Build tick context (shared state passed to game tick modules) ---
@@ -467,14 +258,12 @@ function buildTickContext(tickStart) {
   };
 }
 
-// --- Fast tick (autopilot) ---
+// --- Fast tick (autopilot, grid games only) ---
 
 function fastTick() {
   if (tickInProgress) return;
-
-  if (isGridGame) {
-    if (!state.terrain) return;
-    survivalFastTick(buildTickContext(Date.now()));
+  if (gameAdapter.fastTick) {
+    gameAdapter.fastTick(buildTickContext(Date.now()));
   }
 }
 
@@ -489,12 +278,7 @@ async function tick() {
   try {
     advanceClock();
     const ctx = buildTickContext(tickStart);
-    if (isGridGame) {
-      await survivalTick(ctx);
-    } else {
-      await socialTick(ctx);
-      await runNPCTick(ctx);
-    }
+    await gameAdapter.tick(ctx);
     nextTickAt = ctx.nextTickAt;
   } catch (err) {
     console.error(`[village] Tick error: ${err.message}`);
@@ -559,16 +343,8 @@ const server = createServer(async (req, res) => {
 
     const name = displayName || botName;
 
-    // Generate appearance for social-village bots
-    let appearance = null;
-    if (!isGridGame) {
-      try {
-        const occupation = state.occupations?.[botName]?.title || null;
-        appearance = await generateAppearance(botName, occupation);
-      } catch (err) {
-        console.warn(`[village] Failed to generate appearance for ${botName}: ${err.message}`);
-      }
-    }
+    // Place bot in the game world via adapter
+    const { events, appearance } = await gameAdapter.joinBot(state, botName, name, gameConfig);
 
     participants.set(botName, { displayName: name, appearance });
     failureCounts.delete(botName);
@@ -577,50 +353,8 @@ const server = createServer(async (req, res) => {
     if (!state.remoteParticipants) state.remoteParticipants = {};
     state.remoteParticipants[botName] = { displayName: name, joinedAt: new Date().toISOString() };
 
-    // Place bot in the world
-    if (isGridGame) {
-      if (!state.bots[botName]) {
-        const rng = mulberry32(state.worldSeed + Date.now());
-        const pos = randomEdgeTile(state.terrain, gameConfig.raw.world.width, gameConfig.raw.world.height, gameConfig.raw.world.terrain, rng);
-        state.bots[botName] = {
-          x: pos.x, y: pos.y,
-          health: gameConfig.raw.survival.maxHealth,
-          hunger: 0,
-          inventory: {},
-          equipment: { weapon: null, armor: null, tool: null },
-          alive: true,
-          directive: { intent: 'idle', target: null, fallback: null, x: null, y: null, setAt: 0 },
-          path: null,
-          pathIdx: 0,
-          fastTickStats: { tilesMoved: 0, itemsGathered: [], damageDealt: 0, damageTaken: 0 },
-        };
-        broadcastEvent({
-          type: 'survival_event', bot: botName, displayName: name,
-          action: 'join', x: pos.x, y: pos.y, tick: state.clock.tick,
-        });
-        console.log(`[village] ${botName} spawned at (${pos.x},${pos.y})`);
-      }
-      // Init score for new/rejoining bot
-      if (gameConfig.raw.scoring && state.round) {
-        if (state.round.scores[botName] === undefined) {
-          state.round.scores[botName] = 0;
-        }
-      }
-    } else {
-      const alreadyInLocation = allLocationSlugs().some(loc => (state.locations[loc] || []).includes(botName));
-      if (!alreadyInLocation) {
-        state.locations[gameConfig.spawnLocation].push(botName);
-        broadcastEvent({
-          type: 'movement', bot: botName, displayName: name,
-          action: 'join', location: gameConfig.spawnLocation, tick: state.clock.tick,
-          ...(appearance ? { appearance } : {}),
-        });
-        state.publicLogs[gameConfig.spawnLocation].push({
-          bot: botName, action: 'say',
-          message: `*${name} has joined the village!*`,
-        });
-      }
-    }
+    // Broadcast join events from adapter
+    for (const ev of (events || [])) broadcastEvent(ev);
 
     await saveState();
     console.log(`[village] ${botName} joined (remote, display: ${name})`);
@@ -757,89 +491,8 @@ const server = createServer(async (req, res) => {
     observers.add(observer);
 
     // Send initial state
-    let initData;
-    if (isGridGame) {
-      const dayPhase = getDayPhase(state.clock.tick, gameConfig.raw.dayNight);
-      initData = JSON.stringify({
-        type: 'init',
-        gameType: 'grid',
-        tick: state.clock.tick,
-        dayPhase: dayPhase.name,
-        paused: false,
-        nextTickAt,
-        tickIntervalMs: TICK_INTERVAL_MS,
-        game: {
-          id: gameConfig.raw.id,
-          name: gameConfig.raw.name,
-          version: gameConfig.raw.version,
-        },
-        world: { width: gameConfig.raw.world.width, height: gameConfig.raw.world.height },
-        terrain: state.terrain,
-        bots: Object.fromEntries(
-          Object.entries(state.bots).map(([name, bs]) => [name, {
-            x: bs.x, y: bs.y, health: bs.health, hunger: bs.hunger, alive: bs.alive,
-            equipment: bs.equipment, inventory: bs.inventory,
-            displayName: participants.get(name)?.displayName || name,
-            seenTiles: bs.seenTiles ? Object.keys(bs.seenTiles) : [],
-          }])
-        ),
-        resources: Object.keys(state.tileData)
-          .filter(k => state.tileData[k].resources?.length > 0)
-          .map(k => { const [x, y] = k.split(',').map(Number); return { x, y }; }),
-        recentEvents: (state.recentEvents || []).slice(-20),
-        round: state.round ? {
-          number: state.round.number,
-          ticksRemaining: state.round.ticksRemaining,
-          scores: state.round.scores,
-          roundHistory: state.round.roundHistory,
-        } : null,
-        diplomacy: state.diplomacy || null,
-      });
-    } else {
-      const initVt = getVillageTime(gameConfig.timezone);
-      const initAllLocs = allLocationSlugs();
-      initData = JSON.stringify({
-        type: 'init',
-        gameType: 'social',
-        tick: state.clock.tick,
-        phase: initVt.phase,
-        villageTime: initVt.timeStr,
-        paused: false,
-        nextTickAt,
-        tickIntervalMs: TICK_INTERVAL_MS,
-        game: {
-          id: gameConfig.raw.id,
-          name: gameConfig.raw.name,
-          description: gameConfig.raw.description,
-          version: gameConfig.raw.version,
-        },
-        locations: Object.fromEntries(
-          initAllLocs.map(l => [l, (state.locations[l] || []).map(b => ({
-            name: b, displayName: participants.get(b)?.displayName || b,
-            ...(participants.get(b)?.appearance ? { appearance: participants.get(b).appearance } : {}),
-          }))])
-        ),
-        publicLogs: Object.fromEntries(
-          initAllLocs.filter(l => (state.publicLogs[l] || []).length > 0)
-            .map(l => [l, state.publicLogs[l].map(e => ({
-              ...e,
-              displayName: participants.get(e.bot)?.displayName || e.bot,
-            }))])
-        ),
-        customLocations: state.customLocations || {},
-        occupations: state.occupations || {},
-        governance: state.governance || {},
-        exiles: state.exiles || {},
-        memories: state.memories || {},
-        agendas: state.agendas || {},
-        newsBulletins: state.newsBulletins || [],
-        locationFlavors: Object.fromEntries(
-          Object.entries(gameConfig.raw.locations || {}).map(([k, v]) => [k, v.flavor || ''])
-        ),
-        npcProfiles: getNPCProfiles(),
-      });
-    }
-    res.write(`data: ${initData}\n\n`);
+    const initPayload = gameAdapter.buildSSEInitPayload(state, participants, gameConfig, { nextTickAt, tickIntervalMs: TICK_INTERVAL_MS });
+    res.write(`data: ${JSON.stringify(initPayload)}\n\n`);
 
     // Keepalive
     const keepalive = setInterval(() => {
@@ -859,20 +512,6 @@ const server = createServer(async (req, res) => {
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '50', 10), 200);
 
     // Filter events by current game type so survival events don't show in social UI and vice versa
-    const SURVIVAL_TYPES = new Set(['survival_event', 'survival_tick', 'fast_tick', 'thinking']);
-    const SOCIAL_TYPES = new Set(['action', 'ambient', 'idle', 'autopilot_move']);
-    function matchesGameType(ev) {
-      if (isGridGame) {
-        if (SOCIAL_TYPES.has(ev.type)) return false;
-        // Skip social-format tick events (have 'actions' but no 'botStates')
-        if (ev.type === 'tick' && ev.actions && !ev.botStates) return false;
-      } else {
-        if (SURVIVAL_TYPES.has(ev.type)) return false;
-        // Skip survival-format tick events (have 'botStates' but no 'actions')
-        if (ev.type === 'tick' && ev.botStates && !ev.actions) return false;
-      }
-      return true;
-    }
 
     try {
       // List log files sorted descending (newest first)
@@ -889,7 +528,7 @@ const server = createServer(async (req, res) => {
           try {
             const ev = JSON.parse(lines[i]);
             if (ev.tick !== undefined && ev.tick >= beforeTick) continue;
-            if (!matchesGameType(ev)) continue;
+            if (!gameAdapter.isEventForGame(ev)) continue;
             if (events.length >= limit) { hasMore = true; break outer; }
             events.push(ev);
           } catch { /* skip malformed lines */ }
@@ -1008,10 +647,17 @@ const server = createServer(async (req, res) => {
     const ext = safeName.slice(safeName.lastIndexOf('.'));
     const filePath = join(__dirname, 'games', VILLAGE_GAME, 'assets', safeName);
     try {
-      const data = await readFile(filePath);
+      const [data, fileStat] = await Promise.all([readFile(filePath), stat(filePath)]);
+      const etag = `"${fileStat.mtimeMs.toString(36)}-${fileStat.size.toString(36)}"`;
+      if (req.headers['if-none-match'] === etag) {
+        res.writeHead(304);
+        res.end();
+        return;
+      }
       res.writeHead(200, {
         'Content-Type': MIME[ext] || 'application/octet-stream',
-        'Cache-Control': 'public, max-age=3600',
+        'Cache-Control': 'public, max-age=60',
+        'ETag': etag,
       });
       res.end(data);
     } catch {
@@ -1035,8 +681,8 @@ function startGameLoop() {
   setTimeout(() => tick(), 5000);
   tickTimer = setInterval(() => tick(), TICK_INTERVAL_MS);
 
-  // Fast tick only for grid games (survival)
-  if (isGridGame) {
+  // Fast tick only for games that support it (e.g. survival)
+  if (gameAdapter.hasFastTick) {
     const fastTickMs = gameConfig.raw.autopilot?.fastTickMs || 1000;
     fastTickTimer = setInterval(() => fastTick(), fastTickMs);
     console.log(`[village] Fast tick started: ${fastTickMs}ms interval`);
@@ -1093,10 +739,8 @@ await mkdir(LOGS_DIR, { recursive: true });
 
 await loadState();
 await recoverParticipants();
-if (!isGridGame) {
-  initNPCs(state, participants, gameConfig);
-  probeAPIRouter();
-}
+if (gameAdapter.initNPCsForGame) gameAdapter.initNPCsForGame(state, participants, gameConfig);
+if (gameAdapter.probeAPIRouterForGame) gameAdapter.probeAPIRouterForGame();
 
 server.listen(PORT, '127.0.0.1', () => {
   startTime = Date.now();
