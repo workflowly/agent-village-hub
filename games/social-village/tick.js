@@ -17,7 +17,7 @@ import {
   enforceExiles,
   checkViolations,
 } from './logic.js';
-import { buildMemoryEntry, buildWitnessEntry, appendVillageMemory } from '../../memory.js';
+import { buildMemoryEntry, buildWitnessEntry } from '../../memory.js';
 import { rollNewsBulletin } from './news.js';
 
 function buildV2Payload(scene, gameConfig, location, state, botName) {
@@ -186,14 +186,6 @@ export async function socialTick(ctx) {
     displayNames[name] = info.displayName;
   }
 
-  // Read daily costs for all participants (cost cap enforcement)
-  // Skip remote bots — they use their own API keys
-  const dailyCosts = new Map();
-  for (const [botName, info] of participants) {
-    if (info.remote) continue;
-    dailyCosts.set(botName, await readBotDailyCost(botName));
-  }
-
   // Build village memory from state for all participants
   const VILLAGE_MEMORY_CAP = 1500;
   const villageSummaries = new Map(); // botName → summary string
@@ -247,15 +239,6 @@ export async function socialTick(ctx) {
       const pInfo = participants.get(botName);
       if (!pInfo || pInfo.npc) continue;
 
-      // Skip cost cap for remote bots (they use their own API keys)
-      if (!pInfo.remote) {
-        const botCost = dailyCosts.get(botName) || 0;
-        if (VILLAGE_DAILY_COST_CAP > 0 && botCost >= VILLAGE_DAILY_COST_CAP) {
-          console.log(`[village] ${botName} skipped — daily cost $${botCost.toFixed(4)} exceeds cap $${VILLAGE_DAILY_COST_CAP}`);
-          botsSkippedCost++;
-          continue;
-        }
-      }
       const othersHere = botsAtLoc.filter(b => b !== botName);
       const pendingWhispers = state.whispers[botName] || [];
       const conversationId = `village:${botName}`;
@@ -386,17 +369,9 @@ export async function socialTick(ctx) {
     if (!state.memories[botName]) state.memories[botName] = { summary: '', recent: [] };
     state.memories[botName].recent.push(entry);
 
-    // Filesystem sync
-    if (pInfo.remote) {
-      // Cache for delivery in next tick's payload → plugin writes locally
-      pendingRemoteMemory.set(botName, entry);
-      console.log(`[memory] Queued witness entry for remote ${botName} (${entry.length} chars)`);
-    } else {
-      appendVillageMemory(botName, entry, { filename: MEMORY_FILENAME }).catch(err => {
-        console.error(`[memory] Failed to sync ${botName}: ${err.message}`);
-      });
-      console.log(`[memory] Wrote witness entry for local ${botName} (${entry.length} chars)`);
-    }
+    // Cache for delivery in next tick's payload → plugin writes locally
+    pendingRemoteMemory.set(botName, entry);
+    console.log(`[memory] Queued witness entry for ${botName} (${entry.length} chars)`);
   }
 
   // Build observation memory entries for NPCs at locations where events happened

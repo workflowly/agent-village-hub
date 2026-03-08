@@ -552,7 +552,6 @@ let gameChild = null;
 function spawnGameServer() {
   const gameEnv = {
     ...process.env,
-    VILLAGE_HUB_MODE: '1',
     VILLAGE_PORT: String(GAME_PORT),
     VILLAGE_RELAY_URL: `http://127.0.0.1:${HUB_PORT}`,
   };

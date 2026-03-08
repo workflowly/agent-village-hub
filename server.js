@@ -5,7 +5,7 @@
  * to bots via the portal relay proxy, routes responses, writes village
  * memories, and serves an observer web UI via SSE.
  *
- * Uses Node.js built-ins only. Imports CJS lib/ modules via createRequire.
+ * Uses Node.js built-ins only.
  *
  * Game content is loaded from a JSON schema file via game-loader.js.
  * Set VILLAGE_GAME env var to select a game (default: social-village).
@@ -17,8 +17,6 @@ import { readFile, writeFile, rename, copyFile, mkdir, readdir } from 'node:fs/p
 import { appendFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
-
 import { loadGame } from './game-loader.js';
 import { advanceClock as advanceClockImpl, readBotDailyCost as readBotDailyCostImpl } from './games/social-village/logic.js';
 import { getVillageTime } from './games/social-village/scene.js';
@@ -30,21 +28,6 @@ import { initNPCs, runNPCTick, probeAPIRouter, getNPCProfiles } from './games/so
 import { generateAppearance } from './games/social-village/appearance.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const require = createRequire(import.meta.url);
-
-// --- Standalone mode (village-hub Docker deployment) ---
-// When VILLAGE_HUB_MODE=1, lib/ modules are unavailable (no portal/customers dirs).
-// All bots are remote in this mode; local bot recovery and identity reads are skipped.
-const STANDALONE_MODE = !!process.env.VILLAGE_HUB_MODE;
-
-// --- Import CJS lib modules (only in integrated mode) ---
-let paths = null, villageManager = null, configManager = null, identityManager = null;
-if (!STANDALONE_MODE) {
-  paths = require('../lib/paths');
-  villageManager = require('../lib/village-manager');
-  configManager = require('../lib/config-manager');
-  identityManager = require('../lib/identity-manager');
-}
 
 // --- Load game schema ---
 const VILLAGE_GAME = process.env.VILLAGE_GAME || 'social-village';
@@ -68,7 +51,7 @@ const TICK_INTERVAL_MS = parseInt(process.env.VILLAGE_TICK_INTERVAL || (isGridGa
 const _dataDir = process.env.VILLAGE_DATA_DIR;
 const STATE_FILE = _dataDir ? join(_dataDir, `state-${VILLAGE_GAME}.json`) : join(__dirname, `state-${VILLAGE_GAME}.json`);
 const MEMORY_FILENAME = isGridGame ? 'survival.md' : 'village.md';
-const USAGE_FILE = STANDALONE_MODE ? null : join(paths.PROJECT_DIR, 'api-router', 'usage.json');
+const USAGE_FILE = process.env.VILLAGE_USAGE_FILE || null;
 const LOGS_DIR = _dataDir ? join(_dataDir, 'logs') : join(__dirname, 'logs');
 
 // --- Event log file (JSONL, one file per day) ---
@@ -95,10 +78,9 @@ let startTime = Date.now();
 const observers = new Set(); // { res, botName }
 
 // --- Participants (event-driven, updated by /api/join and /api/leave) ---
-const participants = new Map(); // botName → { port, displayName, appearance? }
+const participants = new Map(); // botName → { displayName, appearance? }
 const failureCounts = new Map(); // botName → consecutive failure count
 const lastMoveTick = new Map();  // botName → tick number of last move (cooldown)
-const MAX_CONSECUTIVE_FAILURES = 3;
 
 // --- Load/Save state ---
 
@@ -353,114 +335,45 @@ async function recoverParticipants() {
   }
 
   console.log(`[village] Recovery: checking ${botsInState.size} bot(s) from state...`);
+
+  // Restore remote participants from state.remoteParticipants.
+  // Bots in state.locations but not in remoteParticipants were removed before the last save — drop them.
   const toRemove = [];
-
-  // First pass: recover local bots via villageManager/configManager (integrated mode only).
-  // In standalone mode all bots are remote; skip this pass entirely.
-  if (!STANDALONE_MODE) for (const botName of botsInState) {
+  for (const botName of botsInState) {
     if (botName.startsWith('npc-')) continue; // NPCs re-initialized by initNPCs
-    try {
-      const village = await villageManager.read(botName);
-      if (!village.enabled) {
-        toRemove.push({ botName, reason: 'village disabled' });
-        continue;
-      }
-
-      const config = await configManager.read(botName);
-      const port = config?.gateway?.port;
-      if (!port) {
-        toRemove.push({ botName, reason: 'no port in config' });
-        continue;
-      }
-
-      // Health check
-      try {
-        await fetch(`http://127.0.0.1:${port}/health`, {
-          signal: AbortSignal.timeout(5000),
-        });
-      } catch {
-        toRemove.push({ botName, reason: 'unreachable' });
-        continue;
-      }
-
-      const identity = await identityManager.read(botName);
-      const displayName = identity?.self?.displayName || botName;
-      let appearance = null;
-      if (!isGridGame) {
-        try {
-          const occupation = state.occupations?.[botName]?.title || null;
-          appearance = await generateAppearance(botName, occupation);
-        } catch { /* non-critical */ }
-      }
-      participants.set(botName, { port, displayName, appearance });
-      console.log(`[village] Recovery: ${botName} OK (port ${port})`);
-    } catch {
-      toRemove.push({ botName, reason: 'error reading config' });
+    const entry = state.remoteParticipants?.[botName];
+    if (!entry) {
+      toRemove.push(botName);
+      continue;
     }
-  }
-
-  // Second pass: check unrecovered bots against state.remoteParticipants
-  const stillUnrecovered = toRemove.filter(({ botName }) => !participants.has(botName));
-  if (stillUnrecovered.length > 0 && state.remoteParticipants) {
-    for (let i = stillUnrecovered.length - 1; i >= 0; i--) {
-      const { botName } = stillUnrecovered[i];
-      const entry = state.remoteParticipants[botName];
-      if (entry) {
-        let remoteAppearance = null;
-        if (!isGridGame) {
-          try {
-            const occupation = state.occupations?.[botName]?.title || null;
-            remoteAppearance = await generateAppearance(botName, occupation);
-          } catch { /* non-critical */ }
-        }
-        participants.set(botName, {
-          port: null,
-          displayName: entry.displayName || botName,
-          remote: true,
-          appearance: remoteAppearance,
-        });
-        stillUnrecovered.splice(i, 1);
-        console.log(`[village] Recovery: ${botName} OK (remote, from remoteParticipants)`);
-      }
-    }
-  }
-
-  // Remove bots that couldn't be recovered locally or remotely
-  for (const { botName, reason } of stillUnrecovered) {
-    removeBot(botName, `recovery: ${reason}`);
-  }
-
-  // Third pass: restore remote bots from remoteParticipants that aren't in state.locations
-  // (e.g. bot timed out before server restart — removed from locations but kept in remoteParticipants)
-  // Also upgrades bots that were recovered as local in the first pass but belong to remoteParticipants —
-  // remoteParticipants is an explicit operator declaration and takes precedence over local container discovery.
-  if (state.remoteParticipants && !isGridGame) {
-    for (const [botName, entry] of Object.entries(state.remoteParticipants)) {
-      if (participants.has(botName)) {
-        // Already recovered as local — upgrade to remote if needed
-        const existing = participants.get(botName);
-        if (!existing.remote) {
-          existing.remote = true;
-          existing.port = null;
-          console.log(`[village] Recovery: ${botName} upgraded to remote (explicit remoteParticipants entry)`);
-        }
-        continue;
-      }
-      let remoteAppearance = null;
+    let appearance = null;
+    if (!isGridGame) {
       try {
         const occupation = state.occupations?.[botName]?.title || null;
-        remoteAppearance = await generateAppearance(botName, occupation);
+        appearance = await generateAppearance(botName, occupation);
       } catch { /* non-critical */ }
-      participants.set(botName, {
-        port: null,
-        displayName: entry.displayName || botName,
-        remote: true,
-        appearance: remoteAppearance,
-      });
+    }
+    participants.set(botName, { displayName: entry.displayName || botName, appearance });
+    console.log(`[village] Recovery: ${botName} OK (remote)`);
+  }
+
+  // Also restore remote bots that timed out before restart (in remoteParticipants but not in locations)
+  if (state.remoteParticipants && !isGridGame) {
+    for (const [botName, entry] of Object.entries(state.remoteParticipants)) {
+      if (participants.has(botName)) continue;
+      if (botName.startsWith('npc-')) continue;
+      let appearance = null;
+      try {
+        const occupation = state.occupations?.[botName]?.title || null;
+        appearance = await generateAppearance(botName, occupation);
+      } catch { /* non-critical */ }
+      participants.set(botName, { displayName: entry.displayName || botName, appearance });
       state.locations[gameConfig.spawnLocation].push(botName);
-      console.log(`[village] Recovery: ${botName} restored (remote, re-placed at ${gameConfig.spawnLocation})`);
+      console.log(`[village] Recovery: ${botName} restored (re-placed at ${gameConfig.spawnLocation})`);
     }
   }
+
+  for (const botName of toRemove) removeBot(botName, 'recovery: not in remoteParticipants');
 
   console.log(`[village] Recovery complete: ${participants.size} active participant(s)`);
 }
@@ -497,9 +410,7 @@ async function sendSceneRemote(botName, conversationId, payload) {
 function trackFailure(botName) {
   const count = (failureCounts.get(botName) || 0) + 1;
   failureCounts.set(botName, count);
-  const isRemote = participants.get(botName)?.remote;
-  const limit = isRemote ? MAX_CONSECUTIVE_FAILURES_REMOTE : MAX_CONSECUTIVE_FAILURES;
-  if (count >= limit) {
+  if (count >= MAX_CONSECUTIVE_FAILURES_REMOTE) {
     console.warn(`[village] ${botName} failed ${count} consecutive times — auto-removing`);
     removeBot(botName, `${count} consecutive failures`);
   }
@@ -633,10 +544,10 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    const { botName, port, displayName, remote } = body || {};
-    if (!botName || (!port && !remote)) {
+    const { botName, displayName } = body || {};
+    if (!botName) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Missing botName or port' }));
+      res.end(JSON.stringify({ error: 'Missing botName' }));
       return;
     }
 
@@ -646,28 +557,7 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    // Health-check the bot before accepting (skip for remote bots)
-    if (!remote) {
-      try {
-        await fetch(`http://127.0.0.1:${port}/health`, {
-          signal: AbortSignal.timeout(5000),
-        });
-      } catch {
-        res.writeHead(503, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Bot unreachable' }));
-        return;
-      }
-    }
-
-    // For local bots, always read identity.json on the server to get the correct display name
-    // (the plugin may send the system name if identity.json wasn't ready at activation time)
-    let name = displayName || botName;
-    if (!remote && !STANDALONE_MODE) {
-      try {
-        const identity = await identityManager.read(botName);
-        if (identity?.self?.displayName) name = identity.self.displayName;
-      } catch { /* use what was provided */ }
-    }
+    const name = displayName || botName;
 
     // Generate appearance for social-village bots
     let appearance = null;
@@ -680,17 +570,12 @@ const server = createServer(async (req, res) => {
       }
     }
 
-    // Add to participants map
-    participants.set(botName, remote
-      ? { port: null, displayName: name, remote: true, appearance }
-      : { port, displayName: name, appearance });
+    participants.set(botName, { displayName: name, appearance });
     failureCounts.delete(botName);
 
-    // Persist remote participant for recovery across server restarts
-    if (remote) {
-      if (!state.remoteParticipants) state.remoteParticipants = {};
-      state.remoteParticipants[botName] = { displayName: name, joinedAt: new Date().toISOString() };
-    }
+    // Persist for recovery across server restarts
+    if (!state.remoteParticipants) state.remoteParticipants = {};
+    state.remoteParticipants[botName] = { displayName: name, joinedAt: new Date().toISOString() };
 
     // Place bot in the world
     if (isGridGame) {
@@ -738,7 +623,7 @@ const server = createServer(async (req, res) => {
     }
 
     await saveState();
-    console.log(`[village] ${botName} joined (${remote ? 'remote' : `port ${port}`}, display: ${name})`);
+    console.log(`[village] ${botName} joined (remote, display: ${name})`);
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({

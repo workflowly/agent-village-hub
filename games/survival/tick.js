@@ -5,9 +5,6 @@
  * context object built by the orchestrator.
  */
 
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { createRequire } from 'node:module';
 
 import { buildSurvivalScene, getDayPhase } from './scene.js';
 import { generateWorld, mulberry32, respawnResources } from './world.js';
@@ -26,8 +23,7 @@ import {
   getBountyBot,
 } from './logic.js';
 import { runFastTick } from './autopilot.js';
-import { appendVillageMemory, buildMemoryEntry } from '../../memory.js';
-import { needsSummarization, summarizeVillageMemory } from '../../summarize.js';
+import { buildMemoryEntry } from '../../memory.js';
 
 function buildV2Payload(scene, gameConfig) {
   return {
@@ -39,9 +35,6 @@ function buildV2Payload(scene, gameConfig) {
     maxActions: gameConfig.raw.maxActions || 2,
   };
 }
-
-const require = createRequire(import.meta.url);
-const paths = require('../../../lib/paths');
 
 /**
  * Fast tick — autopilot movement/gathering between slow ticks.
@@ -194,13 +187,6 @@ export async function survivalTick(ctx) {
     state.diplomacy = { alliances: {}, proposals: {}, betrayals: [] };
   }
 
-  // Read daily costs for cost cap enforcement
-  const dailyCosts = new Map();
-  for (const [botName, info] of participants) {
-    if (info.remote) continue;
-    dailyCosts.set(botName, await readBotDailyCost(botName));
-  }
-
   // 1. Tick survival (hunger/health drain)
   const survivalEvents = tickSurvival(state.bots, gameConfig.raw.survival);
   const allEvents = [...survivalEvents];
@@ -227,45 +213,16 @@ export async function survivalTick(ctx) {
     console.log(`[village] ${respawned.length} tiles respawned resources`);
   }
 
-  // 4. Read village memory summaries
-  const VILLAGE_MEMORY_CAP = 1500;
-  const villageSummaries = new Map();
-  for (const [botName, info] of participants) {
-    if (info.remote) continue;
-    try {
-      const memPath = join(paths.memoryDir(botName), MEMORY_FILENAME);
-      const content = await readFile(memPath, 'utf-8');
-      const start = content.indexOf('## Village History (summarized)');
-      if (start !== -1) {
-        const afterHeader = content.indexOf('\n', start);
-        const nextSection = content.indexOf('\n## ', afterHeader + 1);
-        const summaryText = nextSection !== -1
-          ? content.slice(afterHeader + 1, nextSection).trim()
-          : content.slice(afterHeader + 1).trim();
-        if (summaryText) {
-          villageSummaries.set(botName, summaryText.slice(0, VILLAGE_MEMORY_CAP));
-        }
-      }
-    } catch { /* no memory file or no summary yet */ }
-  }
-
-  // 5. Build scenes per bot and send in parallel
+  // 4. Build scenes per bot and send in parallel
   const allSceneRequests = [];
   let botsSent = 0;
   let botsResponded = 0;
-  let botsSkippedCost = 0;
   let errors = 0;
 
   // Filter visible events per bot (events near them)
   for (const [botName, botState] of Object.entries(state.bots)) {
     if (!botState.alive) continue;
     if (!participants.has(botName)) continue;
-
-    const botCost = dailyCosts.get(botName) || 0;
-    if (VILLAGE_DAILY_COST_CAP > 0 && botCost >= VILLAGE_DAILY_COST_CAP) {
-      botsSkippedCost++;
-      continue;
-    }
 
     // Filter recent events to ones near this bot
     const visibleEvents = allEvents.filter(ev => {
@@ -284,7 +241,7 @@ export async function survivalTick(ctx) {
       gameConfig,
       currentTick: tickNum,
       recentEvents: [...(state.recentEvents || []).slice(-10), ...visibleEvents],
-      villageSummary: villageSummaries.get(botName) || '',
+      villageSummary: '',
       isScout: false,
       fastTickStats: botState.fastTickStats || null,
       round: state.round || null,
@@ -448,53 +405,12 @@ export async function survivalTick(ctx) {
   // Cap recentEvents at 50
   state.recentEvents = allEvents.slice(-50);
 
-  // 8. Write memories per bot
-  const timestamp = new Date().toISOString();
-  for (const [botName, botState] of Object.entries(state.bots)) {
-    if (!participants.has(botName)) continue;
-    if (participants.get(botName).remote) continue;
-
-    const botEvents = allEvents.filter(ev => {
-      if (ev.bot === botName) return true;
-      if (ev.x !== undefined && ev.y !== undefined) {
-        const dist = Math.sqrt(Math.pow(botState.x - ev.x, 2) + Math.pow(botState.y - ev.y, 2));
-        return dist <= 10;
-      }
-      // Death/respawn are global knowledge; say is proximity-only (handled by x,y check above)
-      return ev.action === 'death' || ev.action === 'respawn';
-    });
-
-    if (botEvents.length > 0) {
-      try {
-        const entry = buildMemoryEntry({
-          location: `(${botState.x},${botState.y})`,
-          timestamp,
-          events: botEvents,
-          botName,
-        });
-        if (entry.trim()) {
-          await appendVillageMemory(botName, entry, { filename: MEMORY_FILENAME });
-        }
-      } catch (err) {
-        console.error(`[village] Failed to write memory for ${botName}: ${err.message}`);
-      }
-    }
-  }
-
-  // Summarize oversized memory files
-  for (const [botName, info] of participants) {
-    if (info.remote) continue;
-    needsSummarization(botName, { filename: MEMORY_FILENAME }).then(needed => {
-      if (needed) summarizeVillageMemory(botName, { filename: MEMORY_FILENAME });
-    }).catch(() => {});
-  }
-
-  // 9. Save state
+  // 8. Save state
   await saveState();
 
   // Tick summary
   const duration = Math.round((Date.now() - tickStart) / 1000);
-  const costStr = botsSkippedCost > 0 ? ` costSkipped=${botsSkippedCost}` : '';
+  const costStr = '';
   console.log(
     `[village] tick=${tickNum} phase=${dayPhase.name} duration=${duration}s ` +
     `bots=${botsResponded}/${botsSent} events=${allEvents.length} errors=${errors}${costStr}`

@@ -1,51 +1,14 @@
 /**
- * Village memory writer — appends entries to each bot's village.md.
+ * Village memory builder — formats memory entries for each bot's village.md.
  *
  * Each bot's village.md reflects their view of village interactions:
  * public messages, their own whispers, whispers to them, movements.
  * No leaked whispers between other bots.
- */
-
-import { createRequire } from 'node:module';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
-
-const require = createRequire(import.meta.url);
-const paths = require('../lib/paths');
-
-/**
- * Append a village memory entry for a specific bot.
  *
- * @param {string} botName - System name of the bot
- * @param {string} entry - Formatted memory entry (markdown)
- * @param {object} [opts]
- * @param {string} [opts.filename='village.md'] - Memory filename (e.g. 'survival.md')
+ * All bots are remote — memory entries are queued server-side and delivered
+ * to the plugin via the scene payload (pendingRemoteMemory). The plugin writes
+ * them to disk locally.
  */
-export async function appendVillageMemory(botName, entry, { filename = 'village.md' } = {}) {
-  const memDir = paths.memoryDir(botName);
-  const filePath = join(memDir, filename);
-
-  // Ensure memory directory exists
-  try {
-    await mkdir(memDir, { recursive: true });
-  } catch { /* exists */ }
-
-  let existing = '';
-  try {
-    existing = await readFile(filePath, 'utf-8');
-  } catch { /* new file */ }
-
-  const content = existing + (existing && !existing.endsWith('\n') ? '\n' : '') + entry + '\n';
-
-  await writeFile(filePath, content);
-
-  // chown for customer bots (UID 1000)
-  if (!paths.isAdminBot(botName)) {
-    try {
-      await paths.chown(filePath);
-    } catch { /* best effort */ }
-  }
-}
 
 /**
  * Build a witness memory entry — always produces an entry capturing what the bot
