@@ -46,10 +46,10 @@ describe('relay → waiter path (poll waiting when relay arrives)', () => {
   });
 });
 
-// ─── relay + queue path ───────────────────────────────────────────────────────
+// ─── relay + payload path (relay arrives before poll) ────────────────────────
 
-describe('relay → queue path (relay arrives before poll)', () => {
-  it('relay queues scene; subsequent poll returns immediately', async () => {
+describe('relay → payload path (relay arrives before poll)', () => {
+  it('relay stores payload; subsequent poll returns immediately', async () => {
     const t = new RelayTransport();
 
     // Relay before any poll
@@ -81,6 +81,18 @@ describe('timeouts', () => {
   it('poll returns null after timeout (no relay arrives)', async () => {
     const t = new RelayTransport();
     const { promise } = t.poll('ghost2', 50);
+    const result = await promise;
+    expect(result).toBeNull();
+  });
+
+  it('relay timeout destroys payload — bot gets nothing on next poll', async () => {
+    const t = new RelayTransport();
+    // Relay with very short timeout — expires before bot polls
+    const relayPromise = t.relay('late-bot', { conversationId: 'c-late', scene: 'stale' }, 50);
+    await relayPromise;  // null (timed out)
+
+    // Bot polls now — should get nothing (relay and its payload are gone)
+    const { promise } = t.poll('late-bot', 100);
     const result = await promise;
     expect(result).toBeNull();
   });
