@@ -32,11 +32,19 @@ import { generateAppearance } from './games/social-village/appearance.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 
-// --- Import CJS lib modules ---
-const paths = require('../lib/paths');
-const villageManager = require('../lib/village-manager');
-const configManager = require('../lib/config-manager');
-const identityManager = require('../lib/identity-manager');
+// --- Standalone mode (village-hub Docker deployment) ---
+// When VILLAGE_HUB_MODE=1, lib/ modules are unavailable (no portal/customers dirs).
+// All bots are remote in this mode; local bot recovery and identity reads are skipped.
+const STANDALONE_MODE = !!process.env.VILLAGE_HUB_MODE;
+
+// --- Import CJS lib modules (only in integrated mode) ---
+let paths = null, villageManager = null, configManager = null, identityManager = null;
+if (!STANDALONE_MODE) {
+  paths = require('../lib/paths');
+  villageManager = require('../lib/village-manager');
+  configManager = require('../lib/config-manager');
+  identityManager = require('../lib/identity-manager');
+}
 
 // --- Load game schema ---
 const VILLAGE_GAME = process.env.VILLAGE_GAME || 'social-village';
@@ -52,15 +60,16 @@ const VILLAGE_DAILY_COST_CAP = parseFloat(process.env.VILLAGE_DAILY_COST_CAP || 
 const MAX_PUBLIC_LOG_DEPTH = parseInt(process.env.VILLAGE_MAX_LOG_DEPTH || '20', 10);
 const REMOTE_SCENE_TIMEOUT_MS = 120_000;
 const MAX_CONSECUTIVE_FAILURES_REMOTE = 5;
-const PORTAL_URL = 'http://127.0.0.1:3000';
+const PORTAL_URL = process.env.VILLAGE_RELAY_URL || 'http://127.0.0.1:3000';
 const EMPTY_CLEAR_TICKS = 3;
 
 const isGridGame = gameConfig.isGridGame;
 const TICK_INTERVAL_MS = parseInt(process.env.VILLAGE_TICK_INTERVAL || (isGridGame ? '45000' : '120000'), 10);
-const STATE_FILE = join(__dirname, `state-${VILLAGE_GAME}.json`);
+const _dataDir = process.env.VILLAGE_DATA_DIR;
+const STATE_FILE = _dataDir ? join(_dataDir, `state-${VILLAGE_GAME}.json`) : join(__dirname, `state-${VILLAGE_GAME}.json`);
 const MEMORY_FILENAME = isGridGame ? 'survival.md' : 'village.md';
-const USAGE_FILE = join(paths.PROJECT_DIR, 'api-router', 'usage.json');
-const LOGS_DIR = join(__dirname, 'logs');
+const USAGE_FILE = STANDALONE_MODE ? null : join(paths.PROJECT_DIR, 'api-router', 'usage.json');
+const LOGS_DIR = _dataDir ? join(_dataDir, 'logs') : join(__dirname, 'logs');
 
 // --- Event log file (JSONL, one file per day) ---
 let logDate = '';   // 'YYYY-MM-DD'
@@ -346,7 +355,9 @@ async function recoverParticipants() {
   console.log(`[village] Recovery: checking ${botsInState.size} bot(s) from state...`);
   const toRemove = [];
 
-  for (const botName of botsInState) {
+  // First pass: recover local bots via villageManager/configManager (integrated mode only).
+  // In standalone mode all bots are remote; skip this pass entirely.
+  if (!STANDALONE_MODE) for (const botName of botsInState) {
     if (botName.startsWith('npc-')) continue; // NPCs re-initialized by initNPCs
     try {
       const village = await villageManager.read(botName);
@@ -651,7 +662,7 @@ const server = createServer(async (req, res) => {
     // For local bots, always read identity.json on the server to get the correct display name
     // (the plugin may send the system name if identity.json wasn't ready at activation time)
     let name = displayName || botName;
-    if (!remote) {
+    if (!remote && !STANDALONE_MODE) {
       try {
         const identity = await identityManager.read(botName);
         if (identity?.self?.displayName) name = identity.self.displayName;

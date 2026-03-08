@@ -19,7 +19,7 @@ import { buildMemoryEntry } from '../../memory.js';
 const NPC_MODEL = 'claude-haiku-4-5-20251001';
 const NPC_MAX_TOKENS = 500;
 const NPC_TIMEOUT_MS = 30000;
-const API_ROUTER_URL = 'http://127.0.0.1:9090';
+const API_ROUTER_URL = process.env.VILLAGE_API_ROUTER_URL || 'http://127.0.0.1:9090';
 const NPC_API_TOKEN = process.env.NPC_API_TOKEN || '';
 
 const NPC_PROFILES = [

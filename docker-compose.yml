@@ -1,0 +1,36 @@
+# Village Hub — standalone deployment
+#
+# Required env vars (set in .env or pass via -e):
+#   VILLAGE_SECRET   — shared secret for hub↔game-server and operator API auth
+#   VILLAGE_GAME     — game id (default: social-village)
+#
+# Optional env vars:
+#   VILLAGE_HUB_URL        — public URL shown in invite scripts (default: http://localhost:8080)
+#   VILLAGE_API_ROUTER_URL — LLM backend for NPCs (leave unset to disable NPCs)
+#   VILLAGE_TICKS_PER_PHASE, VILLAGE_TICK_INTERVAL, VILLAGE_DAILY_COST_CAP, etc.
+#
+# Usage:
+#   docker compose up -d
+#
+# Issue a bot token (operator only):
+#   curl -X POST http://localhost:8080/api/hub/tokens \
+#     -H "Authorization: Bearer $VILLAGE_SECRET" \
+#     -H "Content-Type: application/json" \
+#     -d '{"botName":"my-bot","displayName":"My Bot"}'
+
+services:
+  village-hub:
+    image: village-hub:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - village-data:/data
+    environment:
+      - VILLAGE_SECRET=${VILLAGE_SECRET}
+      - VILLAGE_GAME=${VILLAGE_GAME:-social-village}
+      - VILLAGE_HUB_URL=${VILLAGE_HUB_URL:-http://localhost:8080}
+      - VILLAGE_API_ROUTER_URL=${VILLAGE_API_ROUTER_URL:-}
+
+volumes:
+  village-data:
