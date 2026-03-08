@@ -277,12 +277,38 @@ export async function socialTick(ctx) {
     }
   }
 
-  // Send all scenes across all locations in parallel
+  // Send all scenes across all locations in parallel, tracking per-bot delivery
+  const botDetails = []; // for dev console tick_detail event
+
   const allResults = await Promise.all(
     allSceneRequests.map(async ({ botName, conversationId, payload, loc }) => {
       botsSent++;
+      const pInfo = participants.get(botName);
+      const payloadJson = JSON.stringify(payload);
+      const detail = {
+        name: botName,
+        displayName: displayNames[botName],
+        location: loc,
+        isRemote: !!pInfo?.remote,
+        payloadSize: payloadJson.length,
+        toolCount: (payload.tools || []).length,
+        hasAgenda: !!payload.agenda,
+        hasMemoryEntry: !!payload.memoryEntry,
+        payload, // full v2 payload for dev console
+        deliveryMs: 0,
+        deliveryStatus: 'ok',
+        actions: [],
+        error: null,
+      };
+      const t0 = Date.now();
       const response = await sendSceneRemote(botName, conversationId, payload);
-      return { botName, response, loc };
+      detail.deliveryMs = Date.now() - t0;
+      if (!response || !response.actions) {
+        detail.deliveryStatus = detail.deliveryMs >= 55000 ? 'timeout' : 'error';
+        detail.error = detail.deliveryStatus;
+      }
+      botDetails.push(detail);
+      return { botName, response, loc, detail };
     })
   );
 
@@ -292,7 +318,7 @@ export async function socialTick(ctx) {
   }
 
   // Process all responses after everyone has responded
-  for (const { botName, response, loc } of allResults) {
+  for (const { botName, response, loc, detail } of allResults) {
     delete state.whispers[botName];
 
     if (!response || !response.actions) {
@@ -305,6 +331,10 @@ export async function socialTick(ctx) {
       lastMoveTick, tick: tickNum, validLocations: gameConfig.locationSlugs, gameConfig,
     });
     allEvents.get(loc).push(...events);
+
+    // Capture actions for dev console — both raw bot response and processed events
+    detail.rawActions = response.actions;
+    detail.actions = events.map(ev => ({ tool: ev.action, ...(ev.message ? { message: ev.message } : {}), ...(ev.target ? { target: ev.target } : {}) }));
 
     for (const ev of events) {
       if (actionCounts[ev.action] !== undefined) actionCounts[ev.action]++;
@@ -326,6 +356,15 @@ export async function socialTick(ctx) {
       });
     }
   }
+
+  // Broadcast detailed per-bot tick info for dev console
+  broadcastEvent({
+    type: 'tick_detail',
+    tick: tickNum,
+    phase,
+    timestamp: new Date().toISOString(),
+    bots: botDetails,
+  });
 
   // Check for constitutional violations
   const violations = await checkViolations(state, tickNum);
@@ -433,7 +472,7 @@ export async function socialTick(ctx) {
   );
 
   // Broadcast tick summary to observers
-  ctx.nextTickAt = Date.now() + TICK_INTERVAL_MS;
+  ctx.nextTickAt = ctx.tickStart + TICK_INTERVAL_MS;
   broadcastEvent({
     type: 'tick',
     tick: tickNum,
@@ -458,5 +497,6 @@ export async function socialTick(ctx) {
     memories: state.memories || {},
     agendas: state.agendas || {},
     newsBulletins: state.newsBulletins || [],
+    villageCosts: state.villageCosts || {},
   });
 }

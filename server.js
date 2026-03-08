@@ -13,6 +13,7 @@
 
 import { createServer } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { readFile, writeFile, rename, copyFile, mkdir, readdir, stat } from 'node:fs/promises';
 import { appendFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
@@ -235,9 +236,19 @@ function trackFailure(botName) {
   }
 }
 
+// --- Recent tick_detail ring buffer for dev console bootstrap ---
+const RECENT_TICK_DETAILS_CAP = 20;
+const recentTickDetails = []; // newest first
+
 // --- Broadcast to observers ---
 
 function broadcastEvent(event) {
+  // Capture tick_detail events in ring buffer
+  if (event.type === 'tick_detail') {
+    recentTickDetails.unshift(event);
+    if (recentTickDetails.length > RECENT_TICK_DETAILS_CAP) recentTickDetails.pop();
+  }
+
   const data = JSON.stringify(event);
   for (const obs of observers) {
     try {
@@ -298,6 +309,16 @@ async function tick() {
 
   try {
     advanceClock();
+    nextTickAt = tickStart + TICK_INTERVAL_MS;
+    broadcastEvent({
+      type: 'tick_start',
+      tick: state.clock.tick,
+      phase: state.clock.phase,
+      timestamp: new Date().toISOString(),
+      bots: [...participants.keys()],
+      relayTimeoutMs: REMOTE_SCENE_TIMEOUT_MS,
+      nextTickAt,
+    });
     const ctx = buildTickContext(tickStart);
     await gameAdapter.tick(ctx);
     nextTickAt = ctx.nextTickAt;
@@ -510,8 +531,14 @@ const server = createServer(async (req, res) => {
     const observer = { res, botName: 'observer' };
     observers.add(observer);
 
-    // Send initial state
+    // Send initial state (include tickInProgress so late-joining clients know)
     const initPayload = gameAdapter.buildSSEInitPayload(state, participants, gameConfig, { nextTickAt, tickIntervalMs: TICK_INTERVAL_MS });
+    initPayload.tickInProgress = tickInProgress;
+    if (tickInProgress) {
+      initPayload.tickStartBots = [...participants.keys()];
+      initPayload.relayTimeoutMs = REMOTE_SCENE_TIMEOUT_MS;
+      initPayload.nextTickAt = nextTickAt;
+    }
     res.write(`data: ${JSON.stringify(initPayload)}\n\n`);
 
     // Keepalive
@@ -590,7 +617,7 @@ const server = createServer(async (req, res) => {
 
       html = html.replace(/^import\s+\{([^}]+)\}\s+from\s+'\.\/assets\/([^'?]+)(?:\?[^']*)?';\s*$/gm, (match, imports, filename) => {
         try {
-          let code = require('fs').readFileSync(join(assetsDir, filename), 'utf-8');
+          let code = readFileSync(join(assetsDir, filename), 'utf-8');
           const modVar = '_mod_' + filename.replace(/[^a-zA-Z0-9]/g, '_');
           moduleResults[filename] = modVar;
 
@@ -656,6 +683,102 @@ const server = createServer(async (req, res) => {
     } catch {
       res.writeHead(404);
       res.end('Not found');
+    }
+    return;
+  }
+
+  // Dev console
+  if (path === '/dev') {
+    try {
+      const html = await readFile(join(__dirname, 'games', VILLAGE_GAME, 'dev-console.html'), 'utf-8');
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(html);
+    } catch {
+      res.writeHead(404);
+      res.end('Not found');
+    }
+    return;
+  }
+
+  // Dev transport events — proxy pushes relay/poll/respond events here for SSE broadcast
+  if (path === '/api/dev/transport' && req.method === 'POST') {
+    if (!validateVillageSecret(req)) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+      return;
+    }
+    try {
+      const body = await readJsonBody(req);
+      broadcastEvent({ type: 'transport', ...body, timestamp: new Date().toISOString() });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('{"ok":true}');
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Bad request' }));
+    }
+    return;
+  }
+
+  // Dev recent ticks — serve ring buffer of recent tick_detail events for bootstrap
+  if (path === '/api/dev/recent-ticks') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, ticks: recentTickDetails }));
+    return;
+  }
+
+  // Dev hub status — proxy to portal's hub-status endpoint
+  if (path === '/api/dev/hub-status') {
+    try {
+      const resp = await fetch(`${PORTAL_URL}/api/village/hub-status`, {
+        headers: { 'Authorization': `Bearer ${VILLAGE_SECRET}` },
+        signal: AbortSignal.timeout(5_000),
+      });
+      const data = await resp.json();
+      res.writeHead(resp.status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(data));
+    } catch {
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Portal unreachable' }));
+    }
+    return;
+  }
+
+  // Dev server meta — expose server internals for dev console
+  if (path === '/api/dev/server-meta') {
+    const failures = {};
+    for (const [name, count] of failureCounts) failures[name] = count;
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      ok: true,
+      uptime: Math.round((Date.now() - startTime) / 1000),
+      tick: state.clock.tick,
+      phase: state.clock.phase,
+      tickIntervalMs: TICK_INTERVAL_MS,
+      relayTimeoutMs: REMOTE_SCENE_TIMEOUT_MS,
+      maxConsecutiveFailures: MAX_CONSECUTIVE_FAILURES_REMOTE,
+      dailyCostCap: VILLAGE_DAILY_COST_CAP,
+      game: { id: gameConfig.raw.id, name: gameConfig.raw.name, version: gameConfig.raw.version },
+      observers: observers.size,
+      participants: participants.size,
+      failureCounts: failures,
+      villageCosts: state.villageCosts || {},
+    }));
+    return;
+  }
+
+  // Dev health proxy — fetch bot health from portal proxy
+  if (path === '/api/dev/health') {
+    try {
+      const resp = await fetch(`${PORTAL_URL}/api/village/health`, {
+        headers: { 'Authorization': `Bearer ${VILLAGE_SECRET}` },
+        signal: AbortSignal.timeout(5_000),
+      });
+      const data = await resp.json();
+      res.writeHead(resp.status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(data));
+    } catch {
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Portal unreachable' }));
     }
     return;
   }
