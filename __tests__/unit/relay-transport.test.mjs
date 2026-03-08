@@ -25,8 +25,8 @@ describe('relay → waiter path (poll waiting when relay arrives)', () => {
     expect(scene.conversationId).toBe('c1');
     expect(scene.scene).toBe('hello');
 
-    // Bot responds
-    const result = t.respond(scene.requestId, 'alice', [{ tool: 'village_observe', params: {} }], null);
+    // Bot responds — botName first, requestId second
+    const result = t.respond('alice', scene.requestId, [{ tool: 'village_observe', params: {} }], null);
     expect(result.ok).toBe(true);
 
     // Relay resolves with the actions
@@ -40,7 +40,7 @@ describe('relay → waiter path (poll waiting when relay arrives)', () => {
     const { promise } = t.poll('alice', 2000);
     const relayPromise = t.relay('alice', { conversationId: 'c2', scene: 's' }, 2000);
     const scene = await promise;
-    t.respond(scene.requestId, 'alice', [{ tool: 'village_move', params: {} }], { inputTokens: 100, outputTokens: 50 });
+    t.respond('alice', scene.requestId, [{ tool: 'village_move', params: {} }], { inputTokens: 100, outputTokens: 50 });
     const resp = await relayPromise;
     expect(resp.usage).toEqual({ inputTokens: 100, outputTokens: 50 });
   });
@@ -64,7 +64,7 @@ describe('relay → queue path (relay arrives before poll)', () => {
     expect(Date.now() - t0).toBeLessThan(200);  // immediate, not long-polled
     expect(scene.scene).toBe('queued');
 
-    t.respond(scene.requestId, 'bob', [{ tool: 'village_observe', params: {} }]);
+    t.respond('bob', scene.requestId, [{ tool: 'village_observe', params: {} }]);
     await relayPromise;
   });
 });
@@ -118,7 +118,7 @@ describe('cancel', () => {
     expect(r2).not.toBeNull();
     expect(r2.scene).toBe('for-p2');
 
-    t.respond(r2.requestId, 'dave', []);
+    t.respond('dave', r2.requestId, []);
     await relayPromise;
   });
 });
@@ -142,7 +142,7 @@ describe('duplicate poll', () => {
     const r2 = await p2;
     expect(r2.scene).toBe('for-p2');
 
-    t.respond(r2.requestId, 'eve', [{ tool: 'village_observe', params: {} }]);
+    t.respond('eve', r2.requestId, [{ tool: 'village_observe', params: {} }]);
     await relayPromise;
   });
 });
@@ -150,25 +150,37 @@ describe('duplicate poll', () => {
 // ─── respond error cases ──────────────────────────────────────────────────────
 
 describe('respond — error cases', () => {
-  it('unknown requestId → { ok: false, error: "not_found" }', () => {
+  it('no pending relay for bot → { ok: false, error: "not_found" }', () => {
     const t = new RelayTransport();
-    const result = t.respond('vr_0_0000_expired', 'anyone', []);
+    const result = t.respond('nobody', 'vr_0_0000_expired', []);
     expect(result.ok).toBe(false);
     expect(result.error).toBe('not_found');
   });
 
-  it('wrong bot → { ok: false, error: "wrong_bot" }', async () => {
+  it('stale requestId → { ok: false, error: "stale_request" }', async () => {
     const t = new RelayTransport();
     const { promise } = t.poll('frank', 2000);
     const relayPromise = t.relay('frank', { conversationId: 'c7', scene: 's' }, 2000);
-    const scene = await promise;
+    await promise;
 
-    const result = t.respond(scene.requestId, 'eve-the-impostor', []);
+    // Wrong requestId for frank's pending relay
+    const result = t.respond('frank', 'vr_stale_old_id', []);
     expect(result.ok).toBe(false);
-    expect(result.error).toBe('wrong_bot');
+    expect(result.error).toBe('stale_request');
 
-    // Clean up
-    t.respond(scene.requestId, 'frank', []);
+    // Clean up with no requestId (skips check)
+    t.respond('frank', undefined, []);
+    await relayPromise;
+  });
+
+  it('omitting requestId skips the stale check', async () => {
+    const t = new RelayTransport();
+    const { promise } = t.poll('grace2', 2000);
+    const relayPromise = t.relay('grace2', { conversationId: 'cx', scene: 's' }, 2000);
+    await promise;
+
+    const result = t.respond('grace2', undefined, []);
+    expect(result.ok).toBe(true);
     await relayPromise;
   });
 
@@ -177,7 +189,7 @@ describe('respond — error cases', () => {
     const { promise } = t.poll('grace', 2000);
     const relayPromise = t.relay('grace', { conversationId: 'c8', scene: 's' }, 2000);
     const scene = await promise;
-    t.respond(scene.requestId, 'grace', null);
+    t.respond('grace', scene.requestId, null);
     const resp = await relayPromise;
     expect(resp.actions).toEqual([{ tool: 'village_observe', params: {} }]);
   });
@@ -187,7 +199,7 @@ describe('respond — error cases', () => {
     const { promise } = t.poll('henry', 2000);
     const relayPromise = t.relay('henry', { conversationId: 'c9', scene: 's' }, 2000);
     const scene = await promise;
-    t.respond(scene.requestId, 'henry', []);
+    t.respond('henry', scene.requestId, []);
     const resp = await relayPromise;
     // [] is truthy — kept as empty array, not replaced with default
     expect(resp.actions).toEqual([]);
@@ -235,8 +247,8 @@ describe('multiple bots', () => {
     expect(s1.scene).toBe('scene-for-bot1');
     expect(s2.scene).toBe('scene-for-bot2');
 
-    t.respond(s1.requestId, 'bot1', [{ tool: 'village_observe', params: {} }]);
-    t.respond(s2.requestId, 'bot2', [{ tool: 'village_move', params: { direction: 'north' } }]);
+    t.respond('bot1', s1.requestId, [{ tool: 'village_observe', params: {} }]);
+    t.respond('bot2', s2.requestId, [{ tool: 'village_move', params: { direction: 'north' } }]);
 
     const [r1, r2] = await Promise.all([relay1, relay2]);
     expect(r1.actions[0].tool).toBe('village_observe');
@@ -257,7 +269,7 @@ describe('multiple bots', () => {
     // bot3 responds to clean up
     const { promise: p3 } = t.poll('bot3', 2000);
     const s3 = await p3;
-    t.respond(s3.requestId, 'bot3', []);
+    t.respond('bot3', s3.requestId, []);
     await relayPromise;
   });
 });
@@ -274,7 +286,7 @@ describe('requestId', () => {
       const rp = t.relay(`unique-bot-${i}`, { conversationId: `c${i}`, scene: `s${i}` }, 2000);
       const scene = await promise;
       ids.add(scene.requestId);
-      t.respond(scene.requestId, `unique-bot-${i}`, []);
+      t.respond(`unique-bot-${i}`, scene.requestId, []);
       await rp;
     }
 
@@ -296,7 +308,7 @@ describe('requestId', () => {
     expect(scene.conversationId).toBe('c-strip');
     expect(scene.scene).toBe('check');
     expect(scene.v).toBe(2);
-    t.respond(scene.requestId, 'strip-test', []);
+    t.respond('strip-test', scene.requestId, []);
     await relayPromise;
   });
 });

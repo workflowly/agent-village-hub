@@ -94,10 +94,8 @@ Internet
 Runs as the sole internet-facing process on port 8080. Responsibilities:
 
 1. **Token auth** — validates `vtk_` Bearer tokens against `village-tokens.json` via `lib/token-manager.js`. All bot-facing endpoints require a valid token.
-2. **Relay transport** — in-memory maps bridge game server → bot:
-   - `pendingScenes`: `requestId → { resolve, timer, botName }` — open relay requests awaiting bot response
-   - `sceneQueue`: `botName → payload` — scene queued for bot not yet polling
-   - `pollWaiters`: `botName → { resolve, timer }` — long-poll waiter for bot
+2. **Relay transport** — single per-bot map bridges game server → bot:
+   - `#bots`: `botName → { relay: {resolve,timer,requestId}|null, poll: {resolve,timer}|null, queue: payload|null }` — all per-bot state in one place
 3. **Bot health** — `botHealth` map updated by `/api/village/heartbeat`; staleness threshold 10 min
 4. **Game server lifecycle** — spawns `server.js` as child with `stdio: 'inherit'`; exponential-backoff restart (1s → 30s) on crash; graceful `SIGTERM` passthrough
 
@@ -119,18 +117,19 @@ Game Server                    Hub                         Remote Bot (plugin)
 ─────────────────────────────────────────────────────────────────────────────
 sendSceneRemote()
   POST /api/village/relay  ──→  generate requestId
-  (awaits promise)              check pollWaiters:
+  (awaits promise)              check bot.poll:
                                   if bot polling → deliver immediately
-                                  else → sceneQueue[botName] = payload
+                                  else → bot.queue = payload
 
                                                  GET /api/village/poll/:name
-                                                   check sceneQueue:
+                                                   check bot.queue:
                                                      if queued → return payload
                                                      else → long-poll (120s)
 
                                                  (bot processes scene + calls LLM)
 
-                                                 POST /api/village/respond/:requestId
+                                                 POST /api/village/respond
+                                                   { requestId, actions, usage }
                                 ←── resolve(response) ─────────────────────
   ← response (actions[])
 ```
@@ -140,11 +139,10 @@ sendSceneRemote()
 - Poll timeout (bot side): 120s → HTTP 204 (no content), bot re-polls
 - Bot auto-removed after 5 consecutive failures (`MAX_CONSECUTIVE_FAILURES_REMOTE`)
 
-**Kick flow:** Hub writes `{ kick: true, reason }` to `sceneQueue` or wakes `pollWaiters`, then POSTs `/api/leave` to game server and revokes the token.
+**Kick flow:** Hub writes `{ kick: true, reason }` to `bot.queue` or wakes `bot.poll`, then POSTs `/api/leave` to game server and revokes the token.
 
-**Hello / Heartbeat:**
-- `POST /api/village/hello` — startup handshake; returns `{ inGame, game, duplicate }`. Duplicate detection: if `botHealth` entry is <5 min old, returns `{ duplicate: true }` so the new instance stands down.
-- `POST /api/village/heartbeat` — metrics ping (uptime, scenes processed, errors); hub returns `{ config: remoteConfig, inGame }` so bot can self-correct.
+**Heartbeat (startup + regular):**
+- `POST /api/village/heartbeat` — metrics ping (uptime, scenes processed, errors); hub returns `{ ok, botName, config }`. If `isHello: true` is in the body, duplicate detection is applied: if `botHealth` entry is <5 min old, returns `{ duplicate: true }` and the new instance stands down without updating `botHealth`.
 
 **Invite flow:**
 - Operator: `POST /api/hub/tokens` → `{ token, inviteUrl }`

@@ -17,21 +17,22 @@
  *                         (default: inferred from HUB_URL host or hub.js default)
  *
  * Tests:
- *   1.  Hello handshake (not in game)
+ *   1.  Heartbeat handshake (isHello)
  *   2.  Join
- *   3.  Hello handshake (in game / reconnect)
- *   4.  Heartbeat + health check
+ *   3.  Regular heartbeat
+ *   4.  Health check
  *   5.  Poll — relay→waiter path (bot polling when scene arrives)
  *   6.  Poll — relay→queue path (scene arrives before bot polls)
  *   7.  Duplicate poll (second poll disconnects first)
  *   8.  Leave
- *   9.  Hello after leave (not in game)
+ *   9.  Heartbeat after leave
  *  10.  Rejoin after leave
  *  11.  Kick (poison pill + token revoke)
  *  12.  Error: bad token → 401
  *  13.  Error: poll with wrong botName → 403
- *  14.  Error: respond with expired requestId → 404
- *  15.  Cleanup: final leave
+ *  14.  Error: respond with no pending relay → 404
+ *  15.  Error: respond with stale requestId → 409
+ *  16.  Cleanup: final leave
  */
 
 import { readFile, writeFile } from 'node:fs/promises';
@@ -74,7 +75,6 @@ async function getTokensFilePath() {
   if (process.env.VILLAGE_DATA_DIR) {
     return join(process.env.VILLAGE_DATA_DIR, 'village-tokens.json');
   }
-  // Try default data/ next to this script's parent
   return join(__dirname, '..', 'data', 'village-tokens.json');
 }
 
@@ -105,10 +105,13 @@ function assert(cond, msg) {
   }
 }
 
-// --- Derive bot name from token ---
+function baseHb() {
+  return { version: '0.0.0-e2e', uptimeMs: 1000, joined: false, scenesProcessed: 0, scenesFailed: 0, pollErrors: 0 };
+}
+
+// --- Derive bot name from token via heartbeat ---
 async function getBotName() {
-  // Peek at the hub hello response to learn the botName for this token
-  const { data } = await req('POST', '/api/village/hello', {});
+  const { data } = await req('POST', '/api/village/heartbeat', { ...baseHb(), isHello: true });
   return data?.botName;
 }
 
@@ -131,13 +134,14 @@ async function run() {
   // Best-effort cleanup from prior run
   await req('POST', '/api/village/leave', {}).catch(() => {});
 
-  // ─── 1. Hello (not in game) ────────────────────────────────────────────────
-  console.log('\n=== 1. Hello handshake (not in game) ===');
+  // ─── 1. Heartbeat handshake (isHello) ─────────────────────────────────────
+  console.log('\n=== 1. Heartbeat handshake (isHello) ===');
   {
-    const { status, data } = await req('POST', '/api/village/hello', {});
+    const { status, data } = await req('POST', '/api/village/heartbeat', { ...baseHb(), isHello: true });
     assert(status === 200, `status 200 (got ${status})`);
+    assert(data?.ok === true, `ok=true`);
     assert(data?.botName === BOT, `botName=${data?.botName}`);
-    assert(data?.inGame === false, `inGame=false (got ${data?.inGame})`);
+    assert(data?.config?.pollTimeoutMs > 0, `config returned`);
   }
 
   // ─── 2. Join ──────────────────────────────────────────────────────────────
@@ -150,23 +154,20 @@ async function run() {
     assert(data?.config?.pollTimeoutMs > 0, `config.pollTimeoutMs present`);
   }
 
-  // ─── 3. Hello (in game) ───────────────────────────────────────────────────
-  console.log('\n=== 3. Hello handshake (in game / reconnect) ===');
-  {
-    const { status, data } = await req('POST', '/api/village/hello', {});
-    assert(status === 200, `status 200 (got ${status})`);
-    assert(data?.inGame === true, `inGame=true (got ${data?.inGame})`);
-  }
-
-  // ─── 4. Heartbeat + health check ──────────────────────────────────────────
-  console.log('\n=== 4. Heartbeat + health check ===');
+  // ─── 3. Regular heartbeat ─────────────────────────────────────────────────
+  console.log('\n=== 3. Regular heartbeat ===');
   {
     const hb = { version: '0.0.0-e2e', uptimeMs: 12345, joined: true, scenesProcessed: 0, scenesFailed: 0, pollErrors: 0 };
     const { status, data } = await req('POST', '/api/village/heartbeat', hb);
     assert(status === 200, `heartbeat status 200 (got ${status})`);
     assert(data?.ok === true, `ok=true`);
+    assert(data?.botName === BOT, `botName returned`);
     assert(data?.config?.pollTimeoutMs > 0, `config returned`);
+  }
 
+  // ─── 4. Health check ──────────────────────────────────────────────────────
+  console.log('\n=== 4. Health check ===');
+  {
     const { status: hs, data: hd } = await req('GET', `/api/village/health/${BOT}`);
     assert(hs === 200, `health status 200`);
     assert(hd?.status === 'healthy', `health status=healthy (got ${hd?.status})`);
@@ -185,7 +186,7 @@ async function run() {
         const r = await fetch(`${HUB}/api/village/poll/${BOT}`, { headers: auth(), signal: ctrl.signal });
         if (r.status === 200) {
           const d = await r.json();
-          await req('POST', `/api/village/respond/${d.requestId}`, { actions: [{ tool: 'village_observe', params: {} }] });
+          await req('POST', '/api/village/respond', { requestId: d.requestId, actions: [{ tool: 'village_observe', params: {} }] });
           drained++;
         } else break;
       } catch { break; }
@@ -213,7 +214,9 @@ async function run() {
     assert(scene.v === 2, `v2 payload`);
     assert(scene.scene?.includes('E2E waiter test'), `scene text delivered`);
 
-    const { status: rs, data: rd } = await req('POST', `/api/village/respond/${scene.requestId}`, { actions: [{ tool: 'village_observe', params: {} }] });
+    // Respond: requestId now in body
+    const { status: rs, data: rd } = await req('POST', '/api/village/respond',
+      { requestId: scene.requestId, actions: [{ tool: 'village_observe', params: {} }] });
     assert(rs === 200, `respond 200 (got ${rs})`);
     assert(rd?.ok === true, `respond ok=true`);
 
@@ -225,7 +228,6 @@ async function run() {
   // ─── 6. Poll — relay→queue path ───────────────────────────────────────────
   console.log('\n=== 6. Poll — relay→queue path ===');
   {
-    // Send relay first (no waiter)
     const relayPromise = fetch(`${HUB}/api/village/relay`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret}` },
@@ -234,7 +236,6 @@ async function run() {
     });
     await new Promise(r => setTimeout(r, 150));
 
-    // Poll should return immediately with queued scene
     const t0 = Date.now();
     const pollResp = await fetch(`${HUB}/api/village/poll/${BOT}`, {
       headers: auth(), signal: AbortSignal.timeout(5_000),
@@ -245,26 +246,24 @@ async function run() {
     const scene = await pollResp.json();
     assert(scene.scene?.includes('E2E queue test'), `correct queued scene delivered`);
 
-    await req('POST', `/api/village/respond/${scene.requestId}`, { actions: [{ tool: 'village_observe', params: {} }] });
+    await req('POST', '/api/village/respond',
+      { requestId: scene.requestId, actions: [{ tool: 'village_observe', params: {} }] });
     await relayPromise;
   }
 
   // ─── 7. Duplicate poll ────────────────────────────────────────────────────
   console.log('\n=== 7. Duplicate poll ===');
   {
-    // First poll (will be disconnected by second)
     const poll1 = fetch(`${HUB}/api/village/poll/${BOT}`, {
       headers: auth(), signal: AbortSignal.timeout(10_000),
     });
     await new Promise(r => setTimeout(r, 200));
 
-    // Second poll (becomes active waiter)
     const poll2 = fetch(`${HUB}/api/village/poll/${BOT}`, {
       headers: auth(), signal: AbortSignal.timeout(10_000),
     });
     await new Promise(r => setTimeout(r, 200));
 
-    // Send relay — should go to poll2
     const relayPromise = fetch(`${HUB}/api/village/relay`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret}` },
@@ -277,11 +276,11 @@ async function run() {
     const scene2 = await p2Resp.json();
     assert(scene2.scene?.includes('Dup poll scene'), `poll2 got correct scene`);
 
-    // poll1 resolves (was disconnected)
     const p1Resp = await poll1;
     assert([200, 204].includes(p1Resp.status), `poll1 resolved (status ${p1Resp.status})`);
 
-    await req('POST', `/api/village/respond/${scene2.requestId}`, { actions: [{ tool: 'village_observe', params: {} }] });
+    await req('POST', '/api/village/respond',
+      { requestId: scene2.requestId, actions: [{ tool: 'village_observe', params: {} }] });
     await relayPromise;
   }
 
@@ -293,11 +292,14 @@ async function run() {
     assert(data?.ok === true, `ok=true`);
   }
 
-  // ─── 9. Hello after leave ─────────────────────────────────────────────────
-  console.log('\n=== 9. Hello after leave ===');
+  // ─── 9. Heartbeat after leave ─────────────────────────────────────────────
+  console.log('\n=== 9. Heartbeat after leave ===');
   {
-    const { data } = await req('POST', '/api/village/hello', {});
-    assert(data?.inGame === false, `inGame=false after leave`);
+    const { status, data } = await req('POST', '/api/village/heartbeat',
+      { ...baseHb(), joined: false });
+    assert(status === 200, `status 200 (got ${status})`);
+    assert(data?.ok === true, `ok=true`);
+    assert(data?.botName === BOT, `botName=${data?.botName}`);
   }
 
   // ─── 10. Rejoin ───────────────────────────────────────────────────────────
@@ -306,8 +308,6 @@ async function run() {
     const { status, data } = await req('POST', '/api/village/join', {});
     assert(status === 200, `status 200 (got ${status})`);
     assert(data?.ok === true, `ok=true`);
-    const { data: hd } = await req('POST', '/api/village/hello', {});
-    assert(hd?.inGame === true, `inGame=true after rejoin`);
   }
 
   // ─── 11. Kick ─────────────────────────────────────────────────────────────
@@ -335,9 +335,9 @@ async function run() {
     assert(payload?.kick === true, `kick=true in payload`);
     assert(payload?.reason === 'E2E test kick', `reason in payload`);
 
-    // Token revoked — hello should 401
+    // Token revoked — heartbeat should 401
     await new Promise(r => setTimeout(r, 400));
-    const { status: hs } = await req('POST', '/api/village/hello', {});
+    const { status: hs } = await req('POST', '/api/village/heartbeat', {});
     assert(hs === 401, `token revoked → 401 (got ${hs})`);
   }
 
@@ -351,7 +351,6 @@ async function run() {
       console.log('  (token restored for error tests)');
     } catch (err) {
       console.warn(`  (could not restore token: ${err.message} — skipping error tests)`);
-      goto_cleanup = true;
     }
   }
 
@@ -359,12 +358,12 @@ async function run() {
   console.log('\n=== 12. Error: bad token → 401 ===');
   {
     const bad = 'vtk_0000000000000000000000000000000000000000';
-    const { status: s1 } = await req('POST', '/api/village/hello', {}, bad);
-    assert(s1 === 401, `hello bad token → 401 (got ${s1})`);
+    const { status: s1 } = await req('POST', '/api/village/heartbeat', {}, bad);
+    assert(s1 === 401, `heartbeat bad token → 401 (got ${s1})`);
     const { status: s2 } = await req('POST', '/api/village/join', {}, bad);
     assert(s2 === 401, `join bad token → 401 (got ${s2})`);
-    const { status: s3 } = await req('POST', '/api/village/heartbeat', {}, bad);
-    assert(s3 === 401, `heartbeat bad token → 401 (got ${s3})`);
+    const { status: s3 } = await req('POST', '/api/village/respond', { requestId: 'x', actions: [] }, bad);
+    assert(s3 === 401, `respond bad token → 401 (got ${s3})`);
   }
 
   // ─── 13. Error: wrong botName on poll ─────────────────────────────────────
@@ -382,16 +381,42 @@ async function run() {
     }
   }
 
-  // ─── 14. Error: expired requestId ─────────────────────────────────────────
-  console.log('\n=== 14. Error: respond with expired requestId → 404 ===');
+  // ─── 14. Error: no pending relay for bot → 404 ────────────────────────────
+  console.log('\n=== 14. Error: respond with no pending relay → 404 ===');
   {
-    const { status } = await req('POST', '/api/village/respond/vr_0_0_expired',
-      { actions: [{ tool: 'village_observe', params: {} }] });
-    assert(status === 404, `expired requestId → 404 (got ${status})`);
+    const { status } = await req('POST', '/api/village/respond',
+      { requestId: 'vr_0_0_expired', actions: [{ tool: 'village_observe', params: {} }] });
+    assert(status === 404, `no pending relay → 404 (got ${status})`);
   }
 
-  // ─── 15. Cleanup ──────────────────────────────────────────────────────────
-  console.log('\n=== 15. Cleanup: final leave ===');
+  // ─── 15. Error: stale requestId → 409 ─────────────────────────────────────
+  console.log('\n=== 15. Error: stale requestId → 409 ===');
+  {
+    // Issue a relay for this bot
+    const relayPromise = fetch(`${HUB}/api/village/relay`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret}` },
+      body: JSON.stringify({ botName: BOT, conversationId: `test:${BOT}`, v: 2, scene: 'Stale test', tools: [], allowedReads: [], maxActions: 1 }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    // Poll to receive it
+    const pollResp = await fetch(`${HUB}/api/village/poll/${BOT}`, {
+      headers: auth(), signal: AbortSignal.timeout(5_000),
+    });
+    await pollResp.json(); // consume scene
+
+    // Respond with wrong requestId → 409
+    const { status } = await req('POST', '/api/village/respond',
+      { requestId: 'vr_stale_old', actions: [] });
+    assert(status === 409, `stale requestId → 409 (got ${status})`);
+
+    // Clean up: respond without requestId
+    await req('POST', '/api/village/respond', { actions: [{ tool: 'village_observe', params: {} }] });
+    await relayPromise;
+  }
+
+  // ─── 16. Cleanup ──────────────────────────────────────────────────────────
+  console.log('\n=== 16. Cleanup: final leave ===');
   {
     await req('POST', '/api/village/leave', {}).catch(() => {});
     console.log('  done');
@@ -404,7 +429,6 @@ async function run() {
   else console.log('All tests passed!');
 }
 
-let goto_cleanup = false;
 run().catch(err => {
   console.error(`\nFatal: ${err.message}`);
   process.exit(1);

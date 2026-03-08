@@ -1,5 +1,5 @@
 /**
- * Protocol routes — the core relay/poll/respond transport plus hello, heartbeat,
+ * Protocol routes — the core relay/poll/respond transport plus heartbeat
  * and health endpoints.
  *
  * Mount at /api/village.
@@ -54,47 +54,51 @@ export function createProtocolRouter({ transport, tokenManager, botHealth, confi
     result ? res.json(result) : res.status(204).end();
   });
 
-  // --- POST /respond/:requestId — bot submits actions ---
-  router.post('/respond/:requestId', limiter, async (req, res) => {
+  // --- POST /respond — bot submits actions ---
+  // Auth: vtk_ token (botName comes from token, not URL)
+  // requestId in body is an optional sanity check against stale responses.
+  router.post('/respond', limiter, async (req, res) => {
     const auth = await validateToken(req, tokenManager);
     if (!auth) return res.status(401).json({ error: 'Unauthorized' });
 
-    const { requestId } = req.params;
-    const { actions, usage } = req.body || {};
-    const result = transport.respond(requestId, auth.botName, actions, usage);
+    const { requestId, actions, usage } = req.body || {};
+    const result = transport.respond(auth.botName, requestId, actions, usage);
 
     if (!result.ok) {
-      if (result.error === 'not_found') return res.status(404).json({ error: 'Request not found or expired' });
-      if (result.error === 'wrong_bot')  return res.status(403).json({ error: 'Request does not belong to this bot' });
+      if (result.error === 'not_found')      return res.status(404).json({ error: 'No pending request for this bot' });
+      if (result.error === 'stale_request') return res.status(409).json({ error: 'Response is for a stale request' });
     }
     res.json({ ok: true });
   });
 
-  // --- POST /hello — startup handshake ---
-  router.post('/hello', limiter, async (req, res) => {
-    const auth = await validateToken(req, tokenManager);
-    if (!auth) return res.status(401).json({ error: 'Invalid or missing VILLAGE_TOKEN' });
-
-    const existing = botHealth.get(auth.botName);
-    if (existing && (Date.now() - existing.receivedAt) < 5 * 60_000) {
-      const agoS = Math.round((Date.now() - existing.receivedAt) / 1000);
-      console.warn(
-        `[hub] duplicate hello from ${auth.botName} ` +
-        `(existing instance heartbeat ${agoS}s ago) — standing down new instance`
-      );
-      return res.json({ ok: true, botName: auth.botName, duplicate: true });
-    }
-
-    console.log(`[hub] hello from ${auth.botName}`);
-    res.json({ ok: true, botName: auth.botName });
-  });
-
-  // --- POST /heartbeat — bot health metrics ---
+  // --- POST /heartbeat — bot health metrics + startup handshake ---
+  //
+  // If isHello:true is present in the body, duplicate detection is applied:
+  // if another instance sent a heartbeat within the last 5 minutes, the new
+  // instance is told to stand down ({ duplicate: true }) without updating botHealth.
+  //
+  // Always returns { ok, botName, config } so the plugin can apply remote config
+  // and optionally use botName for self-identification.
   router.post('/heartbeat', limiter, async (req, res) => {
     const auth = await validateToken(req, tokenManager);
     if (!auth) return res.status(401).json({ error: 'Unauthorized' });
 
     const raw = req.body || {};
+
+    // Startup handshake: duplicate detection
+    if (raw.isHello) {
+      const existing = botHealth.get(auth.botName);
+      if (existing && (Date.now() - existing.receivedAt) < 5 * 60_000) {
+        const agoS = Math.round((Date.now() - existing.receivedAt) / 1000);
+        console.warn(
+          `[hub] duplicate hello from ${auth.botName} ` +
+          `(existing instance heartbeat ${agoS}s ago) — standing down new instance`
+        );
+        return res.json({ ok: true, botName: auth.botName, duplicate: true });
+      }
+      console.log(`[hub] hello from ${auth.botName}`);
+    }
+
     botHealth.set(auth.botName, {
       botName:         auth.botName,
       displayName:     auth.displayName,
@@ -108,12 +112,16 @@ export function createProtocolRouter({ transport, tokenManager, botHealth, confi
       pollErrors:      raw.pollErrors,
       receivedAt:      Date.now(),
     });
-    console.log(
-      `[hub] heartbeat from ${auth.botName} ` +
-      `(v${raw.version || '?'}, scenes=${raw.scenesProcessed || 0}, ` +
-      `joined=${raw.joined}, uptime=${Math.round((raw.uptimeMs || 0) / 1000)}s)`
-    );
-    res.json({ ok: true, config: remoteConfig });
+
+    if (!raw.isHello) {
+      console.log(
+        `[hub] heartbeat from ${auth.botName} ` +
+        `(v${raw.version || '?'}, scenes=${raw.scenesProcessed || 0}, ` +
+        `joined=${raw.joined}, uptime=${Math.round((raw.uptimeMs || 0) / 1000)}s)`
+      );
+    }
+
+    res.json({ ok: true, botName: auth.botName, config: remoteConfig });
   });
 
   // --- GET /health/:botName — individual bot health ---

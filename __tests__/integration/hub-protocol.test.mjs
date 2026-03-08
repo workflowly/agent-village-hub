@@ -206,18 +206,18 @@ afterAll(async () => {
 // ─── Token auth ───────────────────────────────────────────────────────────────
 
 describe('token auth', () => {
-  it('no token → 401 on hello', async () => {
-    const { status } = await req('POST', '/api/village/hello', {}, false);
+  it('no token → 401 on heartbeat', async () => {
+    const { status } = await req('POST', '/api/village/heartbeat', {}, false);
     expect(status).toBe(401);
   });
 
-  it('bad token → 401 on hello', async () => {
-    const { status } = await req('POST', '/api/village/hello', {}, 'vtk_badbadbadbad');
+  it('bad token → 401 on heartbeat', async () => {
+    const { status } = await req('POST', '/api/village/heartbeat', {}, 'vtk_badbadbadbad');
     expect(status).toBe(401);
   });
 
   it('non-vtk_ token → 401', async () => {
-    const { status } = await req('POST', '/api/village/hello', {}, 'sk-ant-something');
+    const { status } = await req('POST', '/api/village/heartbeat', {}, 'sk-ant-something');
     expect(status).toBe(401);
   });
 
@@ -241,32 +241,38 @@ describe('token auth', () => {
   });
 });
 
-// ─── Hello ────────────────────────────────────────────────────────────────────
-
-describe('hello handshake', () => {
-  it('returns ok with botName', async () => {
-    const { status, data } = await req('POST', '/api/village/hello', {});
-    expect(status).toBe(200);
-    expect(data.ok).toBe(true);
-    expect(data.botName).toBe('test-bot-a');
-  });
-
-  it('duplicate detection: second hello within 5min returns duplicate=true', async () => {
-    // Seed botHealth via heartbeat first
-    await req('POST', '/api/village/heartbeat', { version: '1.0.0', uptimeMs: 1000, joined: false, scenesProcessed: 0, scenesFailed: 0, pollErrors: 0 });
-    const { data } = await req('POST', '/api/village/hello', {});
-    expect(data.duplicate).toBe(true);
-  });
-});
-
-// ─── Heartbeat ────────────────────────────────────────────────────────────────
+// ─── Heartbeat (startup handshake + regular) ──────────────────────────────────
 
 describe('heartbeat', () => {
-  it('stores metrics and returns config', async () => {
+  it('isHello:true returns ok with botName (no duplicate)', async () => {
+    // Use a fresh token so no existing botHealth entry
+    const { data: issued } = await operatorReq('POST', '/api/hub/tokens', { botName: 'hello-fresh', displayName: 'Fresh' });
+    const freshToken = issued.token;
+    const { status, data } = await req('POST', '/api/village/heartbeat',
+      { isHello: true, version: '3.0.0', uptimeMs: 100, joined: false, scenesProcessed: 0, scenesFailed: 0, pollErrors: 0 },
+      freshToken);
+    expect(status).toBe(200);
+    expect(data.ok).toBe(true);
+    expect(data.botName).toBe('hello-fresh');
+    expect(data.duplicate).toBeUndefined();
+  });
+
+  it('duplicate detection: isHello within 5min of existing entry returns duplicate=true', async () => {
+    // First register a heartbeat for test-bot-a
+    await req('POST', '/api/village/heartbeat',
+      { version: '1.0.0', uptimeMs: 1000, joined: false, scenesProcessed: 0, scenesFailed: 0, pollErrors: 0 });
+    // Second call with isHello → duplicate
+    const { data } = await req('POST', '/api/village/heartbeat',
+      { isHello: true, version: '1.0.0', uptimeMs: 500, joined: false, scenesProcessed: 0, scenesFailed: 0, pollErrors: 0 });
+    expect(data.duplicate).toBe(true);
+  });
+
+  it('stores metrics and returns botName + config', async () => {
     const hb = { version: '1.2.3', uptimeMs: 60000, joined: true, scenesProcessed: 5, scenesFailed: 0, avgSceneMs: 800, lastSceneAt: new Date().toISOString(), pollErrors: 1 };
     const { status, data } = await req('POST', '/api/village/heartbeat', hb);
     expect(status).toBe(200);
     expect(data.ok).toBe(true);
+    expect(data.botName).toBe('test-bot-a');
     expect(data.config.pollTimeoutMs).toBeGreaterThan(0);
   });
 
@@ -357,10 +363,10 @@ describe('relay/poll/respond — waiter path (poll waiting when relay arrives)',
     expect(scene.v).toBe(2);
     expect(scene.scene).toContain('test arena');
 
-    // 5. Respond with actions
+    // 5. Respond with actions — requestId now in body (not URL)
     const { status: rStatus, data: rData } = await req(
-      'POST', `/api/village/respond/${scene.requestId}`,
-      { actions: [{ tool: 'village_observe', params: {} }] }
+      'POST', '/api/village/respond',
+      { requestId: scene.requestId, actions: [{ tool: 'village_observe', params: {} }] }
     );
     expect(rStatus).toBe(200);
     expect(rData.ok).toBe(true);
@@ -407,9 +413,9 @@ describe('relay/poll/respond — queue path (relay arrives before poll)', () => 
     const scene = await pollResp.json();
     expect(scene.scene).toContain('Queued scene for bot-b');
 
-    // 4. Respond to unblock relay
-    await req('POST', `/api/village/respond/${scene.requestId}`,
-      { actions: [{ tool: 'village_observe', params: {} }] }, TOKEN_B);
+    // 4. Respond to unblock relay — requestId in body
+    await req('POST', '/api/village/respond',
+      { requestId: scene.requestId, actions: [{ tool: 'village_observe', params: {} }] }, TOKEN_B);
     await relayPromise;
   });
 });
@@ -435,14 +441,42 @@ describe('relay/poll/respond — error cases', () => {
     expect(resp.status).toBe(400);
   });
 
-  it('respond with expired/unknown requestId → 404', async () => {
-    const { status } = await req('POST', '/api/village/respond/vr_0_9999_expired',
-      { actions: [] });
+  it('respond with no pending relay for bot → 404', async () => {
+    // No relay is pending for test-bot-a at this point
+    const { status } = await req('POST', '/api/village/respond',
+      { requestId: 'vr_0_9999_expired', actions: [] });
     expect(status).toBe(404);
   });
 
-  it('respond with another bots requestId → 403', async () => {
-    // Issue a relay for bot-a, then try to respond using bot-b's token
+  it('respond with stale requestId → 409', async () => {
+    // Issue a relay for bot-a, then respond with wrong requestId
+    const relayPromise = fetch(`${HUB}/api/village/relay`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SECRET}` },
+      body: JSON.stringify({ botName: 'test-bot-a', conversationId: 'village:test-bot-a', scene: 'stale-test', tools: [], allowedReads: [], maxActions: 1 }),
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    // Poll with bot-a to get the current requestId
+    const pollResp = await fetch(`${HUB}/api/village/poll/test-bot-a`, {
+      headers: authHeaders(TOKEN_A),
+      signal: AbortSignal.timeout(5_000),
+    });
+    await pollResp.json();
+
+    // Respond with wrong requestId → stale
+    const { status } = await req('POST', '/api/village/respond',
+      { requestId: 'vr_stale_old', actions: [] }, TOKEN_A);
+    expect(status).toBe(409);
+
+    // Clean up: respond without requestId (skips stale check)
+    await req('POST', '/api/village/respond',
+      { actions: [{ tool: 'village_observe', params: {} }] }, TOKEN_A);
+    await relayPromise;
+  });
+
+  it('token B cannot respond to bot A relay (different bot → 404)', async () => {
+    // Issue a relay for bot-a
     const relayPromise = fetch(`${HUB}/api/village/relay`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SECRET}` },
@@ -450,21 +484,21 @@ describe('relay/poll/respond — error cases', () => {
       signal: AbortSignal.timeout(10_000),
     });
 
-    // Poll with bot-a to get the requestId
+    // Poll with bot-a to consume the queued scene
     const pollResp = await fetch(`${HUB}/api/village/poll/test-bot-a`, {
       headers: authHeaders(TOKEN_A),
       signal: AbortSignal.timeout(5_000),
     });
     const scene = await pollResp.json();
 
-    // Try responding as bot-b — should be forbidden
-    const { status } = await req('POST', `/api/village/respond/${scene.requestId}`,
-      { actions: [] }, TOKEN_B);
-    expect(status).toBe(403);
+    // Try responding as bot-b — no relay pending for bot-b → 404
+    const { status } = await req('POST', '/api/village/respond',
+      { requestId: scene.requestId, actions: [] }, TOKEN_B);
+    expect(status).toBe(404);
 
-    // Clean up: respond as bot-a so relay doesn't timeout
-    await req('POST', `/api/village/respond/${scene.requestId}`,
-      { actions: [{ tool: 'village_observe', params: {} }] }, TOKEN_A);
+    // Clean up: respond as bot-a
+    await req('POST', '/api/village/respond',
+      { requestId: scene.requestId, actions: [{ tool: 'village_observe', params: {} }] }, TOKEN_A);
     await relayPromise;
   });
 });
@@ -504,14 +538,12 @@ describe('duplicate poll handling', () => {
     expect(scene2.scene).toContain('dup-poll-test');
 
     // Respond to clean up
-    await req('POST', `/api/village/respond/${scene2.requestId}`,
-      { actions: [{ tool: 'village_observe', params: {} }] });
+    await req('POST', '/api/village/respond',
+      { requestId: scene2.requestId, actions: [{ tool: 'village_observe', params: {} }] });
     await relayPromise;
 
     // poll1 should also resolve (was disconnected — will get null → 204 or closed)
-    // We don't assert poll1's status strictly since it may resolve as 204 or close
     const poll1Resp = await poll1.catch(() => null);
-    // Just verify it resolves (doesn't hang forever)
     expect(poll1Resp).not.toBeNull();
   });
 });
@@ -520,10 +552,6 @@ describe('duplicate poll handling', () => {
 
 describe('kick', () => {
   it('delivers poison pill to polling bot and revokes token', async () => {
-    // Re-issue a token since kick revokes it
-    const freshToken = 'vtk_' + randomBytes(20).toString('hex');
-    await operatorReq('POST', '/api/hub/tokens', { botName: 'test-bot-kick', displayName: 'Kick Me' });
-    // Use a fresh bot registered via POST /api/hub/tokens
     const { data: newTok } = await operatorReq('POST', '/api/hub/tokens', { botName: 'kick-target', displayName: 'Kick Target' });
     const kickToken = newTok.token;
 
@@ -550,7 +578,7 @@ describe('kick', () => {
 
     // Token revoked — subsequent request → 401
     await new Promise(r => setTimeout(r, 300));
-    const resp = await fetch(`${HUB}/api/village/hello`, {
+    const resp = await fetch(`${HUB}/api/village/heartbeat`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${kickToken}`, 'Content-Type': 'application/json' },
       body: '{}',
@@ -572,7 +600,6 @@ describe('kick', () => {
       signal: AbortSignal.timeout(5_000),
     });
     // Token was revoked so poll returns 401 (token check happens before queue delivery)
-    // This validates kick + revoke happens before the bot can poll
     expect([200, 401]).toContain(pollResp.status);
   });
 });
@@ -641,7 +668,7 @@ describe('token management (operator)', () => {
     const token = issued.token;
 
     // Token works before deletion
-    const beforeResp = await fetch(`${HUB}/api/village/hello`, {
+    const beforeResp = await fetch(`${HUB}/api/village/heartbeat`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: '{}',
@@ -654,7 +681,7 @@ describe('token management (operator)', () => {
     expect(delStatus).toBe(200);
 
     // Token no longer works
-    const afterResp = await fetch(`${HUB}/api/village/hello`, {
+    const afterResp = await fetch(`${HUB}/api/village/heartbeat`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: '{}',
