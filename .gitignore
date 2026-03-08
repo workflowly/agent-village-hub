@@ -1,2 +1,6 @@
 *.json.bak
 logs/
+.env
+data/
+node_modules/
+*.pre-reset.bak
