@@ -256,6 +256,7 @@ export function buildSSEInitPayload(state, participants, gameConfig, { nextTickA
     memories: state.memories || {},
     agendas: state.agendas || {},
     newsBulletins: state.newsBulletins || [],
+    villageCosts: state.villageCosts || {},
     locationFlavors: Object.fromEntries(
       Object.entries(gameConfig.raw.locations || {}).map(([k, v]) => [k, v.flavor || ''])
     ),

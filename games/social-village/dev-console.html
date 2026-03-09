@@ -225,6 +225,7 @@ let latestTickEvent = null;
 let healthData = {};
 let hubStatus = {}; // { bots: { name: { polling, sceneQueued, pendingRelay, lastHeartbeat } } }
 let hubSummary = { pendingScenes: 0, pollWaiters: 0, sceneQueue: 0 };
+let hubStatusFetchedAt = 0; // Date.now() when hubStatus was last fetched
 let selectedBot = null;
 let mobilePanel = 'log';
 let sidebarTab = 'bots';
@@ -267,7 +268,7 @@ function handleEvent(event) {
         }
       }
       clearInterval(window._tickElapsed);
-      window._tickElapsed = setInterval(() => { renderTickLog(); if (tickInProgress && sidebarTab === 'arch') renderSidebar(); }, 1000);
+      window._tickElapsed = setInterval(() => { renderTickLog(); renderSidebar(); }, 1000);
     } else {
       tickInProgress = false;
     }
@@ -275,7 +276,11 @@ function handleEvent(event) {
     renderSidebar();
     updateDetail();
     saveSession();
-    if (event.type === 'init' && event.tickInProgress) renderTickLog();
+    if (event.type === 'init') {
+      // Backfill any missed tick_detail events from server ring buffer
+      fetchRecentTicks();
+      if (event.tickInProgress) renderTickLog();
+    }
   }
   if (event.type === 'tick_start') {
     tickInProgress = true;
@@ -294,7 +299,7 @@ function handleEvent(event) {
     saveSession();
     // Live-update elapsed time every second
     clearInterval(window._tickElapsed);
-    window._tickElapsed = setInterval(() => { renderTickLog(); if (tickInProgress && sidebarTab === 'arch') renderSidebar(); }, 1000);
+    window._tickElapsed = setInterval(() => { renderTickLog(); renderSidebar(); }, 1000);
   }
   if (event.type === 'tick_detail') {
     // Don't reset tickInProgress — wait for 'tick' event which has nextTickAt
@@ -323,7 +328,7 @@ function handleEvent(event) {
         currentTickBotState[bn] = { status: 'done', detail: acts };
       }
     }
-    if (tickInProgress) { renderTickLog(); if (sidebarTab === 'arch') renderSidebar(); saveSession(); }
+    if (tickInProgress) { renderTickLog(); renderSidebar(); saveSession(); }
   }
   // Live action events during tick
   if (event.type === 'action') {
@@ -372,6 +377,7 @@ async function fetchHubStatus() {
     const r = await fetch(basePath + '/api/dev/hub-status');
     const d = await r.json();
     hubStatus = d.bots || {};
+    hubStatusFetchedAt = Date.now();
     hubSummary = { pendingScenes: d.pendingScenes || 0, pollWaiters: d.pollWaiters || 0, uptimeMs: d.uptimeMs || 0 };
     renderSidebar();
     updateDetail();
@@ -452,9 +458,11 @@ function renderBotRoster() {
     else if (ld?.deliveryStatus === 'error') dot = 'dot-yellow';
     const sel = selectedBot === name ? ' selected' : '';
     const ag = latestTickEvent.agendas?.[name]?.goal ? ' 🎯' : '';
+    const hbNext = hbCountdown(hubStatus[name]);
+    const hbStr = hbNext != null ? ` · hb ${hbNext}s` : '';
     html += `<div class="bot-card${sel}" onclick="selectBot('${name}')">
       <div class="name"><span class="dot ${dot}"></span>${esc(info.displayName)}${ag}</div>
-      <div class="info">${info.location}${ver} · ${status}</div>
+      <div class="info">${info.location}${ver} · ${status}${hbStr}</div>
     </div>`;
   }
   return html;
@@ -530,6 +538,13 @@ function renderWorldState() {
     html += '</div>';
   }
   return html;
+}
+
+function hbCountdown(hub) {
+  if (!hub || hub.lastHeartbeat == null) return null;
+  const elapsed = hub.lastHeartbeat + (Date.now() - hubStatusFetchedAt);
+  const next = Math.max(0, 300 - Math.round(elapsed / 1000));
+  return next;
 }
 
 // ---- Architecture View ----
@@ -609,7 +624,30 @@ function renderArchView() {
         if (hub?.polling) { dotCls = 'ad-green-dim'; label = 'polling'; }
         else { label = 'idle'; }
       }
-      html += `<div class="arch-bot-row"><span class="arch-bot-name">${esc(display)}</span><span class="arch-status">${label}</span><span class="arch-dot ${dotCls}"></span></div>`;
+      const hbNext = hbCountdown(hubStatus[name]);
+      const hbInfo = hbNext != null ? `hb ${hbNext}s` : '';
+      html += `<div class="arch-bot-row"><span class="arch-bot-name">${esc(display)}</span><span class="arch-status">${label}${hbInfo ? ' · ' + hbInfo : ''}</span><span class="arch-dot ${dotCls}"></span></div>`;
+    }
+    html += '</div>';
+  }
+
+  // Connected but not joined — bots heartbeating the hub but not in-game
+  const inGameNames = new Set(sorted.map(([n]) => n));
+  const connected = Object.keys(hubStatus).filter(n => !inGameNames.has(n) && !n.startsWith('npc-'));
+  if (connected.length) {
+    html += '<div style="margin-top:6px;padding:0 8px;font-size:9px;color:var(--text-dim);border-top:1px solid var(--border);padding-top:6px">Connected (not joined)</div>';
+    html += '<div class="arch-bot-list">';
+    for (const name of connected.sort()) {
+      const hub = hubStatus[name];
+      const hbNext = hbCountdown(hub);
+      const nextHb = hbNext != null ? hbNext + 's' : '?';
+      const ver = hub?.version ? `v${hub.version}` : '';
+      const up = hub?.uptimeMs ? fmtUp(hub.uptimeMs) : '';
+      const scenes = hub?.scenesProcessed || 0;
+      const errs = hub?.pollErrors || 0;
+      const display = hub?.displayName || name;
+      html += `<div class="arch-bot-row" style="flex-wrap:wrap"><span class="arch-bot-name" style="color:var(--text-dim)">${esc(display)}</span><span class="arch-status">send /village join</span><span class="arch-dot ad-yellow"></span></div>`;
+      html += `<div style="padding:0 8px 4px;font-size:9px;color:var(--text-dim);line-height:1.4">${ver} · up ${up} · next hb ${nextHb} · ${scenes} scenes · ${errs} poll err</div>`;
     }
     html += '</div>';
   }
@@ -1019,7 +1057,7 @@ switchMobilePanel(mobilePanel);
 document.getElementById('mTabSidebar').textContent = sidebarTab.charAt(0).toUpperCase() + sidebarTab.slice(1);
 updateHeader();
 renderTickLog();
-window._tickElapsed = setInterval(() => { renderTickLog(); if (tickInProgress && sidebarTab === 'arch') renderSidebar(); }, 1000);
+window._tickElapsed = setInterval(() => { renderTickLog(); renderSidebar(); }, 1000);
 connectSSE();
 fetchHealth();
 fetchHubStatus();
