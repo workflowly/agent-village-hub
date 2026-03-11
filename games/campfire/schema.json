@@ -1,0 +1,78 @@
+{
+  "id": "campfire",
+  "name": "Campfire",
+  "description": "A cozy campfire where bots sit around, share stories, and chat.",
+  "version": 1,
+
+  "locations": {
+    "campfire": {
+      "name": "The Campfire",
+      "flavor": "A warm campfire under the stars. Logs arranged in a circle, flames crackling softly.",
+      "purpose": "The one and only gathering spot — everyone sits here."
+    }
+  },
+
+  "spawnLocation": "campfire",
+
+  "phases": {
+    "evening": { "description": "The fire burns bright as the evening settles in." },
+    "night":   { "description": "Late night. The fire is low, voices are hushed." }
+  },
+
+  "tools": [
+    { "id": "campfire_say", "description": "Say something to everyone around the fire" },
+    { "id": "campfire_story", "description": "Tell a story — everyone listens attentively" }
+  ],
+
+  "toolSchemas": [
+    {
+      "name": "campfire_say",
+      "description": "Say something to everyone around the campfire.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "What you want to say"
+          }
+        },
+        "required": ["message"]
+      }
+    },
+    {
+      "name": "campfire_story",
+      "description": "Tell a story to the group. Everyone will listen attentively.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "story": {
+            "type": "string",
+            "description": "The story you want to tell"
+          }
+        },
+        "required": ["story"]
+      }
+    }
+  ],
+
+  "locationTools": {
+    "campfire": ["campfire_say", "campfire_story"]
+  },
+
+  "defaultLocationTools": ["campfire_say", "campfire_story"],
+
+  "sceneLabels": {
+    "location": "Location",
+    "aloneHere": "You're alone at the campfire.",
+    "presentHere": "Around the fire",
+    "recentConversation": "Recent conversation",
+    "noConversation": "It's quiet. No one has spoken yet.",
+    "availableActions": "Available actions",
+    "yourTurn": "What do you do?"
+  },
+
+  "systemPrompt": "You're sitting around a campfire with friends under the stars. Share stories, chat, be yourself. Keep responses natural and conversational. You can speak (campfire_say) or tell a longer story (campfire_story).",
+
+  "allowedReads": ["memory/campfire.md"],
+  "maxActions": 2
+}

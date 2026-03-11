@@ -17,19 +17,21 @@ import { readFileSync } from 'node:fs';
 import { readFile, writeFile, rename, copyFile, mkdir, readdir, stat } from 'node:fs/promises';
 import { appendFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadGame } from './game-loader.js';
-import { readBotDailyCost as readBotDailyCostImpl } from './games/social-village/logic.js'; // TODO: move to lib/
+import { readBotDailyCost as readBotDailyCostImpl } from './lib/cost-tracker.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // --- Load game schema ---
 const VILLAGE_GAME = process.env.VILLAGE_GAME || 'social-village';
-const gameConfig = loadGame(join(__dirname, 'games', VILLAGE_GAME, 'schema.json'));
+const GAME_DIR = process.env.VILLAGE_GAME_DIR
+  || join(__dirname, 'games', VILLAGE_GAME);
+const gameConfig = loadGame(join(GAME_DIR, 'schema.json'));
 console.log(`[village] Loaded game: ${gameConfig.raw.id} (${gameConfig.raw.name})`);
 
 // --- Load game adapter ---
-const gameAdapter = await import(`./games/${VILLAGE_GAME}/adapter.js`);
+const gameAdapter = await import(pathToFileURL(join(GAME_DIR, 'adapter.js')).href);
 
 // --- Config ---
 const PORT = parseInt(process.env.VILLAGE_PORT || '7001', 10);
@@ -601,11 +603,11 @@ const server = createServer(async (req, res) => {
   // Serve static files
   if (path === '/' || path === '/index.html') {
     try {
-      let html = await readFile(join(__dirname, 'games', VILLAGE_GAME, 'observer.html'), 'utf-8');
+      let html = await readFile(join(GAME_DIR, 'observer.html'), 'utf-8');
       // Inline ES modules for browser compatibility.
       // Each module is wrapped in an IIFE for proper scope isolation,
       // with exports returned and destructured using the import-side names.
-      const assetsDir = join(__dirname, 'games', VILLAGE_GAME, 'assets');
+      const assetsDir = join(GAME_DIR, 'assets');
       html = html.replace('<script type="module">', '<script>');
       // Two-pass inlining: first collect all modules, then emit them.
       // Each module is wrapped in an IIFE for scope isolation.
@@ -694,7 +696,7 @@ const server = createServer(async (req, res) => {
   // Dev console
   if (path === '/dev') {
     try {
-      const html = await readFile(join(__dirname, 'games', VILLAGE_GAME, 'dev-console.html'), 'utf-8');
+      const html = await readFile(join(GAME_DIR, 'dev-console.html'), 'utf-8');
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(html);
     } catch {
@@ -792,7 +794,7 @@ const server = createServer(async (req, res) => {
     const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml', '.json': 'application/json', '.js': 'text/javascript' };
     const safeName = path.slice('/assets/'.length).replace(/\.\./g, '');
     const ext = safeName.slice(safeName.lastIndexOf('.'));
-    const filePath = join(__dirname, 'games', VILLAGE_GAME, 'assets', safeName);
+    const filePath = join(GAME_DIR, 'assets', safeName);
     try {
       const [data, fileStat] = await Promise.all([readFile(filePath), stat(filePath)]);
       const etag = `"${fileStat.mtimeMs.toString(36)}-${fileStat.size.toString(36)}"`;

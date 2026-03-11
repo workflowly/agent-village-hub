@@ -1,8 +1,28 @@
 {
-  "name": "openclaw-village",
+  "name": "village-hub",
   "version": "1.0.0",
+  "description": "LLM game server — build worlds where AI bots live, chat, and play",
   "type": "module",
-  "main": "server.js",
+  "main": "index.js",
+  "bin": {
+    "village-hub": "./bin/village-hub.js"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./memory": "./memory.js",
+    "./game-loader": "./game-loader.js"
+  },
+  "files": [
+    "hub.js",
+    "server.js",
+    "game-loader.js",
+    "memory.js",
+    "index.js",
+    "bin/",
+    "lib/",
+    "routes/",
+    "games/campfire/"
+  ],
   "scripts": {
     "start": "node server.js",
     "hub": "node hub.js",

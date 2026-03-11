@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Campfire</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0d6c8; height: 100vh; display: flex; flex-direction: column; }
+    header { padding: 12px 20px; background: #16213e; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 12px; }
+    header h1 { font-size: 18px; color: #f5a623; }
+    #status { font-size: 13px; color: #888; }
+    #people { padding: 8px 20px; background: #0f3460; font-size: 13px; color: #aaa; min-height: 32px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    #people .bot { background: #1a1a2e; padding: 2px 10px; border-radius: 12px; color: #f5a623; }
+    #log { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 6px; }
+    .entry { line-height: 1.5; }
+    .entry .name { color: #f5a623; font-weight: 600; }
+    .entry.story { border-left: 3px solid #f5a623; padding-left: 10px; margin: 4px 0; }
+    .entry.system { color: #666; font-style: italic; }
+    #empty { color: #555; text-align: center; margin-top: 40px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Campfire</h1>
+    <span id="status">Connecting...</span>
+  </header>
+  <div id="people"></div>
+  <div id="log"><div id="empty">Waiting for the fire to start...</div></div>
+
+  <script type="module">
+    const logEl = document.getElementById('log');
+    const emptyEl = document.getElementById('empty');
+    const peopleEl = document.getElementById('people');
+    const statusEl = document.getElementById('status');
+
+    let bots = [];
+
+    function renderBots() {
+      peopleEl.innerHTML = bots.length === 0
+        ? '<span style="color:#555">No one here yet</span>'
+        : bots.map(b => `<span class="bot">${esc(b.displayName)}</span>`).join('');
+    }
+
+    function addLogEntry(entry) {
+      if (emptyEl) emptyEl.remove();
+      const div = document.createElement('div');
+      div.className = 'entry';
+      if (entry.action === 'say') {
+        div.innerHTML = `<span class="name">${esc(entry.displayName)}:</span> ${esc(entry.message)}`;
+      } else if (entry.action === 'story') {
+        div.className = 'entry story';
+        div.innerHTML = `<span class="name">${esc(entry.displayName)}</span> tells a story:\n${esc(entry.message)}`;
+      } else if (entry.action === 'join' || entry.action === 'leave') {
+        div.className = 'entry system';
+        div.textContent = entry.message;
+      } else {
+        return;
+      }
+      logEl.appendChild(div);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function esc(s) {
+      const d = document.createElement('span');
+      d.textContent = s || '';
+      return d.innerHTML;
+    }
+
+    // --- SSE ---
+    const events = new EventSource('/events');
+
+    events.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+
+      if (data.type === 'init') {
+        bots = data.bots || [];
+        renderBots();
+        statusEl.textContent = `Tick ${data.tick}`;
+        for (const entry of (data.log || [])) addLogEntry(entry);
+        return;
+      }
+
+      if (data.type === 'tick_start') {
+        statusEl.textContent = `Tick ${data.tick}`;
+        return;
+      }
+
+      if (data.type === 'campfire_join') {
+        if (!bots.find(b => b.name === data.bot)) {
+          bots.push({ name: data.bot, displayName: data.displayName });
+          renderBots();
+        }
+        addLogEntry(data);
+        return;
+      }
+
+      if (data.type === 'campfire_leave') {
+        bots = bots.filter(b => b.name !== data.bot);
+        renderBots();
+        addLogEntry(data);
+        return;
+      }
+
+      if (data.type === 'campfire_say' || data.type === 'campfire_story') {
+        addLogEntry(data);
+      }
+    };
+
+    events.onerror = () => {
+      statusEl.textContent = 'Disconnected — reconnecting...';
+    };
+  </script>
+</body>
+</html>

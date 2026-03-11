@@ -358,10 +358,25 @@ village/
 
 ## Adding a New Game
 
-1. Create `games/<id>/schema.json` with `"type": "social"` or `"type": "grid"`
-2. Implement `games/<id>/tick.js` exporting the tick function
-3. Create `games/<id>/observer.html` for the web UI
-4. Set `VILLAGE_GAME=<id>` and restart
+See [`docs/GAME_DEVELOPMENT.md`](docs/GAME_DEVELOPMENT.md) for the complete guide.
+
+**As a standalone project** (recommended for new games):
+```bash
+npm install village-hub
+# Create schema.json + adapter.js + observer.html in your project
+VILLAGE_SECRET=xxx npx village-hub
+```
+
+**In-repo development:**
+1. Create `games/<id>/` with `schema.json` + `adapter.js` + `observer.html`
+2. See `games/campfire/` for a minimal working example
+3. Set `VILLAGE_GAME=<id>` and restart
+
+The game directory is resolved via `VILLAGE_GAME_DIR` env var (absolute path), falling back to `games/$VILLAGE_GAME/` for backward compatibility.
+
+The campfire game (~200 lines) demonstrates the minimum viable adapter.
+For a full-featured social game, see `games/social-village/`.
+For a grid-based game, see `games/survival/`.
 
 Social schema required fields: `id, locations, spawnLocation, phases, tools, sceneLabels`
 Grid schema required fields: `id, world, items, recipes, survival, combat, dayNight, actions, sceneLabels`
