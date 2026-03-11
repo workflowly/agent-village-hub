@@ -1,5 +1,5 @@
 /**
- * Social game tick — extracted from server.js.
+ * Social world tick — extracted from server.js.
  *
  * Exports socialTick(ctx) which receives a shared context object
  * built by the orchestrator.
@@ -20,22 +20,22 @@ import {
 import { buildMemoryEntry, buildWitnessEntry } from '../../memory.js';
 import { rollNewsBulletin } from './news.js';
 
-function buildV2Payload(scene, gameConfig, location, state, botName) {
-  const allSchemas = gameConfig.raw.toolSchemas || [];
+function buildV2Payload(scene, worldConfig, location, state, botName) {
+  const allSchemas = worldConfig.raw.toolSchemas || [];
   const locationToolIds = new Set(
-    gameConfig.locationTools[location] ||
+    worldConfig.locationTools[location] ||
     state?.customLocations?.[location]?.tools ||
-    gameConfig.defaultLocationTools
+    worldConfig.defaultLocationTools
   );
   const filteredTools = allSchemas.filter(s => locationToolIds.has(s.name));
   return {
     v: 2,
     scene,
     tools: filteredTools,
-    systemPrompt: gameConfig.raw.systemPrompt || null,
-    allowedReads: gameConfig.raw.allowedReads || [],
-    maxActions: gameConfig.raw.maxActions || 2,
-    journalConfig: gameConfig.raw.journalConfig || null,
+    systemPrompt: worldConfig.raw.systemPrompt || null,
+    allowedReads: worldConfig.raw.allowedReads || [],
+    maxActions: worldConfig.raw.maxActions || 2,
+    journalConfig: worldConfig.raw.journalConfig || null,
     agenda: state.agendas?.[botName]?.goal || null,
   };
 }
@@ -127,11 +127,11 @@ async function summarizeStateMemory(state, botName) {
 }
 
 /**
- * Social tick — full LLM-driven tick for social village game.
+ * Social tick — full LLM-driven tick for social village world.
  */
 export async function socialTick(ctx) {
   const {
-    state, gameConfig, participants, lastMoveTick,
+    state, worldConfig, participants, lastMoveTick,
     broadcastEvent, sendSceneRemote,
     accumulateResponseCost, readBotDailyCost, saveState,
     TICK_INTERVAL_MS, VILLAGE_DAILY_COST_CAP, MEMORY_FILENAME,
@@ -140,7 +140,7 @@ export async function socialTick(ctx) {
   } = ctx;
 
   const tickNum = state.clock.tick;
-  const vt = getVillageTime(gameConfig.timezone);
+  const vt = getVillageTime(worldConfig.timezone);
   const phase = vt.phase;
   state.clock.phase = phase;
 
@@ -208,7 +208,7 @@ export async function socialTick(ctx) {
   let errors = 0;
 
   // All locations = schema + custom (built by bots)
-  const allLocations = [...gameConfig.locationSlugs, ...Object.keys(state.customLocations || {})];
+  const allLocations = [...worldConfig.locationSlugs, ...Object.keys(state.customLocations || {})];
 
   // Roll news bulletin (~every 30 ticks)
   await rollNewsBulletin(tickNum, state, broadcastEvent);
@@ -258,12 +258,12 @@ export async function socialTick(ctx) {
         sceneHistoryCap: SCENE_HISTORY_CAP,
         canMove,
         villageMemory: villageSummaries.get(botName) || '',
-        gameConfig,
+        worldConfig,
         state,
         totalVoters: participants.size,
       });
 
-      const payload = buildV2Payload(scene, gameConfig, loc, state, botName);
+      const payload = buildV2Payload(scene, worldConfig, loc, state, botName);
 
       // Attach pending memory entry from previous tick (remote bots only)
       const prevEntry = pendingRemoteMemory.get(botName);
@@ -334,7 +334,7 @@ export async function socialTick(ctx) {
 
     botsResponded++;
     const events = processActions(botName, response.actions, loc, state, {
-      lastMoveTick, tick: tickNum, validLocations: gameConfig.locationSlugs, gameConfig,
+      lastMoveTick, tick: tickNum, validLocations: worldConfig.locationSlugs, worldConfig,
     });
     allEvents.get(loc).push(...events);
 
@@ -355,7 +355,7 @@ export async function socialTick(ctx) {
         tick: tickNum,
         phase,
         location: loc,
-        locationName: gameConfig.locationNames[loc] || state.customLocations?.[loc]?.name || loc,
+        locationName: worldConfig.locationNames[loc] || state.customLocations?.[loc]?.name || loc,
         bot: botName,
         displayName: displayNames[botName],
         ...ev,
@@ -392,7 +392,7 @@ export async function socialTick(ctx) {
     if (!pInfo || pInfo.npc) continue;
 
     const locEvents = allEvents.get(loc) || [];
-    const locName = gameConfig.locationNames[loc] || state.customLocations?.[loc]?.name || loc;
+    const locName = worldConfig.locationNames[loc] || state.customLocations?.[loc]?.name || loc;
 
     // Other bots present at this location (display names)
     const botsPresent = (state.locations[loc] || [])
@@ -427,7 +427,7 @@ export async function socialTick(ctx) {
     const npcsHere = botsAtLoc.filter(b => participants.get(b)?.npc);
     if (npcsHere.length === 0) continue;
 
-    const locName = gameConfig.locationNames[loc] || state.customLocations?.[loc]?.name || loc;
+    const locName = worldConfig.locationNames[loc] || state.customLocations?.[loc]?.name || loc;
     for (const npcName of npcsHere) {
       const entry = buildMemoryEntry({
         location: locName,
@@ -460,7 +460,7 @@ export async function socialTick(ctx) {
   await saveState();
 
   // Conversation quality metrics (observability only — see ggbot.md 2A)
-  for (const loc of gameConfig.locationSlugs) {
+  for (const loc of worldConfig.locationSlugs) {
     const metrics = computeQualityMetrics(state.publicLogs[loc]);
     if (!metrics) continue;
     console.log(

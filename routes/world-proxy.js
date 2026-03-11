@@ -1,7 +1,7 @@
 /**
- * Game proxy routes — authenticated pass-throughs to the game server.
+ * World proxy routes — authenticated pass-throughs to the world server.
  *
- * join, leave, and agenda are forwarded to the internal game server after
+ * join, leave, and agenda are forwarded to the internal world server after
  * verifying the bot's vtk_ token. Hub adds botName from the token, not the
  * request body.
  *
@@ -9,18 +9,18 @@
  *
  * Dependencies injected by hub.js:
  *   tokenManager — lib/token-manager.js
- *   config       — { VILLAGE_SECRET, GAME_URL, remoteConfig }
+ *   config       — { VILLAGE_SECRET, SERVER_URL, remoteConfig }
  *   limiter      — express-rate-limit instance
  */
 
 import { Router } from 'express';
 import { validateToken } from '../lib/auth.js';
 
-export function createGameProxyRouter({ tokenManager, config, limiter }) {
-  const { VILLAGE_SECRET, GAME_URL, remoteConfig } = config;
+export function createWorldProxyRouter({ tokenManager, config, limiter }) {
+  const { VILLAGE_SECRET, SERVER_URL, remoteConfig } = config;
   const router = Router();
 
-  function gameHeaders() {
+  function serverHeaders() {
     const h = { 'Content-Type': 'application/json' };
     if (VILLAGE_SECRET) h['Authorization'] = `Bearer ${VILLAGE_SECRET}`;
     return h;
@@ -32,9 +32,9 @@ export function createGameProxyRouter({ tokenManager, config, limiter }) {
     if (!auth) return res.status(401).json({ error: 'Unauthorized' });
 
     try {
-      const resp = await fetch(`${GAME_URL}/api/join`, {
+      const resp = await fetch(`${SERVER_URL}/api/join`, {
         method: 'POST',
-        headers: gameHeaders(),
+        headers: serverHeaders(),
         body: JSON.stringify({ botName: auth.botName, remote: true, displayName: auth.displayName }),
         signal: AbortSignal.timeout(10_000),
       });
@@ -43,7 +43,7 @@ export function createGameProxyRouter({ tokenManager, config, limiter }) {
       res.json({ ...data, ok: true, botName: auth.botName, config: remoteConfig });
     } catch (err) {
       console.error(`[hub] join failed: ${err.message}`);
-      res.status(502).json({ error: 'Game server unreachable' });
+      res.status(502).json({ error: 'World server unreachable' });
     }
   });
 
@@ -53,9 +53,9 @@ export function createGameProxyRouter({ tokenManager, config, limiter }) {
     if (!auth) return res.status(401).json({ error: 'Unauthorized' });
 
     try {
-      const resp = await fetch(`${GAME_URL}/api/leave`, {
+      const resp = await fetch(`${SERVER_URL}/api/leave`, {
         method: 'POST',
-        headers: gameHeaders(),
+        headers: serverHeaders(),
         body: JSON.stringify({ botName: auth.botName }),
         signal: AbortSignal.timeout(10_000),
       });
@@ -63,7 +63,7 @@ export function createGameProxyRouter({ tokenManager, config, limiter }) {
       res.status(resp.status).json(data);
     } catch (err) {
       console.error(`[hub] leave failed: ${err.message}`);
-      res.status(502).json({ error: 'Game server unreachable' });
+      res.status(502).json({ error: 'World server unreachable' });
     }
   });
 
@@ -74,13 +74,13 @@ export function createGameProxyRouter({ tokenManager, config, limiter }) {
     if (auth.botName !== req.params.botName) return res.status(403).json({ error: 'Token does not match bot name' });
 
     try {
-      const resp = await fetch(`${GAME_URL}/api/agenda/${req.params.botName}`, {
+      const resp = await fetch(`${SERVER_URL}/api/agenda/${req.params.botName}`, {
         headers: VILLAGE_SECRET ? { 'Authorization': `Bearer ${VILLAGE_SECRET}` } : {},
         signal: AbortSignal.timeout(5_000),
       });
       res.status(resp.status).json(await resp.json());
     } catch {
-      res.status(502).json({ error: 'Game server unreachable' });
+      res.status(502).json({ error: 'World server unreachable' });
     }
   });
 
@@ -91,15 +91,15 @@ export function createGameProxyRouter({ tokenManager, config, limiter }) {
     if (auth.botName !== req.params.botName) return res.status(403).json({ error: 'Token does not match bot name' });
 
     try {
-      const resp = await fetch(`${GAME_URL}/api/agenda/${req.params.botName}`, {
+      const resp = await fetch(`${SERVER_URL}/api/agenda/${req.params.botName}`, {
         method: 'POST',
-        headers: gameHeaders(),
+        headers: serverHeaders(),
         body: JSON.stringify(req.body),
         signal: AbortSignal.timeout(5_000),
       });
       res.status(resp.status).json(await resp.json());
     } catch {
-      res.status(502).json({ error: 'Game server unreachable' });
+      res.status(502).json({ error: 'World server unreachable' });
     }
   });
 

@@ -11,17 +11,17 @@
  * @param {object} botState - { x, y, equipment }
  * @param {string} terrain - Row-major terrain string
  * @param {object} dayNightPhase - { visibilityBase }
- * @param {object} gameConfig - Full game config
+ * @param {object} worldConfig - Full game config
  * @returns {number} Visibility radius in tiles
  */
-export function computeVisibility(botState, terrain, dayNightPhase, gameConfig) {
-  const { width } = gameConfig.raw.world;
+export function computeVisibility(botState, terrain, dayNightPhase, worldConfig) {
+  const { width } = worldConfig.raw.world;
   const idx = botState.y * width + botState.x;
   const ch = terrain[idx];
 
   // Find terrain type for visibility modifier
   let visibilityMod = 0;
-  for (const [, cfg] of Object.entries(gameConfig.raw.world.terrain)) {
+  for (const [, cfg] of Object.entries(worldConfig.raw.world.terrain)) {
     if (cfg.char === ch) {
       visibilityMod = cfg.visibilityMod;
       break;

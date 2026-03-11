@@ -1,15 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { buildScene } from '../../games/social-village/scene.js';
-import { loadGame } from '../../game-loader.js';
+import { buildScene } from '../../worlds/social-village/scene.js';
+import { loadWorld } from '../../world-loader.js';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const gameConfig = loadGame(join(__dirname, '../../games/social-village/schema.json'));
+const worldConfig = loadWorld(join(__dirname, '../../worlds/social-village/schema.json'));
 
-const LOCATION_NAMES = gameConfig.locationNames;
-const ALL_LOCATIONS = gameConfig.locationSlugs;
-const PHASE_DESCRIPTIONS = gameConfig.phaseDescriptions;
+const LOCATION_NAMES = worldConfig.locationNames;
+const ALL_LOCATIONS = worldConfig.locationSlugs;
+const PHASE_DESCRIPTIONS = worldConfig.phaseDescriptions;
 
 // --- ORC-020: Location definitions ---
 
@@ -55,7 +55,7 @@ describe('buildScene', () => {
     publicLog: [],
     whispers: [],
     movements: [],
-    gameConfig,
+    worldConfig,
   };
 
   it('includes phase description', () => {
@@ -72,7 +72,7 @@ describe('buildScene', () => {
 
   it('shows "alone" when no other bots present', () => {
     const scene = buildScene(baseOpts);
-    expect(scene).toContain(gameConfig.sceneLabels.aloneHere);
+    expect(scene).toContain(worldConfig.sceneLabels.aloneHere);
   });
 
   it('lists other bots present by display name', () => {
@@ -87,7 +87,7 @@ describe('buildScene', () => {
     });
     expect(scene).toContain('FriendBot');
     expect(scene).toContain('OtherBot');
-    expect(scene).not.toContain(gameConfig.sceneLabels.aloneHere);
+    expect(scene).not.toContain(worldConfig.sceneLabels.aloneHere);
   });
 
   it('falls back to system name for unknown bots', () => {
@@ -209,7 +209,7 @@ describe('buildScene', () => {
       whispers: [],
       movements: [],
     });
-    expect(scene).not.toContain(gameConfig.sceneLabels.whisperHeader);
+    expect(scene).not.toContain(worldConfig.sceneLabels.whisperHeader);
   });
 
   it('returns a string', () => {

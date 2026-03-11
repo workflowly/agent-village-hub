@@ -8,7 +8,7 @@
  * Dependencies injected by hub.js:
  *   tokenManager     — lib/token-manager.js
  *   processManager   — ProcessManager instance (for hub health running status)
- *   config           — { VILLAGE_SECRET, VILLAGE_HUB_URL, GAME_URL }
+ *   config           — { VILLAGE_SECRET, VILLAGE_HUB_URL, SERVER_URL }
  *   limiter          — express-rate-limit instance
  */
 
@@ -16,14 +16,14 @@ import { Router } from 'express';
 import { safeEqual, requireSecret } from '../lib/auth.js';
 
 export function createOperatorRouters({ tokenManager, processManager, config, limiter }) {
-  const { VILLAGE_SECRET, VILLAGE_HUB_URL, GAME_URL } = config;
+  const { VILLAGE_SECRET, VILLAGE_HUB_URL, SERVER_URL } = config;
   const authMiddleware = requireSecret(VILLAGE_SECRET);
 
   // ─── /api/village/* ────────────────────────────────────────────────────────
 
   const villageRouter = Router();
 
-  // POST /kick/:botName — game server leave + token revoke
+  // POST /kick/:botName — world server leave + token revoke
   // Token revocation means the bot's next poll returns 410 → clean exit.
   villageRouter.post('/kick/:botName', authMiddleware, async (req, res) => {
     const { botName } = req.params;
@@ -32,7 +32,7 @@ export function createOperatorRouters({ tokenManager, processManager, config, li
     try {
       const headers = { 'Content-Type': 'application/json' };
       if (VILLAGE_SECRET) headers['Authorization'] = `Bearer ${VILLAGE_SECRET}`;
-      await fetch(`${GAME_URL}/api/leave`, {
+      await fetch(`${SERVER_URL}/api/leave`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ botName }),
@@ -157,7 +157,7 @@ echo "Done! Restart your bot to join the village."
 
   // GET /health — hub process health (public)
   hubRouter.get('/health', (req, res) => {
-    res.json({ ok: true, uptime: process.uptime(), gameServerRunning: processManager.running });
+    res.json({ ok: true, uptime: process.uptime(), worldServerRunning: processManager.running });
   });
 
   return { villageRouter, hubRouter };

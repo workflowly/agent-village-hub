@@ -1,7 +1,7 @@
 /**
- * Campfire game adapter — minimal example.
+ * Campfire world adapter — minimal example.
  *
- * Demonstrates the GameAdapter interface with the simplest possible game:
+ * Demonstrates the WorldAdapter interface with the simplest possible world:
  * all bots sit around a single campfire, chatting and telling stories.
  * No movement, no grid, no governance, no NPCs.
  *
@@ -16,7 +16,7 @@ export const hasFastTick = false;
 
 // --- State lifecycle ---
 
-export function initState(gameConfig) {
+export function initState(worldConfig) {
   return {
     log: [],
     clock: { tick: 0 },
@@ -26,7 +26,7 @@ export function initState(gameConfig) {
   };
 }
 
-export function loadState(raw, gameConfig) {
+export function loadState(raw, worldConfig) {
   return {
     log: raw.log || [],
     clock: raw.clock || { tick: 0 },
@@ -52,7 +52,7 @@ export async function recoverParticipants(state, participants) {
   return toRemove;
 }
 
-export async function joinBot(state, botName, displayName, gameConfig) {
+export async function joinBot(state, botName, displayName, worldConfig) {
   const events = [];
   if (!state.bots.includes(botName)) {
     state.bots.push(botName);
@@ -73,10 +73,10 @@ export function removeBot(state, botName, displayName, broadcastEvent) {
   }
 }
 
-// --- Game loop ---
+// --- Tick loop ---
 
 export async function tick(ctx) {
-  const { state, gameConfig, participants, sendSceneRemote,
+  const { state, worldConfig, participants, sendSceneRemote,
     accumulateResponseCost, broadcastEvent, saveState,
     SCENE_HISTORY_CAP } = ctx;
 
@@ -91,18 +91,18 @@ export async function tick(ctx) {
 
   // Build scene text from recent log
   const recentLog = state.log.slice(-(SCENE_HISTORY_CAP || 10));
-  const labels = gameConfig.sceneLabels;
+  const labels = worldConfig.sceneLabels;
 
   // Send scene to each bot in parallel
   const results = await Promise.all(botsHere.map(async (bot) => {
-    const scene = buildScene(bot, botsHere, recentLog, labels, gameConfig);
-    const tools = gameConfig.raw.toolSchemas || [];
+    const scene = buildScene(bot, botsHere, recentLog, labels, worldConfig);
+    const tools = worldConfig.raw.toolSchemas || [];
     const response = await sendSceneRemote(bot.name, 'campfire', {
       scene,
       tools,
-      systemPrompt: gameConfig.raw.systemPrompt || '',
-      allowedReads: gameConfig.raw.allowedReads || [],
-      maxActions: gameConfig.raw.maxActions || 2,
+      systemPrompt: worldConfig.raw.systemPrompt || '',
+      allowedReads: worldConfig.raw.allowedReads || [],
+      maxActions: worldConfig.raw.maxActions || 2,
     });
     accumulateResponseCost(bot.name, response);
     return { bot, response };
@@ -133,18 +133,18 @@ export const fastTick = null;
 
 // --- Observer ---
 
-export function buildSSEInitPayload(state, participants, gameConfig, { nextTickAt, tickIntervalMs }) {
+export function buildSSEInitPayload(state, participants, worldConfig, { nextTickAt, tickIntervalMs }) {
   return {
     type: 'init',
-    gameType: 'social',
+    worldType: 'social',
     tick: state.clock.tick,
     nextTickAt,
     tickIntervalMs,
-    game: {
-      id: gameConfig.raw.id,
-      name: gameConfig.raw.name,
-      description: gameConfig.raw.description,
-      version: gameConfig.raw.version,
+    world: {
+      id: worldConfig.raw.id,
+      name: worldConfig.raw.name,
+      description: worldConfig.raw.description,
+      version: worldConfig.raw.version,
     },
     bots: state.bots.map(name => ({
       name,
@@ -154,7 +154,7 @@ export function buildSSEInitPayload(state, participants, gameConfig, { nextTickA
   };
 }
 
-export function isEventForGame(event) {
+export function isEventForWorld(event) {
   if (event.type?.startsWith('campfire_')) return true;
   if (event.type === 'tick_start') return true;
   return false;
@@ -162,7 +162,7 @@ export function isEventForGame(event) {
 
 // --- Internal helpers ---
 
-function buildScene(bot, botsHere, recentLog, labels, gameConfig) {
+function buildScene(bot, botsHere, recentLog, labels, worldConfig) {
   const others = botsHere.filter(b => b.name !== bot.name);
   const lines = [];
 
@@ -193,7 +193,7 @@ function buildScene(bot, botsHere, recentLog, labels, gameConfig) {
   lines.push('');
 
   lines.push(`### ${labels.availableActions}`);
-  for (const tool of (gameConfig.raw.tools || [])) {
+  for (const tool of (worldConfig.raw.tools || [])) {
     lines.push(`- **${tool.id}**: ${tool.description}`);
   }
   lines.push('');

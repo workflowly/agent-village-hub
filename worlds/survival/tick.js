@@ -25,14 +25,14 @@ import {
 import { runFastTick } from './autopilot.js';
 import { buildMemoryEntry } from '../../memory.js';
 
-function buildV2Payload(scene, gameConfig) {
+function buildV2Payload(scene, worldConfig) {
   return {
     v: 2,
     scene,
-    tools: gameConfig.raw.toolSchemas || [],
-    systemPrompt: gameConfig.raw.systemPrompt || null,
-    allowedReads: gameConfig.raw.allowedReads || [],
-    maxActions: gameConfig.raw.maxActions || 2,
+    tools: worldConfig.raw.toolSchemas || [],
+    systemPrompt: worldConfig.raw.systemPrompt || null,
+    allowedReads: worldConfig.raw.allowedReads || [],
+    maxActions: worldConfig.raw.maxActions || 2,
   };
 }
 
@@ -40,7 +40,7 @@ function buildV2Payload(scene, gameConfig) {
  * Fast tick — autopilot movement/gathering between slow ticks.
  */
 export function fastTick(ctx) {
-  const { state, gameConfig, participants, broadcastEvent } = ctx;
+  const { state, worldConfig, participants, broadcastEvent } = ctx;
 
   if (!state.terrain) return;
 
@@ -51,21 +51,21 @@ export function fastTick(ctx) {
 
   // Snapshot bots already at 0 HP before fast tick (they haven't been respawned yet)
   const alreadyDead = new Set();
-  if (state.round && gameConfig.raw.scoring) {
+  if (state.round && worldConfig.raw.scoring) {
     for (const [name, bs] of Object.entries(state.bots)) {
       if (bs.health <= 0) alreadyDead.add(name);
     }
   }
 
-  const { events, positionUpdates } = runFastTick(state, gameConfig);
+  const { events, positionUpdates } = runFastTick(state, worldConfig);
 
   // Score autopilot events
   // Only score kills/deaths for bots that were alive at start of this fast tick
-  if (state.round && gameConfig.raw.scoring) {
+  if (state.round && worldConfig.raw.scoring) {
     const killedThisTick = new Set();
     for (const ev of events) {
       if (ev.action === 'gather' && ev.bot) {
-        awardPoints(state.round.scores, ev.bot, 'gather', gameConfig);
+        awardPoints(state.round.scores, ev.bot, 'gather', worldConfig);
       }
       if (ev.action === 'move' && ev.bot && ev.to) {
         if (!state.round.explored) state.round.explored = {};
@@ -73,18 +73,18 @@ export function fastTick(ctx) {
         const tileKey = `${ev.to.x},${ev.to.y}`;
         if (!state.round.explored[ev.bot][tileKey]) {
           state.round.explored[ev.bot][tileKey] = 1;
-          awardPoints(state.round.scores, ev.bot, 'explore', gameConfig);
+          awardPoints(state.round.scores, ev.bot, 'explore', worldConfig);
         }
       }
       if (ev.action === 'killed' && ev.bot && !alreadyDead.has(ev.bot) && !killedThisTick.has(ev.bot)) {
         killedThisTick.add(ev.bot);
-        awardPoints(state.round.scores, ev.bot, 'death', gameConfig);
+        awardPoints(state.round.scores, ev.bot, 'death', worldConfig);
       }
     }
     // Award kill points only for fresh kills this tick (not already-dead bots)
     for (const ev of events) {
       if (ev.action === 'attack' && ev.bot && killedThisTick.has(ev.target)) {
-        awardPoints(state.round.scores, ev.bot, 'kill', gameConfig);
+        awardPoints(state.round.scores, ev.bot, 'kill', worldConfig);
         killedThisTick.delete(ev.target); // one kill reward per death
       }
     }
@@ -110,7 +110,7 @@ export function fastTick(ctx) {
  */
 export async function survivalTick(ctx) {
   const {
-    state, gameConfig, participants,
+    state, worldConfig, participants,
     broadcastEvent, sendSceneRemote,
     accumulateResponseCost, readBotDailyCost, saveState,
     TICK_INTERVAL_MS, VILLAGE_DAILY_COST_CAP, MEMORY_FILENAME,
@@ -118,7 +118,7 @@ export async function survivalTick(ctx) {
   } = ctx;
 
   const tickNum = state.clock.tick;
-  const dayPhase = getDayPhase(tickNum, gameConfig.raw.dayNight);
+  const dayPhase = getDayPhase(tickNum, worldConfig.raw.dayNight);
   const rng = mulberry32(state.worldSeed + tickNum);
 
   // Build display name lookup
@@ -128,12 +128,12 @@ export async function survivalTick(ctx) {
   }
 
   // --- Round lifecycle ---
-  if (gameConfig.raw.scoring) {
+  if (worldConfig.raw.scoring) {
     // Ensure round state exists
     if (!state.round) {
       state.round = {
         number: 1,
-        ticksRemaining: gameConfig.raw.scoring.roundLength,
+        ticksRemaining: worldConfig.raw.scoring.roundLength,
         scores: initScores(state.bots),
         roundHistory: [],
       };
@@ -143,7 +143,7 @@ export async function survivalTick(ctx) {
 
     // Award survival tick points to all alive bots
     for (const [botName, bs] of Object.entries(state.bots)) {
-      if (bs.alive) awardPoints(state.round.scores, botName, 'survivalTick', gameConfig);
+      if (bs.alive) awardPoints(state.round.scores, botName, 'survivalTick', worldConfig);
     }
 
     // Round end check
@@ -176,38 +176,38 @@ export async function survivalTick(ctx) {
 
       // Start new round
       state.round.number++;
-      state.round.ticksRemaining = gameConfig.raw.scoring.roundLength;
+      state.round.ticksRemaining = worldConfig.raw.scoring.roundLength;
       state.round.scores = initScores(state.bots);
       state.round.explored = {};
     }
   }
 
   // Ensure diplomacy state exists
-  if (gameConfig.raw.diplomacy && !state.diplomacy) {
+  if (worldConfig.raw.diplomacy && !state.diplomacy) {
     state.diplomacy = { alliances: {}, proposals: {}, betrayals: [] };
   }
 
   // 1. Tick survival (hunger/health drain)
-  const survivalEvents = tickSurvival(state.bots, gameConfig.raw.survival);
+  const survivalEvents = tickSurvival(state.bots, worldConfig.raw.survival);
   const allEvents = [...survivalEvents];
 
   // 2. Handle deaths from starvation
   for (const ev of survivalEvents) {
     if (ev.action === 'starved') {
       if (state.round) {
-        awardPoints(state.round.scores, ev.bot, 'death', gameConfig);
+        awardPoints(state.round.scores, ev.bot, 'death', worldConfig);
       }
       const deathEvents = handleDeath(
         ev.bot, state.bots[ev.bot], state,
-        gameConfig.raw.survival, gameConfig.raw.world.terrain,
-        rng, gameConfig.raw.world.width, gameConfig.raw.world.height
+        worldConfig.raw.survival, worldConfig.raw.world.terrain,
+        rng, worldConfig.raw.world.width, worldConfig.raw.world.height
       );
       allEvents.push(...deathEvents);
     }
   }
 
   // 3. Respawn resources
-  const respawned = respawnResources(state.tileData, state.terrain, gameConfig.raw.world, tickNum, rng);
+  const respawned = respawnResources(state.tileData, state.terrain, worldConfig.raw.world, tickNum, rng);
   const respawnedCoords = respawned.map(k => { const [x, y] = k.split(',').map(Number); return { x, y }; });
   if (respawned.length > 0) {
     console.log(`[village] ${respawned.length} tiles respawned resources`);
@@ -238,7 +238,7 @@ export async function survivalTick(ctx) {
       botName,
       botState,
       worldState: state,
-      gameConfig,
+      worldConfig,
       currentTick: tickNum,
       recentEvents: [...(state.recentEvents || []).slice(-10), ...visibleEvents],
       villageSummary: '',
@@ -250,7 +250,7 @@ export async function survivalTick(ctx) {
     });
 
     const conversationId = `survival:${botName}`;
-    const payload = buildV2Payload(scene, gameConfig);
+    const payload = buildV2Payload(scene, worldConfig);
     allSceneRequests.push({ botName, conversationId, payload });
   }
 
@@ -296,7 +296,7 @@ export async function survivalTick(ctx) {
     botState._currentTick = tickNum;
 
     const { events: evts, pendingAttacks: atks } = processSurvivalActions(
-      botName, response.actions, botState, state, gameConfig, displayNames
+      botName, response.actions, botState, state, worldConfig, displayNames
     );
     actionEvents.push(...evts);
     pendingAttacks.push(...atks);
@@ -304,8 +304,8 @@ export async function survivalTick(ctx) {
     // Score gather/craft/explore events
     if (state.round) {
       for (const ev of evts) {
-        if (ev.action === 'gather') awardPoints(state.round.scores, botName, 'gather', gameConfig);
-        if (ev.action === 'craft') awardPoints(state.round.scores, botName, 'craft', gameConfig);
+        if (ev.action === 'gather') awardPoints(state.round.scores, botName, 'gather', worldConfig);
+        if (ev.action === 'craft') awardPoints(state.round.scores, botName, 'craft', worldConfig);
         if (ev.action === 'move') {
           // Track explored tiles per round
           if (!state.round.explored) state.round.explored = {};
@@ -313,7 +313,7 @@ export async function survivalTick(ctx) {
           const tileKey = `${ev.to.x},${ev.to.y}`;
           if (!state.round.explored[botName][tileKey]) {
             state.round.explored[botName][tileKey] = 1;
-            awardPoints(state.round.scores, botName, 'explore', gameConfig);
+            awardPoints(state.round.scores, botName, 'explore', worldConfig);
           }
         }
       }
@@ -329,7 +329,7 @@ export async function survivalTick(ctx) {
   }
 
   // Simultaneous combat resolution
-  const combatEvents = resolveCombat(pendingAttacks, state.bots, gameConfig);
+  const combatEvents = resolveCombat(pendingAttacks, state.bots, worldConfig);
   actionEvents.push(...combatEvents);
 
   // Handle combat deaths + scoring
@@ -339,23 +339,23 @@ export async function survivalTick(ctx) {
       if (bs && bs.health <= 0) {
         // Score: death penalty for killed bot
         if (state.round) {
-          awardPoints(state.round.scores, ev.bot, 'death', gameConfig);
+          awardPoints(state.round.scores, ev.bot, 'death', worldConfig);
         }
         // Score: kill points for attackers + betrayal/bounty bonuses
         if (state.round) {
           const bountyBot = getBountyBot(state.round.scores);
           for (const atk of pendingAttacks) {
             if (atk.target === ev.bot) {
-              awardPoints(state.round.scores, atk.attacker, 'kill', gameConfig);
+              awardPoints(state.round.scores, atk.attacker, 'kill', worldConfig);
               // Betrayal bonus
               if (state.diplomacy && detectBetrayal(atk.attacker, ev.bot, state.diplomacy)) {
-                awardPoints(state.round.scores, atk.attacker, 'betrayalKill', gameConfig);
+                awardPoints(state.round.scores, atk.attacker, 'betrayalKill', worldConfig);
                 const betrayalEvents = recordBetrayal(atk.attacker, ev.bot, state.diplomacy, tickNum);
                 actionEvents.push(...betrayalEvents);
               }
               // Bounty bonus
               if (ev.bot === bountyBot) {
-                awardPoints(state.round.scores, atk.attacker, 'bountyKill', gameConfig);
+                awardPoints(state.round.scores, atk.attacker, 'bountyKill', worldConfig);
                 actionEvents.push({ action: 'bounty_kill', bot: atk.attacker, target: ev.bot, tick: tickNum });
               }
             }
@@ -363,8 +363,8 @@ export async function survivalTick(ctx) {
         }
         const deathEvents = handleDeath(
           ev.bot, bs, state,
-          gameConfig.raw.survival, gameConfig.raw.world.terrain,
-          rng, gameConfig.raw.world.width, gameConfig.raw.world.height
+          worldConfig.raw.survival, worldConfig.raw.world.terrain,
+          rng, worldConfig.raw.world.width, worldConfig.raw.world.height
         );
         actionEvents.push(...deathEvents);
       }
@@ -374,18 +374,18 @@ export async function survivalTick(ctx) {
   allEvents.push(...actionEvents);
 
   // 6b. Diplomacy — process alliance say messages + proximity bonuses
-  if (state.diplomacy && gameConfig.raw.diplomacy) {
+  if (state.diplomacy && worldConfig.raw.diplomacy) {
     if (!state.diplomacy.alliances) state.diplomacy.alliances = {};
     if (!state.diplomacy.proposals) state.diplomacy.proposals = {};
     if (!state.diplomacy.betrayals) state.diplomacy.betrayals = [];
 
     const sayEvents = allEvents.filter(ev => ev.action === 'say');
-    const allianceEvents = processAllianceActions(sayEvents, state.diplomacy, state.bots, tickNum, gameConfig.raw.diplomacy, displayNames);
+    const allianceEvents = processAllianceActions(sayEvents, state.diplomacy, state.bots, tickNum, worldConfig.raw.diplomacy, displayNames);
     allEvents.push(...allianceEvents);
 
     // Alliance proximity bonus
     if (state.round) {
-      const bonusEvents = tickAllianceBonuses(state.diplomacy, state.bots, state.round.scores, gameConfig);
+      const bonusEvents = tickAllianceBonuses(state.diplomacy, state.bots, state.round.scores, worldConfig);
       allEvents.push(...bonusEvents);
     }
   }

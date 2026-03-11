@@ -3,7 +3,7 @@
  *
  * Implements the GameAdapter interface for server.js:
  *   initState, loadState, advanceClock, recoverParticipants,
- *   joinBot, removeBot, tick, fastTick, buildSSEInitPayload, isEventForGame
+ *   joinBot, removeBot, tick, fastTick, buildSSEInitPayload, isEventForWorld
  */
 
 import { survivalTick, fastTick as survivalFastTick } from './tick.js';
@@ -18,9 +18,9 @@ export const hasFastTick = true;
 
 // --- State lifecycle ---
 
-export async function initState(gameConfig) {
+export async function initState(worldConfig) {
   console.log('[village] Generating world...');
-  const worldConfig = gameConfig.raw.world;
+  const worldConfig = worldConfig.raw.world;
   const rng = mulberry32(worldConfig.seed);
   const { terrain } = generateWorld(worldConfig);
   const tileData = placeInitialResources(terrain, worldConfig, rng);
@@ -36,7 +36,7 @@ export async function initState(gameConfig) {
     remoteParticipants: {},
     round: {
       number: 1,
-      ticksRemaining: gameConfig.raw.scoring?.roundLength || 50,
+      ticksRemaining: worldConfig.raw.scoring?.roundLength || 50,
       scores: {},
       roundHistory: [],
     },
@@ -44,19 +44,19 @@ export async function initState(gameConfig) {
   };
 }
 
-export function loadState(raw, gameConfig) {
+export function loadState(raw, worldConfig) {
   const state = {
     terrain: raw.terrain || '',
     tileData: raw.tileData || {},
     bots: raw.bots || {},
     recentEvents: raw.recentEvents || [],
     clock: raw.clock || { tick: 0, dayTick: 0 },
-    worldSeed: raw.worldSeed || gameConfig.raw.world.seed,
+    worldSeed: raw.worldSeed || worldConfig.raw.world.seed,
     villageCosts: raw.villageCosts || {},
     remoteParticipants: raw.remoteParticipants || {},
     round: raw.round || {
       number: 1,
-      ticksRemaining: gameConfig.raw.scoring?.roundLength || 50,
+      ticksRemaining: worldConfig.raw.scoring?.roundLength || 50,
       scores: {},
       roundHistory: [],
     },
@@ -66,9 +66,9 @@ export function loadState(raw, gameConfig) {
   return state;
 }
 
-export function advanceClock(state, gameConfig) {
+export function advanceClock(state, worldConfig) {
   state.clock.tick++;
-  state.clock.dayTick = state.clock.tick % gameConfig.raw.dayNight.cycleTicks;
+  state.clock.dayTick = state.clock.tick % worldConfig.raw.dayNight.cycleTicks;
 }
 
 // --- Participant management ---
@@ -91,20 +91,20 @@ export async function recoverParticipants(state, participants) {
   return toRemove;
 }
 
-export async function joinBot(state, botName, displayName, gameConfig) {
+export async function joinBot(state, botName, displayName, worldConfig) {
   const events = [];
   if (!state.bots[botName]) {
     const rng = mulberry32(state.worldSeed + Date.now());
     const pos = randomEdgeTile(
       state.terrain,
-      gameConfig.raw.world.width,
-      gameConfig.raw.world.height,
-      gameConfig.raw.world.terrain,
+      worldConfig.raw.world.width,
+      worldConfig.raw.world.height,
+      worldConfig.raw.world.terrain,
       rng
     );
     state.bots[botName] = {
       x: pos.x, y: pos.y,
-      health: gameConfig.raw.survival.maxHealth,
+      health: worldConfig.raw.survival.maxHealth,
       hunger: 0,
       inventory: {},
       equipment: { weapon: null, armor: null, tool: null },
@@ -120,7 +120,7 @@ export async function joinBot(state, botName, displayName, gameConfig) {
     });
     console.log(`[village] ${botName} spawned at (${pos.x},${pos.y})`);
   }
-  if (gameConfig.raw.scoring && state.round) {
+  if (worldConfig.raw.scoring && state.round) {
     if (state.round.scores[botName] === undefined) state.round.scores[botName] = 0;
   }
   return { events, appearance: null };
@@ -146,22 +146,22 @@ export function fastTick(ctx) {
 
 // --- Observer ---
 
-export function buildSSEInitPayload(state, participants, gameConfig, { nextTickAt, tickIntervalMs }) {
-  const dayPhase = getDayPhase(state.clock.tick, gameConfig.raw.dayNight);
+export function buildSSEInitPayload(state, participants, worldConfig, { nextTickAt, tickIntervalMs }) {
+  const dayPhase = getDayPhase(state.clock.tick, worldConfig.raw.dayNight);
   return {
     type: 'init',
-    gameType: 'grid',
+    worldType: 'grid',
     tick: state.clock.tick,
     dayPhase: dayPhase.name,
     paused: false,
     nextTickAt,
     tickIntervalMs,
     game: {
-      id: gameConfig.raw.id,
-      name: gameConfig.raw.name,
-      version: gameConfig.raw.version,
+      id: worldConfig.raw.id,
+      name: worldConfig.raw.name,
+      version: worldConfig.raw.version,
     },
-    world: { width: gameConfig.raw.world.width, height: gameConfig.raw.world.height },
+    world: { width: worldConfig.raw.world.width, height: worldConfig.raw.world.height },
     terrain: state.terrain,
     bots: Object.fromEntries(
       Object.entries(state.bots).map(([name, bs]) => [name, {
@@ -185,7 +185,7 @@ export function buildSSEInitPayload(state, participants, gameConfig, { nextTickA
   };
 }
 
-export function isEventForGame(event) {
+export function isEventForWorld(event) {
   if (SOCIAL_TYPES.has(event.type)) return false;
   if (event.type === 'tick' && event.actions && !event.botStates) return false;
   return true;

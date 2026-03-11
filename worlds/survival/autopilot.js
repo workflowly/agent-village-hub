@@ -277,22 +277,22 @@ function directionAway(fromX, fromY, threatX, threatY) {
  * @param {string} botName
  * @param {object} botState - mutable bot state (has directive, path, pathIdx, etc.)
  * @param {object} worldState - { terrain, tileData, bots, clock }
- * @param {object} gameConfig
+ * @param {object} worldConfig
  * @param {number} currentTick - slow tick number (for events)
  * @returns {{ events: Array, pendingAttacks: Array }}
  */
-export function stepAutopilot(botName, botState, worldState, gameConfig) {
+export function stepAutopilot(botName, botState, worldState, worldConfig) {
   if (!botState.alive) return { events: [], pendingAttacks: [] };
 
   const events = [];
   const pendingAttacks = [];
-  const autopilotCfg = gameConfig.raw.autopilot || {};
-  const survivalCfg = gameConfig.raw.survival;
-  const worldCfg = gameConfig.raw.world;
+  const autopilotCfg = worldConfig.raw.autopilot || {};
+  const survivalCfg = worldConfig.raw.survival;
+  const worldCfg = worldConfig.raw.world;
   const terrainConfig = worldCfg.terrain;
   const width = worldCfg.width;
   const height = worldCfg.height;
-  const itemsConfig = gameConfig.raw.items;
+  const itemsConfig = worldConfig.raw.items;
   const maxSlots = survivalCfg.inventorySlots;
 
   const directive = botState.directive || { intent: 'idle' };
@@ -306,7 +306,7 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
   if (botState.hunger >= autoEatThreshold) {
     const foodItem = Object.keys(botState.inventory).find(item => itemsConfig[item]?.type === 'food');
     if (foodItem) {
-      const eatEvents = doEat(botName, botState, foodItem, gameConfig);
+      const eatEvents = doEat(botName, botState, foodItem, worldConfig);
       events.push(...eatEvents);
       if (botState.fastTickStats) botState.fastTickStats.autoAte = true;
       return { events, pendingAttacks };
@@ -319,7 +319,7 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
     const nearestThreat = findNearestThreat(botName, botState, worldState.bots);
     if (nearestThreat) {
       const dir = directionAway(botState.x, botState.y, nearestThreat.x, nearestThreat.y);
-      const moveEvents = doMove(botName, botState, dir, worldState, gameConfig);
+      const moveEvents = doMove(botName, botState, dir, worldState, worldConfig);
       events.push(...moveEvents);
       if (botState.fastTickStats) botState.fastTickStats.tilesMoved++;
       return { events, pendingAttacks };
@@ -334,7 +334,7 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
       const tileKey = `${botState.x},${botState.y}`;
       const tile = worldState.tileData[tileKey];
       if (tile?.resources?.length > 0 && countInventory(botState.inventory) < maxSlots) {
-        const gatherEvents = doGather(botName, botState, worldState, gameConfig, worldState.clock?.tick || 0);
+        const gatherEvents = doGather(botName, botState, worldState, worldConfig, worldState.clock?.tick || 0);
         events.push(...gatherEvents);
         if (botState.fastTickStats) {
           for (const ev of gatherEvents) {
@@ -367,7 +367,7 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
       if (botState.path && botState.pathIdx < botState.path.length) {
         const next = botState.path[botState.pathIdx];
         const dir = directionToward(botState.x, botState.y, next.x, next.y);
-        const moveEvents = doMove(botName, botState, dir, worldState, gameConfig);
+        const moveEvents = doMove(botName, botState, dir, worldState, worldConfig);
         events.push(...moveEvents);
         if (moveEvents.some(e => e.action === 'move')) {
           botState.pathIdx++;
@@ -383,7 +383,7 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
           const newKey = `${botState.x},${botState.y}`;
           const newTile = worldState.tileData[newKey];
           if (newTile?.resources?.length > 0 && countInventory(botState.inventory) < maxSlots) {
-            const gatherEvents = doGather(botName, botState, worldState, gameConfig, worldState.clock?.tick || 0);
+            const gatherEvents = doGather(botName, botState, worldState, worldConfig, worldState.clock?.tick || 0);
             events.push(...gatherEvents);
             if (botState.fastTickStats) {
               for (const ev of gatherEvents) {
@@ -410,7 +410,7 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
 
       if (dx <= 1 && dy <= 1) {
         // Attack
-        const result = doAttack(botName, targetName, botState, worldState, gameConfig);
+        const result = doAttack(botName, targetName, botState, worldState, worldConfig);
         events.push(...result.events);
         if (result.pending) pendingAttacks.push(result.pending);
       } else {
@@ -424,7 +424,7 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
         if (botState.path && botState.pathIdx < botState.path.length) {
           const next = botState.path[botState.pathIdx];
           const dir = directionToward(botState.x, botState.y, next.x, next.y);
-          const moveEvents = doMove(botName, botState, dir, worldState, gameConfig);
+          const moveEvents = doMove(botName, botState, dir, worldState, worldConfig);
           events.push(...moveEvents);
           if (moveEvents.some(e => e.action === 'move')) {
             botState.pathIdx++;
@@ -441,14 +441,14 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
       const threat = findNearestThreat(botName, botState, worldState.bots);
       if (threat) {
         const dir = directionAway(botState.x, botState.y, threat.x, threat.y);
-        const moveEvents = doMove(botName, botState, dir, worldState, gameConfig);
+        const moveEvents = doMove(botName, botState, dir, worldState, worldConfig);
         events.push(...moveEvents);
         if (botState.fastTickStats) botState.fastTickStats.tilesMoved++;
       } else if (directive.target) {
         // Flee toward a specific direction
         const dir = directive.target.toUpperCase();
         if (DIRECTIONS[dir]) {
-          const moveEvents = doMove(botName, botState, dir, worldState, gameConfig);
+          const moveEvents = doMove(botName, botState, dir, worldState, worldConfig);
           events.push(...moveEvents);
           if (botState.fastTickStats) botState.fastTickStats.tilesMoved++;
         }
@@ -462,7 +462,7 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
       const targetItem = directive.target;
       if (!targetItem) break;
 
-      const recipe = gameConfig.raw.recipes.find(r => r.output === targetItem);
+      const recipe = worldConfig.raw.recipes.find(r => r.output === targetItem);
       if (!recipe) break;
 
       // Check which inputs we need
@@ -488,7 +488,7 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
       const tileKey = `${botState.x},${botState.y}`;
       const tile = worldState.tileData[tileKey];
       if (tile?.resources?.length > 0 && tile.resources.some(r => r.item === missingItem)) {
-        const gatherEvents = doGather(botName, botState, worldState, gameConfig, worldState.clock?.tick || 0);
+        const gatherEvents = doGather(botName, botState, worldState, worldConfig, worldState.clock?.tick || 0);
         events.push(...gatherEvents);
         if (botState.fastTickStats) {
           for (const ev of gatherEvents) {
@@ -514,7 +514,7 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
       if (botState.path && botState.pathIdx < botState.path.length) {
         const next = botState.path[botState.pathIdx];
         const dir = directionToward(botState.x, botState.y, next.x, next.y);
-        const moveEvents = doMove(botName, botState, dir, worldState, gameConfig);
+        const moveEvents = doMove(botName, botState, dir, worldState, worldConfig);
         events.push(...moveEvents);
         if (moveEvents.some(e => e.action === 'move')) {
           botState.pathIdx++;
@@ -530,7 +530,7 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
       // Try to eat from inventory
       const foodItem = Object.keys(botState.inventory).find(item => itemsConfig[item]?.type === 'food');
       if (foodItem) {
-        const eatEvents = doEat(botName, botState, foodItem, gameConfig);
+        const eatEvents = doEat(botName, botState, foodItem, worldConfig);
         events.push(...eatEvents);
         break;
       }
@@ -539,7 +539,7 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
       const tileKey = `${botState.x},${botState.y}`;
       const tile = worldState.tileData[tileKey];
       if (tile?.resources?.length > 0 && tile.resources.some(r => itemsConfig[r.item]?.type === 'food')) {
-        const gatherEvents = doGather(botName, botState, worldState, gameConfig, worldState.clock?.tick || 0);
+        const gatherEvents = doGather(botName, botState, worldState, worldConfig, worldState.clock?.tick || 0);
         events.push(...gatherEvents);
         break;
       }
@@ -558,7 +558,7 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
       if (botState.path && botState.pathIdx < botState.path.length) {
         const next = botState.path[botState.pathIdx];
         const dir = directionToward(botState.x, botState.y, next.x, next.y);
-        const moveEvents = doMove(botName, botState, dir, worldState, gameConfig);
+        const moveEvents = doMove(botName, botState, dir, worldState, worldConfig);
         events.push(...moveEvents);
         if (moveEvents.some(e => e.action === 'move')) {
           botState.pathIdx++;
@@ -586,7 +586,7 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
         const tick = worldState.clock?.tick || 0;
         const idx = (botState.x * 7 + botState.y * 13 + tick * 3 + Date.now()) % candidates.length;
         const dir = candidates[Math.abs(idx) % candidates.length];
-        const moveEvents = doMove(botName, botState, dir, worldState, gameConfig);
+        const moveEvents = doMove(botName, botState, dir, worldState, worldConfig);
         events.push(...moveEvents);
         if (botState.fastTickStats) botState.fastTickStats.tilesMoved++;
 
@@ -595,7 +595,7 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
           const newKey = `${botState.x},${botState.y}`;
           const newTile = worldState.tileData[newKey];
           if (newTile?.resources?.length > 0 && countInventory(botState.inventory) < maxSlots) {
-            const gatherEvents = doGather(botName, botState, worldState, gameConfig, worldState.clock?.tick || 0);
+            const gatherEvents = doGather(botName, botState, worldState, worldConfig, worldState.clock?.tick || 0);
             events.push(...gatherEvents);
             if (botState.fastTickStats) {
               for (const ev of gatherEvents) {
@@ -617,7 +617,7 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
         const dx = Math.abs(botState.x - bs.x);
         const dy = Math.abs(botState.y - bs.y);
         if (dx <= 1 && dy <= 1) {
-          const result = doAttack(botName, name, botState, worldState, gameConfig);
+          const result = doAttack(botName, name, botState, worldState, worldConfig);
           events.push(...result.events);
           if (result.pending) pendingAttacks.push(result.pending);
           break; // Only attack one per tick
@@ -641,7 +641,7 @@ export function stepAutopilot(botName, botState, worldState, gameConfig) {
       if (botState.path && botState.pathIdx < botState.path.length) {
         const next = botState.path[botState.pathIdx];
         const dir = directionToward(botState.x, botState.y, next.x, next.y);
-        const moveEvents = doMove(botName, botState, dir, worldState, gameConfig);
+        const moveEvents = doMove(botName, botState, dir, worldState, worldConfig);
         events.push(...moveEvents);
         if (moveEvents.some(e => e.action === 'move')) {
           botState.pathIdx++;
@@ -701,19 +701,19 @@ function findNearestThreat(botName, botState, allBots) {
  * Run one fast tick: iterate all alive bots, call stepAutopilot.
  *
  * @param {object} state - full world state (bots, terrain, tileData, clock)
- * @param {object} gameConfig
+ * @param {object} worldConfig
  * @returns {{ events: Array, positionUpdates: Object }}
  */
-export function runFastTick(state, gameConfig) {
+export function runFastTick(state, worldConfig) {
   const allEvents = [];
   const allPendingAttacks = [];
   const positionUpdates = {};
-  const autopilotCfg = gameConfig.raw.autopilot || {};
+  const autopilotCfg = worldConfig.raw.autopilot || {};
 
   // Fractional hunger drain per fast tick
   const fastTickMs = autopilotCfg.fastTickMs || 1000;
   const fastTicksPerSlowTick = 45000 / fastTickMs; // ~45 fast ticks per slow tick
-  const hungerPerFastTick = (gameConfig.raw.survival.hungerPerTick || 3) / fastTicksPerSlowTick;
+  const hungerPerFastTick = (worldConfig.raw.survival.hungerPerTick || 3) / fastTicksPerSlowTick;
 
   // Respawn any zombie bots (health=0, alive=true) — safety net
   const rngZombie = mulberry32(state.worldSeed + state.clock.tick + 999);
@@ -722,8 +722,8 @@ export function runFastTick(state, gameConfig) {
       // Zombie state: killed in fast-tick combat but handleDeath wasn't called
       const deathEvents = handleDeath(
         botName, botState, state,
-        gameConfig.raw.survival, gameConfig.raw.world.terrain,
-        rngZombie, gameConfig.raw.world.width, gameConfig.raw.world.height
+        worldConfig.raw.survival, worldConfig.raw.world.terrain,
+        rngZombie, worldConfig.raw.world.width, worldConfig.raw.world.height
       );
       allEvents.push(...deathEvents);
     }
@@ -745,8 +745,8 @@ export function runFastTick(state, gameConfig) {
     // Update fog-of-war: mark tiles within visibility radius as seen
     if (!botState.seenTiles) botState.seenTiles = {};
     const visRadius = 5; // base visibility
-    const width = gameConfig.raw.world.width;
-    const height = gameConfig.raw.world.height;
+    const width = worldConfig.raw.world.width;
+    const height = worldConfig.raw.world.height;
     for (let dy = -visRadius; dy <= visRadius; dy++) {
       for (let dx = -visRadius; dx <= visRadius; dx++) {
         if (dx * dx + dy * dy > visRadius * visRadius) continue;
@@ -757,7 +757,7 @@ export function runFastTick(state, gameConfig) {
       }
     }
 
-    const { events, pendingAttacks } = stepAutopilot(botName, botState, state, gameConfig);
+    const { events, pendingAttacks } = stepAutopilot(botName, botState, state, worldConfig);
     allEvents.push(...events);
     allPendingAttacks.push(...pendingAttacks);
 
@@ -766,14 +766,14 @@ export function runFastTick(state, gameConfig) {
 
     // Fractional hunger increase
     botState.hunger = Math.min(
-      gameConfig.raw.survival.maxHunger,
+      worldConfig.raw.survival.maxHunger,
       botState.hunger + hungerPerFastTick
     );
   }
 
   // Resolve any combat from this fast tick (individual, not simultaneous)
   if (allPendingAttacks.length > 0) {
-    const combatEvents = resolveCombat(allPendingAttacks, state.bots, gameConfig);
+    const combatEvents = resolveCombat(allPendingAttacks, state.bots, worldConfig);
     allEvents.push(...combatEvents);
 
     // Track damage stats + handle deaths
@@ -790,8 +790,8 @@ export function runFastTick(state, gameConfig) {
         if (bs && bs.health <= 0) {
           const deathEvents = handleDeath(
             ev.bot, bs, state,
-            gameConfig.raw.survival, gameConfig.raw.world.terrain,
-            rng, gameConfig.raw.world.width, gameConfig.raw.world.height
+            worldConfig.raw.survival, worldConfig.raw.world.terrain,
+            rng, worldConfig.raw.world.width, worldConfig.raw.world.height
           );
           allEvents.push(...deathEvents);
         }

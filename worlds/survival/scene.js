@@ -38,12 +38,12 @@ export function getDayPhase(tick, dayNightConfig) {
  *
  * @param {object} inventory - { item: count }
  * @param {object} equipment - { weapon, armor, tool }
- * @param {object} gameConfig
+ * @param {object} worldConfig
  * @returns {string}
  */
-export function formatInventory(inventory, equipment, gameConfig) {
-  const items = gameConfig.raw.items;
-  const maxSlots = gameConfig.raw.survival.inventorySlots;
+export function formatInventory(inventory, equipment, worldConfig) {
+  const items = worldConfig.raw.items;
+  const maxSlots = worldConfig.raw.survival.inventorySlots;
 
   const parts = [];
   let usedSlots = 0;
@@ -80,7 +80,7 @@ export function formatStats(botState, dayPhase, tick) {
  * @param {string} opts.botName
  * @param {object} opts.botState - { x, y, health, hunger, inventory, equipment, alive, directive, fastTickStats }
  * @param {object} opts.worldState - { terrain, tileData, bots, clock }
- * @param {object} opts.gameConfig
+ * @param {object} opts.worldConfig
  * @param {number} opts.currentTick
  * @param {Array} opts.recentEvents - Events this bot witnessed
  * @param {string} opts.villageSummary - Memory summary
@@ -88,11 +88,11 @@ export function formatStats(botState, dayPhase, tick) {
  * @param {object} [opts.fastTickStats] - { tilesMoved, itemsGathered, damageDealt, damageTaken }
  * @returns {string} Scene prompt
  */
-export function buildSurvivalScene({ botName, botState, worldState, gameConfig, currentTick,
+export function buildSurvivalScene({ botName, botState, worldState, worldConfig, currentTick,
                                       recentEvents, villageSummary, isScout, fastTickStats,
                                       round, displayNames, diplomacy }) {
-  const labels = gameConfig.raw.sceneLabels;
-  const dayNight = gameConfig.raw.dayNight;
+  const labels = worldConfig.raw.sceneLabels;
+  const dayNight = worldConfig.raw.dayNight;
   const dayPhase = getDayPhase(currentTick, dayNight);
 
   const lines = [];
@@ -103,7 +103,7 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
   lines.push('');
 
   // == ROUND ==
-  if (round && gameConfig.raw.scoring) {
+  if (round && worldConfig.raw.scoring) {
     lines.push('== ROUND ==');
     lines.push(`Round ${round.number} | ${round.ticksRemaining} ticks remaining`);
     const scoreboard = buildScoreboard(round.scores || {}, displayNames || {});
@@ -111,7 +111,7 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
       const scoreStr = scoreboard.map(s => `${s.displayName}: ${s.score}`).join(', ');
       lines.push(`Scoreboard: ${scoreStr}`);
     }
-    const pts = gameConfig.raw.scoring.points;
+    const pts = worldConfig.raw.scoring.points;
     lines.push(`Points: kill=${pts.kill}, craft=${pts.craft}, gather=${pts.gather}, explore=${pts.explore}, survival=${pts.survivalTick}, death=${pts.death}`);
     if (round.scores && pts.betrayalKill) {
       const bounty = getBountyBot(round.scores);
@@ -127,7 +127,7 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
   }
 
   // == DIPLOMACY ==
-  if (diplomacy && gameConfig.raw.diplomacy) {
+  if (diplomacy && worldConfig.raw.diplomacy) {
     lines.push('== DIPLOMACY ==');
 
     // Your allies
@@ -151,7 +151,7 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
       const [from, to] = key.split('→');
       if (to === botName) {
         const fromName = (displayNames || {})[from] || from;
-        const remaining = (gameConfig.raw.diplomacy.proposalExpireTicks || 5) - (currentTick - proposal.tick);
+        const remaining = (worldConfig.raw.diplomacy.proposalExpireTicks || 5) - (currentTick - proposal.tick);
         lines.push(`Pending: ${fromName} wants to ally with you (expires in ${remaining} ticks) — say "ACCEPT ALLIANCE ${fromName}" to accept`);
       } else if (from === botName) {
         lines.push(`Your proposal to ${(displayNames || {})[to] || to} is pending...`);
@@ -169,7 +169,7 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
   }
 
   // == MAP ==
-  let radius = computeVisibility(botState, worldState.terrain, dayPhase, gameConfig);
+  let radius = computeVisibility(botState, worldState.terrain, dayPhase, worldConfig);
   if (isScout) radius = Math.min(radius + 3, 15);
 
   const asciiMap = buildAsciiMap({
@@ -180,8 +180,8 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
     tileData: worldState.tileData,
     allBots: worldState.bots,
     botName,
-    width: gameConfig.raw.world.width,
-    height: gameConfig.raw.world.height,
+    width: worldConfig.raw.world.width,
+    height: worldConfig.raw.world.height,
   });
 
   lines.push(labels.mapHeader);
@@ -192,17 +192,17 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
   // == CURRENT TILE ==
   const tileKey = `${botState.x},${botState.y}`;
   const currentTile = worldState.tileData[tileKey];
-  const terrainIdx = botState.y * gameConfig.raw.world.width + botState.x;
+  const terrainIdx = botState.y * worldConfig.raw.world.width + botState.x;
   const terrainChar = worldState.terrain[terrainIdx] || '.';
   const charToType = {};
-  for (const [type, cfg] of Object.entries(gameConfig.raw.world.terrain)) {
+  for (const [type, cfg] of Object.entries(worldConfig.raw.world.terrain)) {
     charToType[cfg.char] = type;
   }
   const terrainType = charToType[terrainChar] || 'unknown';
   lines.push('== CURRENT TILE ==');
   if (currentTile?.resources?.length > 0) {
     const resList = currentTile.resources.map(r => {
-      const label = gameConfig.raw.items[r.item]?.label || r.item;
+      const label = worldConfig.raw.items[r.item]?.label || r.item;
       return `${label} x${r.qty}`;
     }).join(', ');
     lines.push(`Terrain: ${terrainType} | Resources here: ${resList} (autopilot will auto-gather)`);
@@ -242,7 +242,7 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
       const counts = {};
       for (const item of stats.itemsGathered) counts[item] = (counts[item] || 0) + 1;
       const gathered = Object.entries(counts).map(([item, qty]) => {
-        const label = gameConfig.raw.items[item]?.label || item;
+        const label = worldConfig.raw.items[item]?.label || item;
         return `${label} x${qty}`;
       }).join(', ');
       parts.push(`Gathered ${gathered}`);
@@ -258,7 +258,7 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
   if (Object.keys(botState.inventory).length === 0 && !botState.equipment.weapon && !botState.equipment.armor && !botState.equipment.tool) {
     lines.push(labels.emptyInventory);
   } else {
-    lines.push(formatInventory(botState.inventory, botState.equipment, gameConfig));
+    lines.push(formatInventory(botState.inventory, botState.equipment, worldConfig));
   }
   lines.push('');
 
@@ -271,10 +271,10 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
     const dist = Math.sqrt(Math.pow(botState.x - bs.x, 2) + Math.pow(botState.y - bs.y, 2));
     if (dist <= radius) {
       const weapon = bs.equipment.weapon
-        ? (gameConfig.raw.items[bs.equipment.weapon]?.label || bs.equipment.weapon)
+        ? (worldConfig.raw.items[bs.equipment.weapon]?.label || bs.equipment.weapon)
         : 'unarmed';
       const armor = bs.equipment.armor
-        ? (gameConfig.raw.items[bs.equipment.armor]?.label || bs.equipment.armor)
+        ? (worldConfig.raw.items[bs.equipment.armor]?.label || bs.equipment.armor)
         : 'none';
       // Diplomacy tags
       const tags = [];
@@ -296,7 +296,7 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
   lines.push(labels.recentHeader);
   if (recentEvents && recentEvents.length > 0) {
     for (const ev of recentEvents.slice(-15)) {
-      const formatted = formatEvent(ev, gameConfig, displayNames);
+      const formatted = formatEvent(ev, worldConfig, displayNames);
       if (formatted) lines.push(`  ${formatted}`);
     }
   } else {
@@ -312,13 +312,13 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
 
   // Contextual suggestions
   const suggestions = [];
-  const foodItems = Object.entries(botState.inventory).filter(([item]) => gameConfig.raw.items[item]?.type === 'food');
+  const foodItems = Object.entries(botState.inventory).filter(([item]) => worldConfig.raw.items[item]?.type === 'food');
   if (botState.hunger >= 30 && foodItems.length > 0) {
     suggestions.push(`→ Hunger is ${botState.hunger}/100. Call survival_eat or set directive to "eat".`);
   } else if (botState.hunger >= 30 && foodItems.length === 0) {
     suggestions.push(`→ Hunger is ${botState.hunger}/100 and you have no food! Set directive: gather berry.`);
   }
-  const craftable = getCraftableRecipes(botState.inventory, gameConfig);
+  const craftable = getCraftableRecipes(botState.inventory, worldConfig);
   if (craftable.length > 0) {
     suggestions.push(`→ You can craft: ${craftable.map(r => r.output).join(', ')}`);
   }
@@ -347,13 +347,13 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
   if (craftable.length > 0) {
     lines.push('  survival_craft { item: "<output>" } — Craft an item:');
     for (const r of craftable) {
-      const label = gameConfig.raw.items[r.output]?.label || r.output;
+      const label = worldConfig.raw.items[r.output]?.label || r.output;
       lines.push(`    ${r.output} (${label}): ${r.inputs.join(' + ')}`);
     }
   }
 
   lines.push('  survival_say { message: "..." } — Speak to nearby bots (only bots within your visibility range hear this)');
-  if (gameConfig.raw.diplomacy) {
+  if (worldConfig.raw.diplomacy) {
     lines.push('    USE SAY FOR: diplomacy, threats, lies, coordination, alliance commands.');
     lines.push('    DO NOT narrate scores or your own status — you already see the scoreboard.');
     lines.push('    Alliance commands: "PROPOSE ALLIANCE <name>", "ACCEPT ALLIANCE <name>", "BREAK ALLIANCE <name>"');
@@ -364,7 +364,7 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
   // == GUIDANCE ==
   lines.push(labels.guidanceHeader);
   if (labels.behaviorGuidance) lines.push(labels.behaviorGuidance);
-  if (gameConfig.raw.diplomacy) {
+  if (worldConfig.raw.diplomacy) {
     lines.push('This is a game of STRATEGY and DECEPTION, like the Three Kingdoms (三国).');
     lines.push('ALLIANCES: say "PROPOSE ALLIANCE <name>" / "ACCEPT ALLIANCE <name>" / "BREAK ALLIANCE <name>".');
     lines.push('Allies earn +1/tick when nearby. BETRAYAL kill = +80 pts (kill + bonus). BOUNTY kill = +75 pts.');
@@ -383,7 +383,7 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
     lines.push('  - GOOD: "I come in peace. Let me pass."');
     lines.push('  - GOOD: "PROPOSE ALLIANCE wise-koala"');
     lines.push('  - BAD: "289分第一名！饥饿76%紧急！💥" (useless dramatic narration)');
-  } else if (gameConfig.raw.scoring) {
+  } else if (worldConfig.raw.scoring) {
     lines.push('This is a COMPETITION. The bot with the most points at round end wins.');
     lines.push('Kills are worth 50 points — hunting other bots is the fastest way to score.');
     lines.push('Craft weapons, explore new tiles, gather resources — everything earns points.');
@@ -406,9 +406,9 @@ export function buildSurvivalScene({ botName, botState, worldState, gameConfig, 
 /**
  * Get recipes that the bot can currently craft.
  */
-function getCraftableRecipes(inventory, gameConfig) {
+function getCraftableRecipes(inventory, worldConfig) {
   const craftable = [];
-  for (const recipe of gameConfig.raw.recipes) {
+  for (const recipe of worldConfig.raw.recipes) {
     const inputCounts = {};
     for (const input of recipe.inputs) {
       inputCounts[input] = (inputCounts[input] || 0) + 1;
@@ -428,8 +428,8 @@ function getCraftableRecipes(inventory, gameConfig) {
 /**
  * Format an event for display in the recent events section.
  */
-function formatEvent(ev, gameConfig, displayNames) {
-  const items = gameConfig.raw.items;
+function formatEvent(ev, worldConfig, displayNames) {
+  const items = worldConfig.raw.items;
   const dn = (name) => (displayNames || {})[name] || name;
   switch (ev.action) {
     case 'move':

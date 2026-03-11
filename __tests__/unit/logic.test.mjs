@@ -7,16 +7,16 @@ import {
   shouldSkipForCost,
   findNewBots,
   findDepartedBots,
-} from '../../games/social-village/logic.js';
-import { loadGame } from '../../game-loader.js';
+} from '../../worlds/social-village/logic.js';
+import { loadWorld } from '../../world-loader.js';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const gameConfig = loadGame(join(__dirname, '../../games/social-village/schema.json'));
+const worldConfig = loadWorld(join(__dirname, '../../worlds/social-village/schema.json'));
 
-const ALL_LOCATIONS = gameConfig.locationSlugs;
-const PHASES = Object.keys(gameConfig.phaseDescriptions);
+const ALL_LOCATIONS = worldConfig.locationSlugs;
+const PHASES = Object.keys(worldConfig.phaseDescriptions);
 
 // --- Helper to create fresh state ---
 

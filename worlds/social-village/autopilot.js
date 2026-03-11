@@ -5,7 +5,7 @@
  * Generates ambient atmosphere, idle behaviors, and autonomous movement
  * between LLM ticks to make the village feel alive.
  *
- * Single export: runSocialFastTick(state, gameConfig, participants)
+ * Single export: runSocialFastTick(state, worldConfig, participants)
  * Returns { events: Array } for server to broadcast.
  */
 
@@ -34,9 +34,9 @@ function findBotLocation(botName, state) {
  * ~ambientChance per occupied location per fast tick.
  * Respects cooldown to avoid back-to-back at same location.
  */
-function rollAmbient(location, autopilotState, gameConfig) {
-  const cfg = gameConfig.raw.autopilot;
-  const ambientPool = gameConfig.raw.ambientEvents?.[location];
+function rollAmbient(location, autopilotState, worldConfig) {
+  const cfg = worldConfig.raw.autopilot;
+  const ambientPool = worldConfig.raw.ambientEvents?.[location];
   if (!ambientPool || ambientPool.length === 0) return null;
 
   // Cooldown check
@@ -61,9 +61,9 @@ function rollAmbient(location, autopilotState, gameConfig) {
  * ~idleChance per bot per fast tick.
  * Pool selection: 50% location → 50% universal.
  */
-function rollIdle(botName, displayName, location, gameConfig) {
-  const cfg = gameConfig.raw.autopilot;
-  const behaviors = gameConfig.raw.idleBehaviors;
+function rollIdle(botName, displayName, location, worldConfig) {
+  const cfg = worldConfig.raw.autopilot;
+  const behaviors = worldConfig.raw.idleBehaviors;
   if (!behaviors) return null;
 
   if (Math.random() > cfg.idleChance) return null;
@@ -95,16 +95,16 @@ function rollIdle(botName, displayName, location, gameConfig) {
 /**
  * Get time-of-day phase for routine selection.
  */
-function getPhase(gameConfig) {
-  const vt = getVillageTime(gameConfig.timezone);
+function getPhase(worldConfig) {
+  const vt = getVillageTime(worldConfig.timezone);
   return vt.phase;
 }
 
 /**
  * Score a location for a bot based on routine affinity and social gravity.
  */
-function scoreLocation(loc, botName, phase, state, gameConfig) {
-  const cfg = gameConfig.raw.autopilot;
+function scoreLocation(loc, botName, phase, state, worldConfig) {
+  const cfg = worldConfig.raw.autopilot;
   let score = 0;
 
   // Routine affinity: check if location is in default routine for this phase
@@ -138,8 +138,8 @@ function scoreLocation(loc, botName, phase, state, gameConfig) {
  * ~moveChance per bot per fast tick.
  * Respects move cooldown (moveCooldownFastTicks).
  */
-function rollAutoMove(botName, displayName, currentLoc, state, gameConfig, autopilotState) {
-  const cfg = gameConfig.raw.autopilot;
+function rollAutoMove(botName, displayName, currentLoc, state, worldConfig, autopilotState) {
+  const cfg = worldConfig.raw.autopilot;
 
   // Move cooldown check
   const moveCooldowns = autopilotState.moveCooldowns || {};
@@ -147,11 +147,11 @@ function rollAutoMove(botName, displayName, currentLoc, state, gameConfig, autop
 
   if (Math.random() > cfg.moveChance) return null;
 
-  const phase = getPhase(gameConfig);
+  const phase = getPhase(worldConfig);
 
   // Score all other locations
   const allLocs = [
-    ...gameConfig.locationSlugs,
+    ...worldConfig.locationSlugs,
     ...Object.keys(state.customLocations || {}),
   ].filter(l => l !== currentLoc);
 
@@ -161,7 +161,7 @@ function rollAutoMove(botName, displayName, currentLoc, state, gameConfig, autop
   let bestLoc = null;
   let bestScore = -Infinity;
   for (const loc of allLocs) {
-    const s = scoreLocation(loc, botName, phase, state, gameConfig);
+    const s = scoreLocation(loc, botName, phase, state, worldConfig);
     if (s > bestScore) { bestScore = s; bestLoc = loc; }
   }
 
@@ -177,8 +177,8 @@ function rollAutoMove(botName, displayName, currentLoc, state, gameConfig, autop
     displayName,
     from: currentLoc,
     to: bestLoc,
-    fromName: gameConfig.locationNames[currentLoc] || state.customLocations?.[currentLoc]?.name || currentLoc,
-    toName: gameConfig.locationNames[bestLoc] || state.customLocations?.[bestLoc]?.name || bestLoc,
+    fromName: worldConfig.locationNames[currentLoc] || state.customLocations?.[currentLoc]?.name || currentLoc,
+    toName: worldConfig.locationNames[bestLoc] || state.customLocations?.[bestLoc]?.name || bestLoc,
   };
 }
 
@@ -187,13 +187,13 @@ function rollAutoMove(botName, displayName, currentLoc, state, gameConfig, autop
 /**
  * Run one social fast tick cycle.
  *
- * @param {object} state - Game state (mutable — moves update state.locations)
- * @param {object} gameConfig - Loaded game configuration
+ * @param {object} state - World state (mutable — moves update state.locations)
+ * @param {object} worldConfig - Loaded world configuration
  * @param {Map} participants - botName → { port, displayName }
  * @returns {{ events: Array }}
  */
-export function runSocialFastTick(state, gameConfig, participants) {
-  if (!gameConfig.raw.autopilot) return { events: [] };
+export function runSocialFastTick(state, worldConfig, participants) {
+  if (!worldConfig.raw.autopilot) return { events: [] };
 
   // Initialize autopilot state if needed
   if (!state.autopilotState) {
@@ -216,7 +216,7 @@ export function runSocialFastTick(state, gameConfig, participants) {
 
   // All locations (schema + custom)
   const allLocs = [
-    ...gameConfig.locationSlugs,
+    ...worldConfig.locationSlugs,
     ...Object.keys(state.customLocations || {}),
   ];
 
@@ -225,9 +225,9 @@ export function runSocialFastTick(state, gameConfig, participants) {
     const botsAtLoc = state.locations[loc] || [];
     if (botsAtLoc.length === 0) continue;
 
-    const ambient = rollAmbient(loc, apState, gameConfig);
+    const ambient = rollAmbient(loc, apState, worldConfig);
     if (ambient) {
-      ambient.locationName = gameConfig.locationNames[loc] || state.customLocations?.[loc]?.name || loc;
+      ambient.locationName = worldConfig.locationNames[loc] || state.customLocations?.[loc]?.name || loc;
       events.push(ambient);
     }
   }
@@ -240,11 +240,11 @@ export function runSocialFastTick(state, gameConfig, participants) {
     const displayName = info.displayName || botName;
 
     // Idle behavior
-    const idle = rollIdle(botName, displayName, loc, gameConfig);
+    const idle = rollIdle(botName, displayName, loc, worldConfig);
     if (idle) events.push(idle);
 
     // Autonomous movement
-    const move = rollAutoMove(botName, displayName, loc, state, gameConfig, apState);
+    const move = rollAutoMove(botName, displayName, loc, state, worldConfig, apState);
     if (move) {
       // Apply the move to state
       const fromBots = state.locations[move.from];

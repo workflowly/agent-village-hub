@@ -25,7 +25,7 @@ export function initScores(botsState) {
  * @param {object} scores - { botName: number }
  * @param {string} botName
  * @param {string} category - key in config.raw.scoring.points
- * @param {object} config - gameConfig with raw.scoring.points
+ * @param {object} config - worldConfig with raw.scoring.points
  * @returns {number} points awarded (0 if bot/category missing)
  */
 export function awardPoints(scores, botName, category, config) {
@@ -270,15 +270,15 @@ function addToInventory(inventory, item, count = 1) {
  * @param {Array} actions - [{ tool, params }]
  * @param {object} botState - Mutable bot state { x, y, health, hunger, inventory, equipment, alive }
  * @param {object} worldState - { terrain, tileData, bots, clock }
- * @param {object} gameConfig - Full game config
+ * @param {object} worldConfig - Full game config
  * @returns {{ events: Array, pendingAttacks: Array }}
  */
-export function processActions(botName, actions, botState, worldState, gameConfig, displayNames) {
+export function processActions(botName, actions, botState, worldState, worldConfig, displayNames) {
   if (!botState.alive) return { events: [], pendingAttacks: [] };
 
   const events = [];
   const pendingAttacks = [];
-  const actionsConfig = gameConfig.raw.actions;
+  const actionsConfig = worldConfig.raw.actions;
 
   // Classify actions
   let hasExclusive = false;
@@ -310,27 +310,27 @@ export function processActions(botName, actions, botState, worldState, gameConfi
 
     switch (actionType) {
       case 'move': {
-        const result = doMove(botName, botState, params.direction, worldState, gameConfig);
+        const result = doMove(botName, botState, params.direction, worldState, worldConfig);
         events.push(...result);
         break;
       }
       case 'gather': {
-        const result = doGather(botName, botState, worldState, gameConfig, worldState.clock.tick);
+        const result = doGather(botName, botState, worldState, worldConfig, worldState.clock.tick);
         events.push(...result);
         break;
       }
       case 'craft': {
-        const result = doCraft(botName, botState, params.item, gameConfig);
+        const result = doCraft(botName, botState, params.item, worldConfig);
         events.push(...result);
         break;
       }
       case 'eat': {
-        const result = doEat(botName, botState, params.item, gameConfig);
+        const result = doEat(botName, botState, params.item, worldConfig);
         events.push(...result);
         break;
       }
       case 'attack': {
-        const result = doAttack(botName, params.target, botState, worldState, gameConfig);
+        const result = doAttack(botName, params.target, botState, worldState, worldConfig);
         if (result.pending) {
           pendingAttacks.push(result.pending);
         }
@@ -348,7 +348,7 @@ export function processActions(botName, actions, botState, worldState, gameConfi
         break;
       }
       case 'scout': {
-        const result = doScout(botName, botState, worldState, gameConfig);
+        const result = doScout(botName, botState, worldState, worldConfig);
         events.push(...result);
         break;
       }
@@ -445,7 +445,7 @@ export function applyDirective(botName, botState, params, displayNames) {
 
 // --- Move ---
 
-export function doMove(botName, botState, direction, worldState, gameConfig) {
+export function doMove(botName, botState, direction, worldState, worldConfig) {
   const dir = DIRECTIONS[(direction || '').toUpperCase()];
   if (!dir) {
     return [{ action: 'move_fail', bot: botName, reason: `Invalid direction: ${direction}` }];
@@ -453,7 +453,7 @@ export function doMove(botName, botState, direction, worldState, gameConfig) {
 
   const newX = botState.x + dir.dx;
   const newY = botState.y + dir.dy;
-  const { width, height } = gameConfig.raw.world;
+  const { width, height } = worldConfig.raw.world;
 
   // Bounds check
   if (newX < 0 || newX >= width || newY < 0 || newY >= height) {
@@ -463,8 +463,8 @@ export function doMove(botName, botState, direction, worldState, gameConfig) {
   // Terrain passability
   const idx = newY * width + newX;
   const ch = worldState.terrain[idx];
-  const type = terrainTypeFromChar(ch, gameConfig.raw.world);
-  if (!type || gameConfig.raw.world.terrain[type].moveCost < 0) {
+  const type = terrainTypeFromChar(ch, worldConfig.raw.world);
+  if (!type || worldConfig.raw.world.terrain[type].moveCost < 0) {
     return [{ action: 'move_fail', bot: botName, reason: `Impassable terrain (${type || 'unknown'})` }];
   }
 
@@ -485,7 +485,7 @@ export function doMove(botName, botState, direction, worldState, gameConfig) {
 
 // --- Gather ---
 
-export function doGather(botName, botState, worldState, gameConfig, currentTick) {
+export function doGather(botName, botState, worldState, worldConfig, currentTick) {
   const key = `${botState.x},${botState.y}`;
   const tile = worldState.tileData[key];
 
@@ -493,13 +493,13 @@ export function doGather(botName, botState, worldState, gameConfig, currentTick)
     return [{ action: 'gather_fail', bot: botName, reason: 'No resources here' }];
   }
 
-  const maxSlots = gameConfig.raw.survival.inventorySlots;
+  const maxSlots = worldConfig.raw.survival.inventorySlots;
   const currentSlots = countInventory(botState.inventory);
 
   // Calculate gather bonus from equipped tool
   let gatherBonus = 0;
   if (botState.equipment.tool) {
-    const toolCfg = gameConfig.raw.items[botState.equipment.tool];
+    const toolCfg = worldConfig.raw.items[botState.equipment.tool];
     if (toolCfg && toolCfg.gatherBonus) gatherBonus = toolCfg.gatherBonus;
   }
 
@@ -546,13 +546,13 @@ export function doGather(botName, botState, worldState, gameConfig, currentTick)
 
 // --- Craft ---
 
-export function doCraft(botName, botState, recipeOutput, gameConfig) {
+export function doCraft(botName, botState, recipeOutput, worldConfig) {
   if (!recipeOutput) {
     return [{ action: 'craft_fail', bot: botName, reason: 'No item specified' }];
   }
 
   // Find recipe
-  const recipe = gameConfig.raw.recipes.find(r => r.output === recipeOutput);
+  const recipe = worldConfig.raw.recipes.find(r => r.output === recipeOutput);
   if (!recipe) {
     return [{ action: 'craft_fail', bot: botName, reason: `Unknown recipe: ${recipeOutput}` }];
   }
@@ -571,7 +571,7 @@ export function doCraft(botName, botState, recipeOutput, gameConfig) {
   }
 
   // Check inventory space (consuming inputs frees slots, output takes 1)
-  const maxSlots = gameConfig.raw.survival.inventorySlots;
+  const maxSlots = worldConfig.raw.survival.inventorySlots;
   const currentSlots = countInventory(botState.inventory);
   const inputTotal = recipe.inputs.length;
   const afterCraft = currentSlots - inputTotal + 1;
@@ -588,7 +588,7 @@ export function doCraft(botName, botState, recipeOutput, gameConfig) {
   addToInventory(botState.inventory, recipeOutput);
 
   // Auto-equip if equipment slot is empty
-  const outputCfg = gameConfig.raw.items[recipeOutput];
+  const outputCfg = worldConfig.raw.items[recipeOutput];
   if (outputCfg) {
     if (outputCfg.type === 'weapon' && !botState.equipment.weapon) {
       botState.equipment.weapon = recipeOutput;
@@ -613,12 +613,12 @@ export function doCraft(botName, botState, recipeOutput, gameConfig) {
 
 // --- Eat ---
 
-export function doEat(botName, botState, itemId, gameConfig) {
+export function doEat(botName, botState, itemId, worldConfig) {
   if (!itemId) {
     return [{ action: 'eat_fail', bot: botName, reason: 'No item specified' }];
   }
 
-  const itemCfg = gameConfig.raw.items[itemId];
+  const itemCfg = worldConfig.raw.items[itemId];
   if (!itemCfg || itemCfg.type !== 'food') {
     return [{ action: 'eat_fail', bot: botName, reason: `${itemId} is not food` }];
   }
@@ -634,7 +634,7 @@ export function doEat(botName, botState, itemId, gameConfig) {
 
   // Optional health restore
   if (itemCfg.healthRestore) {
-    botState.health = Math.min(gameConfig.raw.survival.maxHealth, botState.health + itemCfg.healthRestore);
+    botState.health = Math.min(worldConfig.raw.survival.maxHealth, botState.health + itemCfg.healthRestore);
   }
 
   return [{
@@ -649,7 +649,7 @@ export function doEat(botName, botState, itemId, gameConfig) {
 
 // --- Attack ---
 
-export function doAttack(botName, targetName, botState, worldState, gameConfig) {
+export function doAttack(botName, targetName, botState, worldState, worldConfig) {
   const events = [];
 
   if (!targetName) {
@@ -677,7 +677,7 @@ export function doAttack(botName, targetName, botState, worldState, gameConfig) 
 
 // --- Scout (enhanced visibility for one turn) ---
 
-export function doScout(botName, botState, worldState, gameConfig) {
+export function doScout(botName, botState, worldState, worldConfig) {
   // Scout reveals a larger area — handled in scene building
   // Here we just emit the event
   return [{
@@ -696,10 +696,10 @@ export function doScout(botName, botState, worldState, gameConfig) {
  *
  * @param {Array} attacks - [{ attacker, target }]
  * @param {object} botsState - { botName: { health, equipment, ... } }
- * @param {object} gameConfig
+ * @param {object} worldConfig
  * @returns {Array} events
  */
-export function resolveCombat(attacks, botsState, gameConfig) {
+export function resolveCombat(attacks, botsState, worldConfig) {
   if (attacks.length === 0) return [];
 
   const events = [];
@@ -711,16 +711,16 @@ export function resolveCombat(attacks, botsState, gameConfig) {
     if (!attackerState?.alive || !targetState?.alive) continue;
 
     // Calculate damage
-    let damage = gameConfig.raw.combat.unarmedDamage;
+    let damage = worldConfig.raw.combat.unarmedDamage;
     if (attackerState.equipment.weapon) {
-      const weaponCfg = gameConfig.raw.items[attackerState.equipment.weapon];
+      const weaponCfg = worldConfig.raw.items[attackerState.equipment.weapon];
       if (weaponCfg?.damage) damage = weaponCfg.damage;
     }
 
     // Apply defense
     let defense = 0;
     if (targetState.equipment.armor) {
-      const armorCfg = gameConfig.raw.items[targetState.equipment.armor];
+      const armorCfg = worldConfig.raw.items[targetState.equipment.armor];
       if (armorCfg?.defense) defense = armorCfg.defense;
     }
 

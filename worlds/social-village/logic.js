@@ -4,8 +4,8 @@
  * These functions operate on state objects passed as arguments rather than
  * module-level closures, making them independently testable.
  *
- * Game content (events, spice, emotions, locations, etc.) is loaded from a
- * game schema JSON via game-loader.js and passed as `gameConfig`.
+ * World content (events, spice, emotions, locations, etc.) is loaded from a
+ * world schema JSON via world-loader.js and passed as `worldConfig`.
  */
 
 import { ACTION_HANDLERS } from './action-handlers.js';
@@ -19,11 +19,11 @@ export { ensureGovernance, resolveExpiredProposal, expireMayor, enforceExiles, c
  * @param {number} tick - Current tick
  * @param {string} location - Location slug
  * @param {object} eventState - Per-location event tracking (mutated)
- * @param {object} gameConfig - Loaded game configuration
+ * @param {object} worldConfig - Loaded world configuration
  * @returns {string|null} Event text, or null
  */
-export function rollVillageEvent(tick, location, eventState, gameConfig) {
-  const { events, eventConfig } = gameConfig;
+export function rollVillageEvent(tick, location, eventState, worldConfig) {
+  const { events, eventConfig } = worldConfig;
 
   if (!eventState[location]) {
     eventState[location] = { lastEventTick: -Infinity, lastCategory: null, recentEvents: [] };
@@ -67,7 +67,7 @@ export function rollVillageEvent(tick, location, eventState, gameConfig) {
  */
 export function processActions(botName, actions, location, state, opts = {}) {
   const events = [];
-  const { lastMoveTick, tick, validLocations = [], gameConfig } = opts;
+  const { lastMoveTick, tick, validLocations = [], worldConfig } = opts;
 
   // Move cooldown: reject move if bot moved last tick
   const onCooldown = lastMoveTick && tick != null
@@ -79,10 +79,10 @@ export function processActions(botName, actions, location, state, opts = {}) {
   ]);
 
   // Location tool filtering — server-side enforcement
-  const locationToolIds = gameConfig ? new Set(
-    gameConfig.locationTools[location] ||
+  const locationToolIds = worldConfig ? new Set(
+    worldConfig.locationTools[location] ||
     state.customLocations?.[location]?.tools ||
-    gameConfig.defaultLocationTools
+    worldConfig.defaultLocationTools
   ) : null;
 
   // Check if bot wants to move — if so, move is exclusive (skip other non-free actions)
@@ -112,11 +112,11 @@ export function processActions(botName, actions, location, state, opts = {}) {
 }
 
 /**
- * Advance the game clock by one tick.
+ * Advance the world clock by one tick.
  *
  * @param {object} clock - { tick, phase, ticksInPhase }
  * @param {number} ticksPerPhase - Ticks before phase advances
- * @param {string[]} phases - Ordered phase names from game schema
+ * @param {string[]} phases - Ordered phase names from world schema
  * @returns {object} Updated clock
  */
 export function advanceClock(clock, ticksPerPhase, phases) {

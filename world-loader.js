@@ -1,5 +1,5 @@
 /**
- * Game schema loader — reads a JSON game definition and builds derived
+ * World schema loader — reads a JSON world definition and builds derived
  * lookup maps consumed by logic.js, scene.js, and server.js.
  *
  * Pure function, no side effects — easily testable.
@@ -8,23 +8,23 @@
 import { readFileSync } from 'node:fs';
 
 /**
- * Load and validate a game schema from a JSON file.
+ * Load and validate a world schema from a JSON file.
  *
- * @param {string} filePath - Absolute path to the game JSON file
- * @returns {object} gameConfig with raw schema + derived lookup maps
+ * @param {string} filePath - Absolute path to the world JSON file
+ * @returns {object} worldConfig with raw schema + derived lookup maps
  * @throws {Error} on missing file, invalid JSON, or schema validation failure
  */
-export function loadGame(filePath) {
+export function loadWorld(filePath) {
   const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
 
-  const gameType = raw.type || 'social';
+  const worldType = raw.type || 'social';
 
-  if (gameType === 'grid') {
+  if (worldType === 'grid') {
     validateGrid(raw, filePath);
     return buildGridConfig(raw);
   }
 
-  // Social (default) game type
+  // Social (default) world type
   validate(raw, filePath);
 
   const locationSlugs = Object.keys(raw.locations);
@@ -45,7 +45,7 @@ export function loadGame(filePath) {
 
   return {
     raw,
-    isGridGame: false,
+    isGrid: false,
     locationSlugs,
     locationNames,
     locationFlavors,
@@ -62,7 +62,7 @@ export function loadGame(filePath) {
 }
 
 /**
- * Build config for grid-based games.
+ * Build config for grid-based worlds.
  */
 function buildGridConfig(raw) {
   // Build derived lookup maps
@@ -78,7 +78,7 @@ function buildGridConfig(raw) {
 
   return {
     raw,
-    isGridGame: true,
+    isGrid: true,
     itemsById,
     charToTerrainType,
     sceneLabels: raw.sceneLabels,
@@ -86,37 +86,37 @@ function buildGridConfig(raw) {
 }
 
 /**
- * Validate required fields for grid-based game schemas.
+ * Validate required fields for grid-based world schemas.
  */
 function validateGrid(raw, filePath) {
   const required = ['id', 'world', 'items', 'recipes', 'survival', 'combat', 'dayNight', 'actions', 'sceneLabels'];
   for (const field of required) {
     if (raw[field] === undefined || raw[field] === null) {
-      throw new Error(`Game schema ${filePath}: missing required field "${field}"`);
+      throw new Error(`World schema ${filePath}: missing required field "${field}"`);
     }
   }
 
   // Validate world
   const world = raw.world;
   if (!world.width || !world.height) {
-    throw new Error(`Game schema ${filePath}: world must have width and height`);
+    throw new Error(`World schema ${filePath}: world must have width and height`);
   }
   if (!world.terrain || Object.keys(world.terrain).length === 0) {
-    throw new Error(`Game schema ${filePath}: world.terrain must have at least one entry`);
+    throw new Error(`World schema ${filePath}: world.terrain must have at least one entry`);
   }
   for (const [type, cfg] of Object.entries(world.terrain)) {
     if (cfg.char === undefined) {
-      throw new Error(`Game schema ${filePath}: world.terrain.${type} missing "char"`);
+      throw new Error(`World schema ${filePath}: world.terrain.${type} missing "char"`);
     }
     if (cfg.moveCost === undefined) {
-      throw new Error(`Game schema ${filePath}: world.terrain.${type} missing "moveCost"`);
+      throw new Error(`World schema ${filePath}: world.terrain.${type} missing "moveCost"`);
     }
   }
 
   // Validate items
   for (const [id, cfg] of Object.entries(raw.items)) {
     if (!cfg.type) {
-      throw new Error(`Game schema ${filePath}: items.${id} missing "type"`);
+      throw new Error(`World schema ${filePath}: items.${id} missing "type"`);
     }
   }
 
@@ -124,34 +124,34 @@ function validateGrid(raw, filePath) {
   for (let i = 0; i < raw.recipes.length; i++) {
     const recipe = raw.recipes[i];
     if (!recipe.inputs || !recipe.output) {
-      throw new Error(`Game schema ${filePath}: recipes[${i}] missing inputs or output`);
+      throw new Error(`World schema ${filePath}: recipes[${i}] missing inputs or output`);
     }
     for (const input of recipe.inputs) {
       if (!raw.items[input]) {
-        throw new Error(`Game schema ${filePath}: recipes[${i}] references unknown item "${input}"`);
+        throw new Error(`World schema ${filePath}: recipes[${i}] references unknown item "${input}"`);
       }
     }
     if (!raw.items[recipe.output]) {
-      throw new Error(`Game schema ${filePath}: recipes[${i}] output "${recipe.output}" is not a valid item`);
+      throw new Error(`World schema ${filePath}: recipes[${i}] output "${recipe.output}" is not a valid item`);
     }
   }
 
   // Validate dayNight
   if (!raw.dayNight.cycleTicks || !raw.dayNight.phases) {
-    throw new Error(`Game schema ${filePath}: dayNight must have cycleTicks and phases`);
+    throw new Error(`World schema ${filePath}: dayNight must have cycleTicks and phases`);
   }
 
   // Validate survival
   const survReq = ['hungerPerTick', 'maxHealth', 'maxHunger', 'inventorySlots'];
   for (const field of survReq) {
     if (raw.survival[field] === undefined) {
-      throw new Error(`Game schema ${filePath}: survival.${field} is required`);
+      throw new Error(`World schema ${filePath}: survival.${field} is required`);
     }
   }
 }
 
 /**
- * Validate required fields and cross-references in the social game schema.
+ * Validate required fields and cross-references in the social world schema.
  */
 function validate(raw, filePath) {
   const required = ['id', 'locations', 'spawnLocation', 'phases',
@@ -159,23 +159,23 @@ function validate(raw, filePath) {
 
   for (const field of required) {
     if (raw[field] === undefined || raw[field] === null) {
-      throw new Error(`Game schema ${filePath}: missing required field "${field}"`);
+      throw new Error(`World schema ${filePath}: missing required field "${field}"`);
     }
   }
 
   const locationSlugs = Object.keys(raw.locations);
   if (locationSlugs.length === 0) {
-    throw new Error(`Game schema ${filePath}: "locations" must have at least one entry`);
+    throw new Error(`World schema ${filePath}: "locations" must have at least one entry`);
   }
 
   if (!locationSlugs.includes(raw.spawnLocation)) {
-    throw new Error(`Game schema ${filePath}: "spawnLocation" "${raw.spawnLocation}" is not a valid location key`);
+    throw new Error(`World schema ${filePath}: "spawnLocation" "${raw.spawnLocation}" is not a valid location key`);
   }
 
   // Validate phases have descriptions
   for (const [phase, cfg] of Object.entries(raw.phases)) {
     if (!cfg.description) {
-      throw new Error(`Game schema ${filePath}: phases.${phase} missing "description"`);
+      throw new Error(`World schema ${filePath}: phases.${phase} missing "description"`);
     }
   }
 

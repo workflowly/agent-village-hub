@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateObserverAuth } from '../../games/social-village/logic.js';
+import { validateObserverAuth } from '../../worlds/social-village/logic.js';
 
 // --- OBS-010, OBS-012: validateObserverAuth ---
 

@@ -121,7 +121,7 @@ export function getNPCProfiles() {
 /**
  * Register NPCs in participants map and place them in home locations.
  */
-export function initNPCs(state, participants, gameConfig) {
+export function initNPCs(state, participants, worldConfig) {
   for (const npc of NPC_PROFILES) {
     // Register in participants with npc flag
     if (!participants.has(npc.name)) {
@@ -160,8 +160,8 @@ export function initNPCs(state, participants, gameConfig) {
 /**
  * Build a shorter scene prompt for an NPC — simplified vs full buildScene.
  */
-function buildNPCScene(npcProfile, location, state, gameConfig, participants, tick) {
-  const { sceneLabels } = gameConfig;
+function buildNPCScene(npcProfile, location, state, worldConfig, participants, tick) {
+  const { sceneLabels } = worldConfig;
   const lines = [];
 
   // Role preamble
@@ -175,7 +175,7 @@ function buildNPCScene(npcProfile, location, state, gameConfig, participants, ti
   lines.push('');
 
   // Time/phase/location (shared helper)
-  renderLocationHeader(lines, location, state, gameConfig);
+  renderLocationHeader(lines, location, state, worldConfig);
   lines.push('');
 
   // Who's here (shared helper)
@@ -214,12 +214,12 @@ function buildNPCScene(npcProfile, location, state, gameConfig, participants, ti
 
   // Action list filtered by location
   const locationToolIds = new Set(
-    gameConfig.locationTools[location] ||
+    worldConfig.locationTools[location] ||
     state.customLocations?.[location]?.tools ||
-    gameConfig.defaultLocationTools
+    worldConfig.defaultLocationTools
   );
   lines.push('可用动作：');
-  const allSchemas = gameConfig.raw.toolSchemas || [];
+  const allSchemas = worldConfig.raw.toolSchemas || [];
   for (const s of allSchemas) {
     if (!locationToolIds.has(s.name)) continue;
     lines.push(`- **${s.name}**：${s.description}`);
@@ -227,7 +227,7 @@ function buildNPCScene(npcProfile, location, state, gameConfig, participants, ti
   lines.push('');
 
   // Available locations (shared helper)
-  renderAvailableLocations(lines, location, gameConfig, state);
+  renderAvailableLocations(lines, location, worldConfig, state);
 
   lines.push('用中文说话，简洁自然（1-3句话）。每个行动都应推进你的议程。不要闲聊，不要浪费行动。');
 
@@ -238,14 +238,14 @@ function buildNPCScene(npcProfile, location, state, gameConfig, participants, ti
  * Call Anthropic API directly via api-router for an NPC.
  * Returns { actions: [{tool, params}], usage } or null on error.
  */
-function callNPCLLM(scene, npcProfile, gameConfig, location, state) {
+function callNPCLLM(scene, npcProfile, worldConfig, location, state) {
   // Build filtered tool schemas (parameters → input_schema for Anthropic API)
   const locationToolIds = new Set(
-    gameConfig.locationTools[location] ||
+    worldConfig.locationTools[location] ||
     state?.customLocations?.[location]?.tools ||
-    gameConfig.defaultLocationTools
+    worldConfig.defaultLocationTools
   );
-  const allSchemas = gameConfig.raw.toolSchemas || [];
+  const allSchemas = worldConfig.raw.toolSchemas || [];
   const tools = allSchemas
     .filter(s => locationToolIds.has(s.name))
     .map(s => ({
@@ -339,7 +339,7 @@ function callNPCLLM(scene, npcProfile, gameConfig, location, state) {
  */
 export async function runNPCTick(ctx) {
   const {
-    state, gameConfig, participants, lastMoveTick,
+    state, worldConfig, participants, lastMoveTick,
     broadcastEvent, accumulateResponseCost,
   } = ctx;
 
@@ -380,10 +380,10 @@ export async function runNPCTick(ctx) {
     }
 
     // Build scene
-    const scene = buildNPCScene(npc, currentLoc, state, gameConfig, participants, tick);
+    const scene = buildNPCScene(npc, currentLoc, state, worldConfig, participants, tick);
 
     // Call LLM
-    const result = await callNPCLLM(scene, npc, gameConfig, currentLoc, state);
+    const result = await callNPCLLM(scene, npc, worldConfig, currentLoc, state);
     if (!result) {
       npcErrors++;
       console.log(`[npc] ${npc.name} skipped (API error)`);
@@ -399,9 +399,9 @@ export async function runNPCTick(ctx) {
     delete state.whispers[npc.name];
 
     // Process actions through the same pipeline as regular bots
-    const allLocations = [...gameConfig.locationSlugs, ...Object.keys(state.customLocations || {})];
+    const allLocations = [...worldConfig.locationSlugs, ...Object.keys(state.customLocations || {})];
     const events = processActions(npc.name, result.actions, currentLoc, state, {
-      lastMoveTick, tick, validLocations: allLocations, gameConfig,
+      lastMoveTick, tick, validLocations: allLocations, worldConfig,
     });
 
     npcActions += events.length;
@@ -422,7 +422,7 @@ export async function runNPCTick(ctx) {
         tick,
         phase,
         location: currentLoc,
-        locationName: gameConfig.locationNames[currentLoc] || state.customLocations?.[currentLoc]?.name || currentLoc,
+        locationName: worldConfig.locationNames[currentLoc] || state.customLocations?.[currentLoc]?.name || currentLoc,
         bot: npc.name,
         displayName: npc.displayName,
         ...ev,
@@ -440,7 +440,7 @@ export async function runNPCTick(ctx) {
     const locEvents = npcLocEvents.get(loc) || [];
     if (locEvents.length === 0) continue;
 
-    const locName = gameConfig.locationNames[loc] || state.customLocations?.[loc]?.name || loc;
+    const locName = worldConfig.locationNames[loc] || state.customLocations?.[loc]?.name || loc;
     const memEntry = buildMemoryEntry({
       location: locName,
       timestamp,

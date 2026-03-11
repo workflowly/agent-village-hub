@@ -1,18 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { computeVisibility, getVisibleTiles, buildAsciiMap } from '../../games/survival/visibility.js';
+import { computeVisibility, getVisibleTiles, buildAsciiMap } from '../../worlds/survival/visibility.js';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const schema = JSON.parse(readFileSync(join(__dirname, '../../games/survival/schema.json'), 'utf-8'));
+const schema = JSON.parse(readFileSync(join(__dirname, '../../worlds/survival/schema.json'), 'utf-8'));
 
 // Override world size to 8x8 for test convenience
 const smallWidth = 8;
 const smallHeight = 8;
-const gameConfig = {
+const worldConfig = {
   raw: { ...schema, world: { ...schema.world, width: smallWidth, height: smallHeight } },
-  isGridGame: true,
+  isGrid: true,
 };
 
 // Simple 8x8 terrain of all plains
@@ -22,7 +22,7 @@ describe('computeVisibility', () => {
   it('returns base visibility for plains during day', () => {
     const botState = { x: 4, y: 4, equipment: {} };
     const dayPhase = { visibilityBase: 7 }; // day
-    const radius = computeVisibility(botState, smallTerrain, dayPhase, gameConfig);
+    const radius = computeVisibility(botState, smallTerrain, dayPhase, worldConfig);
     // plains has visibilityMod 0, so radius = 7
     expect(radius).toBe(7);
   });
@@ -32,7 +32,7 @@ describe('computeVisibility', () => {
     const terrain = '.'.repeat(4 * 8 + 4) + 'T' + '.'.repeat(8 * 8 - 4 * 8 - 5);
     const botState = { x: 4, y: 4, equipment: {} };
     const dayPhase = { visibilityBase: 7 };
-    const radius = computeVisibility(botState, terrain, dayPhase, gameConfig);
+    const radius = computeVisibility(botState, terrain, dayPhase, worldConfig);
     // forest has visibilityMod -1, so radius = 6
     expect(radius).toBe(6);
   });
@@ -41,7 +41,7 @@ describe('computeVisibility', () => {
     const terrain = '.'.repeat(4 * 8 + 4) + '^' + '.'.repeat(8 * 8 - 4 * 8 - 5);
     const botState = { x: 4, y: 4, equipment: {} };
     const dayPhase = { visibilityBase: 7 };
-    const radius = computeVisibility(botState, terrain, dayPhase, gameConfig);
+    const radius = computeVisibility(botState, terrain, dayPhase, worldConfig);
     // mountain has visibilityMod +2, so radius = 9
     expect(radius).toBe(9);
   });
@@ -50,7 +50,7 @@ describe('computeVisibility', () => {
     const botState = { x: 4, y: 4, equipment: {} };
     const dayPhase = { visibilityBase: 1 };
     const terrain = '.'.repeat(4 * 8 + 4) + 'O' + '.'.repeat(8 * 8 - 4 * 8 - 5);
-    const radius = computeVisibility(botState, terrain, dayPhase, gameConfig);
+    const radius = computeVisibility(botState, terrain, dayPhase, worldConfig);
     // cave visibilityMod -2, base 1, so raw = -1, clamped to 2
     expect(radius).toBe(2);
   });
@@ -58,7 +58,7 @@ describe('computeVisibility', () => {
   it('clamps maximum visibility to 15', () => {
     const botState = { x: 4, y: 4, equipment: {} };
     const dayPhase = { visibilityBase: 20 };
-    const radius = computeVisibility(botState, smallTerrain, dayPhase, gameConfig);
+    const radius = computeVisibility(botState, smallTerrain, dayPhase, worldConfig);
     expect(radius).toBe(15);
   });
 });

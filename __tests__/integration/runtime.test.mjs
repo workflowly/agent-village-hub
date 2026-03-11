@@ -15,7 +15,7 @@
  *   3. join duplicate → 409
  *   4. leave → bot removed from state
  *   5. leave unknown bot → 200 (idempotent)
- *   6. bot status (inGame / not inGame)
+ *   6. bot status (inWorld / not inWorld)
  *   7. agenda set + get
  *   8. tick fires → relay call arrives at mock hub with valid scene
  *   9. tick → SSE tick event emitted to observer
@@ -34,10 +34,10 @@ import { randomBytes } from 'node:crypto';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const VILLAGE_DIR = join(__dirname, '..', '..');
 
-const GAME_PORT  = 19101;   // server.js
+const SERVER_PORT  = 19101;   // server.js
 const HUB_PORT   = 19102;   // mock hub (relay receiver)
 const SECRET     = 'rt-test-' + randomBytes(8).toString('hex');
-const GAME_URL   = `http://127.0.0.1:${GAME_PORT}`;
+const SERVER_URL   = `http://127.0.0.1:${SERVER_PORT}`;
 const HUB_URL    = `http://127.0.0.1:${HUB_PORT}`;
 
 let tmpDir;
@@ -61,7 +61,7 @@ function gameReq(method, path, body) {
     signal: AbortSignal.timeout(8_000),
   };
   if (body !== undefined) opts.body = JSON.stringify(body);
-  return fetch(`${GAME_URL}${path}`, opts).then(async r => ({
+  return fetch(`${SERVER_URL}${path}`, opts).then(async r => ({
     status: r.status,
     data: await r.json().catch(() => null),
   }));
@@ -72,7 +72,7 @@ function waitForServer(timeout = 15_000) {
   return new Promise((resolve, reject) => {
     async function poll() {
       try {
-        const r = await fetch(`${GAME_URL}/health`, { signal: AbortSignal.timeout(1_000) });
+        const r = await fetch(`${SERVER_URL}/health`, { signal: AbortSignal.timeout(1_000) });
         if (r.ok) { resolve(); return; }
       } catch { /* not ready */ }
       if (Date.now() - start > timeout) { reject(new Error('server.js did not start')); return; }
@@ -131,8 +131,8 @@ beforeAll(async () => {
     env: {
       ...process.env,
       VILLAGE_SECRET:       SECRET,
-      VILLAGE_GAME:         'social-village',
-      VILLAGE_PORT:         String(GAME_PORT),
+      VILLAGE_WORLD:         'social-village',
+      VILLAGE_PORT:         String(SERVER_PORT),
       VILLAGE_RELAY_URL:    HUB_URL,
       VILLAGE_DATA_DIR:     tmpDir,
       VILLAGE_TICK_INTERVAL: '500',   // fast ticks
@@ -155,12 +155,12 @@ afterAll(async () => {
 // ─── 1. Health ────────────────────────────────────────────────────────────────
 
 describe('health', () => {
-  it('returns game metadata', async () => {
-    const r = await fetch(`${GAME_URL}/health`, { signal: AbortSignal.timeout(5_000) });
+  it('returns world metadata', async () => {
+    const r = await fetch(`${SERVER_URL}/health`, { signal: AbortSignal.timeout(5_000) });
     expect(r.ok).toBe(true);
     const data = await r.json();
     expect(data.status).toBe('running');
-    expect(data.game).toBe('social-village');
+    expect(data.world).toBe('social-village');
     expect(typeof data.tick).toBe('number');
     expect(typeof data.uptime).toBe('number');
   });
@@ -169,17 +169,17 @@ describe('health', () => {
 // ─── 2. Join ──────────────────────────────────────────────────────────────────
 
 describe('join', () => {
-  it('adds bot to participants and returns game info', async () => {
+  it('adds bot to participants and returns world info', async () => {
     const { status, data } = await gameReq('POST', '/api/join', { botName: 'alice', displayName: 'Alice' });
     expect(status).toBe(200);
     expect(data.ok).toBe(true);
-    expect(data.game.id).toBe('social-village');
+    expect(data.world.id).toBe('social-village');
   });
 
-  it('status shows inGame:true after join', async () => {
+  it('status shows inWorld:true after join', async () => {
     const { status, data } = await gameReq('GET', '/api/bot/alice/status');
     expect(status).toBe(200);
-    expect(data.inGame).toBe(true);
+    expect(data.inWorld).toBe(true);
     expect(data.failureCount).toBe(0);
   });
 
@@ -189,7 +189,7 @@ describe('join', () => {
   });
 
   it('join requires secret → 401 without auth', async () => {
-    const r = await fetch(`${GAME_URL}/api/join`, {
+    const r = await fetch(`${SERVER_URL}/api/join`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ botName: 'intruder' }),
@@ -202,17 +202,17 @@ describe('join', () => {
 // ─── 3. Leave ─────────────────────────────────────────────────────────────────
 
 describe('leave', () => {
-  it('removes bot and status shows inGame:false', async () => {
+  it('removes bot and status shows inWorld:false', async () => {
     // Join a fresh bot
     await gameReq('POST', '/api/join', { botName: 'bob', displayName: 'Bob' });
     let s = await gameReq('GET', '/api/bot/bob/status');
-    expect(s.data.inGame).toBe(true);
+    expect(s.data.inWorld).toBe(true);
 
     const { status } = await gameReq('POST', '/api/leave', { botName: 'bob' });
     expect(status).toBe(200);
 
     s = await gameReq('GET', '/api/bot/bob/status');
-    expect(s.data.inGame).toBe(false);
+    expect(s.data.inWorld).toBe(false);
   });
 
   it('leave unknown bot → 200 (idempotent)', async () => {
@@ -224,9 +224,9 @@ describe('leave', () => {
 // ─── 4. Bot status ────────────────────────────────────────────────────────────
 
 describe('bot status', () => {
-  it('returns inGame:false for unknown bot', async () => {
+  it('returns inWorld:false for unknown bot', async () => {
     const { data } = await gameReq('GET', '/api/bot/ghost/status');
-    expect(data.inGame).toBe(false);
+    expect(data.inWorld).toBe(false);
     expect(data.failureCount).toBe(0);
   });
 });
@@ -292,7 +292,7 @@ describe('tick → SSE', () => {
     const ac = new AbortController();
 
     const ssePromise = new Promise((resolve, reject) => {
-      fetch(`${GAME_URL}/events`, { signal: ac.signal })
+      fetch(`${SERVER_URL}/events`, { signal: ac.signal })
         .then(async (r) => {
           const reader = r.body.getReader();
           const decoder = new TextDecoder();
@@ -343,7 +343,7 @@ describe('consecutive failures', () => {
     // Join a fresh bot
     await gameReq('POST', '/api/join', { botName: 'failbot', displayName: 'FailBot' });
     let s = await gameReq('GET', '/api/bot/failbot/status');
-    expect(s.data.inGame).toBe(true);
+    expect(s.data.inWorld).toBe(true);
 
     // Make the mock hub return HTTP 500 for the next relay calls
     const origResponse = nextRelayResponse;

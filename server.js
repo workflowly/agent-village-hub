@@ -1,14 +1,14 @@
 /**
- * Village Orchestrator — the "game master" for the bot social village.
+ * Village Orchestrator — the world server for the bot social village.
  *
- * Maintains world state, runs a tick-based game loop, sends scene prompts
+ * Maintains world state, runs a tick-based tick loop, sends scene prompts
  * to bots via the portal relay proxy, routes responses, writes village
  * memories, and serves an observer web UI via SSE.
  *
  * Uses Node.js built-ins only.
  *
- * Game content is loaded from a JSON schema file via game-loader.js.
- * Set VILLAGE_GAME env var to select a game (default: social-village).
+ * World content is loaded from a JSON schema file via world-loader.js.
+ * Set VILLAGE_WORLD env var to select a world (default: social-village).
  */
 
 import { createServer } from 'node:http';
@@ -18,20 +18,20 @@ import { readFile, writeFile, rename, copyFile, mkdir, readdir, stat } from 'nod
 import { appendFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { loadGame } from './game-loader.js';
+import { loadWorld } from './world-loader.js';
 import { readBotDailyCost as readBotDailyCostImpl } from './lib/cost-tracker.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// --- Load game schema ---
-const VILLAGE_GAME = process.env.VILLAGE_GAME || 'social-village';
-const GAME_DIR = process.env.VILLAGE_GAME_DIR
-  || join(__dirname, 'games', VILLAGE_GAME);
-const gameConfig = loadGame(join(GAME_DIR, 'schema.json'));
-console.log(`[village] Loaded game: ${gameConfig.raw.id} (${gameConfig.raw.name})`);
+// --- Load world schema ---
+const VILLAGE_WORLD = process.env.VILLAGE_WORLD || 'social-village';
+const WORLD_DIR = process.env.VILLAGE_WORLD_DIR
+  || join(__dirname, 'worlds', VILLAGE_WORLD);
+const worldConfig = loadWorld(join(WORLD_DIR, 'schema.json'));
+console.log(`[village] Loaded world: ${worldConfig.raw.id} (${worldConfig.raw.name})`);
 
-// --- Load game adapter ---
-const gameAdapter = await import(pathToFileURL(join(GAME_DIR, 'adapter.js')).href);
+// --- Load adapter ---
+const adapter = await import(pathToFileURL(join(WORLD_DIR, 'adapter.js')).href);
 
 // --- Config ---
 const PORT = parseInt(process.env.VILLAGE_PORT || '7001', 10);
@@ -45,10 +45,10 @@ const MAX_CONSECUTIVE_FAILURES_REMOTE = 5;
 const PORTAL_URL = process.env.VILLAGE_RELAY_URL || 'http://127.0.0.1:3000';
 const EMPTY_CLEAR_TICKS = 3;
 
-const TICK_INTERVAL_MS = parseInt(process.env.VILLAGE_TICK_INTERVAL || (gameAdapter.hasFastTick ? '45000' : '120000'), 10);
+const TICK_INTERVAL_MS = parseInt(process.env.VILLAGE_TICK_INTERVAL || (adapter.hasFastTick ? '45000' : '120000'), 10);
 const _dataDir = process.env.VILLAGE_DATA_DIR;
-const STATE_FILE = _dataDir ? join(_dataDir, `state-${VILLAGE_GAME}.json`) : join(__dirname, `state-${VILLAGE_GAME}.json`);
-const MEMORY_FILENAME = gameAdapter.memoryFilename;
+const STATE_FILE = _dataDir ? join(_dataDir, `state-${VILLAGE_WORLD}.json`) : join(__dirname, `state-${VILLAGE_WORLD}.json`);
+const MEMORY_FILENAME = adapter.memoryFilename;
 const USAGE_FILE = process.env.VILLAGE_USAGE_FILE || null;
 const LOGS_DIR = _dataDir ? join(_dataDir, 'logs') : join(__dirname, 'logs');
 
@@ -57,7 +57,7 @@ let logDate = '';   // 'YYYY-MM-DD'
 let logFile = '';   // full path to current day's .jsonl
 
 // Async log buffer — batches writes within a 100ms window to avoid
-// blocking the event loop with a sync write on every game event.
+// blocking the event loop with a sync write on every world event.
 const _logBuffer = [];
 let _logFlushTimer = null;
 
@@ -97,20 +97,20 @@ async function loadState() {
   // Try primary state file
   try {
     const raw = await readFile(STATE_FILE, 'utf-8');
-    state = gameAdapter.loadState(JSON.parse(raw), gameConfig);
+    state = adapter.loadState(JSON.parse(raw), worldConfig);
     return;
   } catch { /* primary failed or missing */ }
 
   // Fallback to backup
   try {
     const bakRaw = await readFile(STATE_FILE + '.bak', 'utf-8');
-    state = gameAdapter.loadState(JSON.parse(bakRaw), gameConfig);
+    state = adapter.loadState(JSON.parse(bakRaw), worldConfig);
     console.warn('[village] Primary state was corrupt/missing — recovered from backup');
     return;
   } catch { /* backup also failed */ }
 
   // Initialize fresh state
-  state = await gameAdapter.initState(gameConfig);
+  state = await adapter.initState(worldConfig);
   console.log('[village] Fresh state initialized');
 }
 
@@ -178,7 +178,7 @@ async function readJsonBody(req) {
 // --- Helper: all location slugs (schema + custom) ---
 
 function allLocationSlugs() {
-  return [...gameConfig.locationSlugs, ...Object.keys(state.customLocations || {})];
+  return [...worldConfig.locationSlugs, ...Object.keys(state.customLocations || {})];
 }
 
 // --- Remove bot helper (shared by /api/leave, dead bot detection, startup recovery) ---
@@ -188,14 +188,14 @@ function removeBot(botName, reason) {
   participants.delete(botName);
   failureCounts.delete(botName);
   if (state.remoteParticipants?.[botName]) delete state.remoteParticipants[botName];
-  gameAdapter.removeBot(state, botName, displayName, broadcastEvent);
+  adapter.removeBot(state, botName, displayName, broadcastEvent);
   console.log(`[village] ${botName} removed (${reason})`);
 }
 
 // --- Startup recovery: rebuild participants from state.json ---
 
 async function recoverParticipants() {
-  const toRemove = await gameAdapter.recoverParticipants(state, participants, gameConfig);
+  const toRemove = await adapter.recoverParticipants(state, participants, worldConfig);
   for (const botName of (toRemove || [])) removeBot(botName, 'recovery: not in remoteParticipants');
   console.log(`[village] Recovery complete: ${participants.size} active participant(s)`);
 }
@@ -279,14 +279,14 @@ function broadcastEvent(event) {
 // --- Advance clock ---
 
 function advanceClock() {
-  gameAdapter.advanceClock(state, gameConfig, TICKS_PER_PHASE);
+  adapter.advanceClock(state, worldConfig, TICKS_PER_PHASE);
 }
 
-// --- Build tick context (shared state passed to game tick modules) ---
+// --- Build tick context (shared state passed to tick modules) ---
 
 function buildTickContext(tickStart) {
   return {
-    state, gameConfig, participants, lastMoveTick,
+    state, worldConfig, participants, lastMoveTick,
     broadcastEvent, sendSceneRemote,
     accumulateResponseCost, readBotDailyCost, saveState,
     TICK_INTERVAL_MS, VILLAGE_DAILY_COST_CAP, MEMORY_FILENAME,
@@ -296,12 +296,12 @@ function buildTickContext(tickStart) {
   };
 }
 
-// --- Fast tick (autopilot, grid games only) ---
+// --- Fast tick (autopilot, grid worlds only) ---
 
 function fastTick() {
   if (tickInProgress) return;
-  if (gameAdapter.fastTick) {
-    gameAdapter.fastTick(buildTickContext(Date.now()));
+  if (adapter.fastTick) {
+    adapter.fastTick(buildTickContext(Date.now()));
   }
 }
 
@@ -326,7 +326,7 @@ async function tick() {
       nextTickAt,
     });
     const ctx = buildTickContext(tickStart);
-    await gameAdapter.tick(ctx);
+    await adapter.tick(ctx);
     nextTickAt = ctx.nextTickAt;
   } catch (err) {
     console.error(`[village] Tick error: ${err.message}`);
@@ -353,7 +353,7 @@ const server = createServer(async (req, res) => {
       activeBots: participants.size,
       lastTickAt: new Date().toISOString(),
       uptime: Math.round((Date.now() - startTime) / 1000),
-      game: gameConfig.raw.id,
+      world: worldConfig.raw.id,
     }));
     return;
   }
@@ -391,8 +391,8 @@ const server = createServer(async (req, res) => {
 
     const name = displayName || botName;
 
-    // Place bot in the game world via adapter
-    const { events, appearance } = await gameAdapter.joinBot(state, botName, name, gameConfig);
+    // Place bot in the world via adapter
+    const { events, appearance } = await adapter.joinBot(state, botName, name, worldConfig);
 
     participants.set(botName, { displayName: name, appearance });
     failureCounts.delete(botName);
@@ -410,11 +410,11 @@ const server = createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       ok: true,
-      game: {
-        id: gameConfig.raw.id,
-        name: gameConfig.raw.name,
-        description: gameConfig.raw.description,
-        version: gameConfig.raw.version,
+      world: {
+        id: worldConfig.raw.id,
+        name: worldConfig.raw.name,
+        description: worldConfig.raw.description,
+        version: worldConfig.raw.version,
       },
     }));
     return;
@@ -468,11 +468,11 @@ const server = createServer(async (req, res) => {
     }
 
     const queryBot = botStatusMatch[1];
-    const inGame = participants.has(queryBot);
+    const inWorld = participants.has(queryBot);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
-      inGame,
-      game: inGame ? { id: gameConfig.raw.id, name: gameConfig.raw.name } : null,
+      inWorld,
+      world: inWorld ? { id: worldConfig.raw.id, name: worldConfig.raw.name } : null,
       failureCount: failureCounts.get(queryBot) || 0,
     }));
     return;
@@ -496,7 +496,7 @@ const server = createServer(async (req, res) => {
       for (const [l, bots] of Object.entries(state.locations)) {
         if ((bots || []).includes(botName)) { loc = l; break; }
       }
-      const locName = loc ? (gameConfig.locationNames[loc] || state.customLocations?.[loc]?.name || loc) : null;
+      const locName = loc ? (worldConfig.locationNames[loc] || state.customLocations?.[loc]?.name || loc) : null;
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ botName, agenda, location: loc, locationName: locName }));
       return;
@@ -538,7 +538,7 @@ const server = createServer(async (req, res) => {
     observers.add(observer);
 
     // Send initial state (include tickInProgress so late-joining clients know)
-    const initPayload = gameAdapter.buildSSEInitPayload(state, participants, gameConfig, { nextTickAt, tickIntervalMs: TICK_INTERVAL_MS });
+    const initPayload = adapter.buildSSEInitPayload(state, participants, worldConfig, { nextTickAt, tickIntervalMs: TICK_INTERVAL_MS });
     initPayload.tickInProgress = tickInProgress;
     if (tickInProgress) {
       initPayload.tickStartBots = [...participants.keys()];
@@ -564,7 +564,7 @@ const server = createServer(async (req, res) => {
     const beforeTick = url.searchParams.has('before') ? parseInt(url.searchParams.get('before'), 10) : Infinity;
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '50', 10), 200);
 
-    // Filter events by current game type so survival events don't show in social UI and vice versa
+    // Filter events by current world type so survival events don't show in social UI and vice versa
 
     try {
       // List log files sorted descending (newest first)
@@ -581,7 +581,7 @@ const server = createServer(async (req, res) => {
           try {
             const ev = JSON.parse(lines[i]);
             if (ev.tick !== undefined && ev.tick >= beforeTick) continue;
-            if (!gameAdapter.isEventForGame(ev)) continue;
+            if (!adapter.isEventForWorld(ev)) continue;
             if (events.length >= limit) { hasMore = true; break outer; }
             events.push(ev);
           } catch { /* skip malformed lines */ }
@@ -603,11 +603,11 @@ const server = createServer(async (req, res) => {
   // Serve static files
   if (path === '/' || path === '/index.html') {
     try {
-      let html = await readFile(join(GAME_DIR, 'observer.html'), 'utf-8');
+      let html = await readFile(join(WORLD_DIR, 'observer.html'), 'utf-8');
       // Inline ES modules for browser compatibility.
       // Each module is wrapped in an IIFE for proper scope isolation,
       // with exports returned and destructured using the import-side names.
-      const assetsDir = join(GAME_DIR, 'assets');
+      const assetsDir = join(WORLD_DIR, 'assets');
       html = html.replace('<script type="module">', '<script>');
       // Two-pass inlining: first collect all modules, then emit them.
       // Each module is wrapped in an IIFE for scope isolation.
@@ -696,7 +696,7 @@ const server = createServer(async (req, res) => {
   // Dev console
   if (path === '/dev') {
     try {
-      const html = await readFile(join(GAME_DIR, 'dev-console.html'), 'utf-8');
+      const html = await readFile(join(WORLD_DIR, 'dev-console.html'), 'utf-8');
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(html);
     } catch {
@@ -763,7 +763,7 @@ const server = createServer(async (req, res) => {
       relayTimeoutMs: REMOTE_SCENE_TIMEOUT_MS,
       maxConsecutiveFailures: MAX_CONSECUTIVE_FAILURES_REMOTE,
       dailyCostCap: VILLAGE_DAILY_COST_CAP,
-      game: { id: gameConfig.raw.id, name: gameConfig.raw.name, version: gameConfig.raw.version },
+      world: { id: worldConfig.raw.id, name: worldConfig.raw.name, version: worldConfig.raw.version },
       observers: observers.size,
       participants: participants.size,
       failureCounts: failures,
@@ -789,12 +789,12 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  // Serve game assets (images, etc.)
+  // Serve world assets (images, etc.)
   if (path.startsWith('/assets/')) {
     const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml', '.json': 'application/json', '.js': 'text/javascript' };
     const safeName = path.slice('/assets/'.length).replace(/\.\./g, '');
     const ext = safeName.slice(safeName.lastIndexOf('.'));
-    const filePath = join(GAME_DIR, 'assets', safeName);
+    const filePath = join(WORLD_DIR, 'assets', safeName);
     try {
       const [data, fileStat] = await Promise.all([readFile(filePath), stat(filePath)]);
       const etag = `"${fileStat.mtimeMs.toString(36)}-${fileStat.size.toString(36)}"`;
@@ -820,19 +820,19 @@ const server = createServer(async (req, res) => {
   res.end(JSON.stringify({ error: 'Not found' }));
 });
 
-// --- Game loop ---
+// --- Tick loop ---
 let tickTimer = null;
 let fastTickTimer = null;
 
-function startGameLoop() {
+function startTickLoop() {
   // Run first tick after a short delay
   nextTickAt = Date.now() + 5000;
   setTimeout(() => tick(), 5000);
   tickTimer = setInterval(() => tick(), TICK_INTERVAL_MS);
 
-  // Fast tick only for games that support it (e.g. survival)
-  if (gameAdapter.hasFastTick) {
-    const fastTickMs = gameConfig.raw.autopilot?.fastTickMs || 1000;
+  // Fast tick only for worlds that support it (e.g. survival)
+  if (adapter.hasFastTick) {
+    const fastTickMs = worldConfig.raw.autopilot?.fastTickMs || 1000;
     fastTickTimer = setInterval(() => fastTick(), fastTickMs);
     console.log(`[village] Fast tick started: ${fastTickMs}ms interval`);
   }
@@ -891,12 +891,12 @@ await mkdir(LOGS_DIR, { recursive: true });
 
 await loadState();
 await recoverParticipants();
-if (gameAdapter.initNPCsForGame) gameAdapter.initNPCsForGame(state, participants, gameConfig);
-if (gameAdapter.probeAPIRouterForGame) gameAdapter.probeAPIRouterForGame();
+if (adapter.initNPCs) adapter.initNPCs(state, participants, worldConfig);
+if (adapter.probeAPIRouter) adapter.probeAPIRouter();
 
 server.listen(PORT, '127.0.0.1', () => {
   startTime = Date.now();
   console.log(`[village] Orchestrator listening on 127.0.0.1:${PORT}`);
   console.log(`[village] Tick interval: ${TICK_INTERVAL_MS / 1000}s, ticks/phase: ${TICKS_PER_PHASE}`);
-  startGameLoop();
+  startTickLoop();
 });

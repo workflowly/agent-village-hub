@@ -1,21 +1,21 @@
 import { describe, it, expect } from 'vitest';
-import { loadGame } from '../../game-loader.js';
+import { loadWorld } from '../../world-loader.js';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const survivalPath = join(__dirname, '../../games/survival/schema.json');
+const survivalPath = join(__dirname, '../../worlds/survival/schema.json');
 
-describe('loadGame — grid type', () => {
+describe('loadWorld — grid type', () => {
   it('loads survival.json successfully', () => {
-    const config = loadGame(survivalPath);
-    expect(config.isGridGame).toBe(true);
+    const config = loadWorld(survivalPath);
+    expect(config.isGrid).toBe(true);
     expect(config.raw.id).toBe('survival');
     expect(config.raw.type).toBe('grid');
   });
 
   it('builds itemsById lookup', () => {
-    const config = loadGame(survivalPath);
+    const config = loadWorld(survivalPath);
     expect(config.itemsById.wood).toBeDefined();
     expect(config.itemsById.wood.type).toBe('resource');
     expect(config.itemsById.wood.id).toBe('wood');
@@ -24,7 +24,7 @@ describe('loadGame — grid type', () => {
   });
 
   it('builds charToTerrainType lookup', () => {
-    const config = loadGame(survivalPath);
+    const config = loadWorld(survivalPath);
     expect(config.charToTerrainType['.']).toBe('plains');
     expect(config.charToTerrainType['T']).toBe('forest');
     expect(config.charToTerrainType['^']).toBe('mountain');
@@ -34,7 +34,7 @@ describe('loadGame — grid type', () => {
   });
 
   it('includes sceneLabels', () => {
-    const config = loadGame(survivalPath);
+    const config = loadWorld(survivalPath);
     expect(config.sceneLabels).toBeDefined();
     expect(config.sceneLabels.statusHeader).toBe('== STATUS ==');
   });
@@ -42,15 +42,15 @@ describe('loadGame — grid type', () => {
   it('throws on missing required field', () => {
     // We can't easily test with a broken file without writing one,
     // but we can verify the schema is complete by testing that it loads
-    expect(() => loadGame(survivalPath)).not.toThrow();
+    expect(() => loadWorld(survivalPath)).not.toThrow();
   });
 });
 
-describe('loadGame — social type (regression)', () => {
-  it('loads social-village.json with isGridGame false', () => {
-    const socialPath = join(__dirname, '../../games/social-village/schema.json');
-    const config = loadGame(socialPath);
-    expect(config.isGridGame).toBe(false);
+describe('loadWorld — social type (regression)', () => {
+  it('loads social-village.json with isGrid false', () => {
+    const socialPath = join(__dirname, '../../worlds/social-village/schema.json');
+    const config = loadWorld(socialPath);
+    expect(config.isGrid).toBe(false);
     expect(config.raw.id).toBeDefined();
   });
 });

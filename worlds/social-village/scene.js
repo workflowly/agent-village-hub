@@ -2,11 +2,11 @@
  * Scene builder — constructs scene prompts for each bot per tick.
  *
  * The scene prompt is what the orchestrator sends to each bot's /village endpoint.
- * It includes the current game phase, location, who else is there, recent conversation,
+ * It includes the current world phase, location, who else is there, recent conversation,
  * pending whispers, and available actions.
  *
- * All game content (locations, labels, etc.) comes from the game schema
- * via the `gameConfig` parameter.
+ * All world content (locations, labels, etc.) comes from the world schema
+ * via the `worldConfig` parameter.
  */
 
 import { renderTemplate, addSection } from './utils.js';
@@ -37,8 +37,8 @@ export function getVillageTime(timezone) {
 /**
  * Render location header: time/phase line + "you are at" line.
  */
-export function renderLocationHeader(lines, location, state, gameConfig) {
-  const { locationNames, locationFlavors, phaseDescriptions, timezone } = gameConfig;
+export function renderLocationHeader(lines, location, state, worldConfig) {
+  const { locationNames, locationFlavors, phaseDescriptions, timezone } = worldConfig;
   const vt = getVillageTime(timezone);
   lines.push(`${phaseDescriptions[vt.phase] || phaseDescriptions[Object.keys(phaseDescriptions)[0]]} ${vt.dayStr}，${vt.timeStr}。`);
   const locName = locationNames[location] || state.customLocations?.[location]?.name || location;
@@ -96,8 +96,8 @@ export function renderWhispers(lines, whispers, botDisplayNames, sceneLabels) {
 /**
  * Render available locations for movement.
  */
-export function renderAvailableLocations(lines, currentLoc, gameConfig, state) {
-  const { locationNames, locationSlugs, locationPurposes } = gameConfig;
+export function renderAvailableLocations(lines, currentLoc, worldConfig, state) {
+  const { locationNames, locationSlugs, locationPurposes } = worldConfig;
   const customSlugs = Object.keys(state.customLocations || {});
   const allSlugs = [...locationSlugs, ...customSlugs];
   const otherLocations = allSlugs.filter(l => l !== currentLoc);
@@ -127,16 +127,16 @@ export function buildScene({
   sceneHistoryCap = 10,
   canMove = true,
   villageMemory = '',
-  gameConfig,
+  worldConfig,
   state = {},
   totalVoters = 0,
 }) {
   const { locationNames, locationFlavors, phaseDescriptions, timezone,
-    tools, sceneLabels } = gameConfig;
+    tools, sceneLabels } = worldConfig;
   const lines = [];
 
   // Time + phase + location
-  renderLocationHeader(lines, location, state, gameConfig);
+  renderLocationHeader(lines, location, state, worldConfig);
 
   // Wall messages at this location
   const ls = state.locationState?.[location];
@@ -229,9 +229,9 @@ export function buildScene({
 
   // Available actions — filtered by location
   const locationToolIds = new Set(
-    gameConfig.locationTools[location] ||
+    worldConfig.locationTools[location] ||
     state.customLocations?.[location]?.tools ||
-    gameConfig.defaultLocationTools
+    worldConfig.defaultLocationTools
   );
   lines.push(sceneLabels.availableActions);
   for (const tool of tools) {
@@ -251,7 +251,7 @@ export function buildScene({
 
   if (canMove) {
     // Available locations (for move) — include custom locations, show purpose
-    const { locationSlugs, locationPurposes } = gameConfig;
+    const { locationSlugs, locationPurposes } = worldConfig;
     const customSlugs = Object.keys(state.customLocations || {});
     const allSlugs = [...locationSlugs, ...customSlugs];
     const otherLocations = allSlugs.filter(l => l !== location);

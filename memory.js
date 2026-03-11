@@ -149,10 +149,10 @@ export function buildMemoryEntry({ location, timestamp, events, botName }) {
         break;
       case 'move':
         if (ev.direction) {
-          // Grid game move (direction-based)
+          // Grid world move (direction-based)
           lines.push(`*${name} moved ${ev.direction} to (${ev.to?.x},${ev.to?.y})*`);
         } else {
-          // Social game move (location-based)
+          // Social world move (location-based)
           lines.push(`*${name} moved to ${ev.to}*`);
         }
         break;
@@ -165,7 +165,7 @@ export function buildMemoryEntry({ location, timestamp, events, botName }) {
       case 'leave':
         lines.push(`*${name} has left the village.*`);
         break;
-      // --- Survival game events ---
+      // --- Survival world events ---
       case 'gather':
         if (ev.items) {
           const itemStr = ev.items.map(i => `${i.item} x${i.qty}`).join(', ');

@@ -25,11 +25,11 @@ function createRelationship(tick) {
  * Compute a relationship label from interaction counts.
  *
  * @param {{ says: number, whispers: number, coTicks: number }} rel
- * @param {object} gameConfig - Loaded game configuration
+ * @param {object} worldConfig - Loaded world configuration
  * @returns {string} Label string, or '' if score too low
  */
-export function computeLabel(rel, gameConfig) {
-  const { scoring, labels } = gameConfig.relationships;
+export function computeLabel(rel, worldConfig) {
+  const { scoring, labels } = worldConfig.relationships;
   const score = rel.says * scoring.sayWeight + rel.whispers * scoring.whisperWeight + rel.coTicks * scoring.coTickWeight;
 
   let label = '';
@@ -107,15 +107,15 @@ function updateCoLocation(state) {
  *
  * @param {object} state - State with relationships
  * @param {object} displayNames - botName → displayName map
- * @param {object} gameConfig - Loaded game configuration
+ * @param {object} worldConfig - Loaded world configuration
  * @returns {Array<{ from: string, to: string, fromDisplay: string, toDisplay: string, label: string, prevLabel: string }>}
  */
-function updateRelationships(state, displayNames, gameConfig) {
+function updateRelationships(state, displayNames, worldConfig) {
   if (!state.relationships) state.relationships = {};
   const changes = [];
 
   for (const [key, rel] of Object.entries(state.relationships)) {
-    const newLabel = computeLabel(rel, gameConfig);
+    const newLabel = computeLabel(rel, worldConfig);
     if (newLabel !== rel.label) {
       rel.prevLabel = rel.label;
       rel.label = newLabel;
@@ -139,12 +139,12 @@ function updateRelationships(state, displayNames, gameConfig) {
  * Inactive pairs slowly drift apart, requiring maintenance.
  *
  * @param {object} state - State with locations, relationships
- * @param {object} gameConfig - Loaded game configuration
+ * @param {object} worldConfig - Loaded world configuration
  */
-function decayRelationships(state, gameConfig) {
+function decayRelationships(state, worldConfig) {
   if (!state.relationships) return;
 
-  const decayPerTick = gameConfig.relationships.decayPerTick;
+  const decayPerTick = worldConfig.relationships.decayPerTick;
 
   // Build co-location set
   const coLocated = new Set();
@@ -174,13 +174,13 @@ function decayRelationships(state, gameConfig) {
  * Returns structured change events for the tick orchestrator to broadcast.
  *
  * @param {object} opts
- * @param {object} opts.state - Full game state (mutated)
+ * @param {object} opts.state - Full world state (mutated)
  * @param {Map<string, Array>} opts.allEvents - location → events[]
  * @param {object} opts.displayNames - botName → displayName map
- * @param {object} opts.gameConfig - Loaded game configuration
+ * @param {object} opts.worldConfig - Loaded world configuration
  * @returns {{ relationshipChanges: Array }}
  */
-export function updateSocialDynamics({ state, allEvents, displayNames, gameConfig }) {
+export function updateSocialDynamics({ state, allEvents, displayNames, worldConfig }) {
   // Track interactions from this tick's events
   trackInteractions(allEvents, state);
 
@@ -188,10 +188,10 @@ export function updateSocialDynamics({ state, allEvents, displayNames, gameConfi
   updateCoLocation(state);
 
   // Recompute relationship labels
-  const relationshipChanges = updateRelationships(state, displayNames, gameConfig);
+  const relationshipChanges = updateRelationships(state, displayNames, worldConfig);
 
   // Decay relationships for non-co-located pairs
-  decayRelationships(state, gameConfig);
+  decayRelationships(state, worldConfig);
 
   return { relationshipChanges };
 }

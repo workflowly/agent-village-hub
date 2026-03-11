@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { buildSurvivalScene, getDayPhase, formatInventory, formatStats } from '../../games/survival/scene.js';
+import { buildSurvivalScene, getDayPhase, formatInventory, formatStats } from '../../worlds/survival/scene.js';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const schema = JSON.parse(readFileSync(join(__dirname, '../../games/survival/schema.json'), 'utf-8'));
-const gameConfig = { raw: schema, isGridGame: true };
+const schema = JSON.parse(readFileSync(join(__dirname, '../../worlds/survival/schema.json'), 'utf-8'));
+const worldConfig = { raw: schema, isGrid: true };
 
 describe('getDayPhase', () => {
   const dayNight = schema.dayNight;
@@ -47,14 +47,14 @@ describe('getDayPhase', () => {
 
 describe('formatInventory', () => {
   it('shows empty inventory', () => {
-    const result = formatInventory({}, { weapon: null, armor: null, tool: null }, gameConfig);
+    const result = formatInventory({}, { weapon: null, armor: null, tool: null }, worldConfig);
     expect(result).toContain('empty');
     expect(result).toContain('0/20');
   });
 
   it('shows items with counts', () => {
     const inv = { wood: 3, berry: 2 };
-    const result = formatInventory(inv, { weapon: null, armor: null, tool: null }, gameConfig);
+    const result = formatInventory(inv, { weapon: null, armor: null, tool: null }, worldConfig);
     expect(result).toContain('Wood x3');
     expect(result).toContain('Berry x2');
     expect(result).toContain('5/20');
@@ -63,7 +63,7 @@ describe('formatInventory', () => {
   it('shows equipped items', () => {
     const inv = {};
     const equip = { weapon: 'stone_sword', armor: null, tool: 'wooden_pickaxe' };
-    const result = formatInventory(inv, equip, gameConfig);
+    const result = formatInventory(inv, equip, worldConfig);
     expect(result).toContain('[Stone Sword equipped]');
     expect(result).toContain('[Wooden Pickaxe equipped]');
   });
@@ -95,7 +95,7 @@ describe('buildSurvivalScene', () => {
         bots: { alice: { x: 5, y: 5, alive: true } },
         clock: { tick: 10, dayTick: 10 },
       },
-      gameConfig: { ...gameConfig, raw: { ...schema, world: { ...schema.world, width: 10, height: 10 } } },
+      worldConfig: { ...worldConfig, raw: { ...schema, world: { ...schema.world, width: 10, height: 10 } } },
       currentTick: 10,
       recentEvents: [],
       villageSummary: '',

@@ -2,17 +2,17 @@
  * Village Hub — standalone entry point.
  *
  * Thin orchestrator: wires together the relay transport, token manager,
- * route handlers, and game server process manager.
+ * route handlers, and world server process manager.
  *
- * Listens on 0.0.0.0:8080. Game server runs on 127.0.0.1:7001 internally.
+ * Listens on 0.0.0.0:8080. World server runs on 127.0.0.1:7001 internally.
  *
  * Required env vars:
- *   VILLAGE_SECRET   — shared secret between hub and game server
- *   VILLAGE_GAME     — game id (default: social-village)
+ *   VILLAGE_SECRET   — shared secret between hub and world server
+ *   VILLAGE_WORLD    — world id (default: social-village)
  *
  * Optional env vars:
  *   VILLAGE_HUB_PORT       — hub listen port (default: 8080)
- *   VILLAGE_PORT           — game server port (default: 7001)
+ *   VILLAGE_PORT           — world server port (default: 7001)
  *   VILLAGE_HUB_URL        — public URL for invite scripts (default: http://localhost:8080)
  *   VILLAGE_DATA_DIR       — data directory for tokens/state/logs (default: ./data)
  *   VILLAGE_API_ROUTER_URL — NPC LLM backend (default: unset, NPCs disabled)
@@ -29,15 +29,15 @@ import * as tokenManager from './lib/token-manager.js';
 import { RelayTransport }   from './lib/relay-transport.js';
 import { ProcessManager }   from './lib/process-manager.js';
 import { createProtocolRouter }   from './routes/protocol.js';
-import { createGameProxyRouter }  from './routes/game-proxy.js';
+import { createWorldProxyRouter }  from './routes/world-proxy.js';
 import { createOperatorRouters }  from './routes/operator.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // --- Config ---
 const HUB_PORT       = parseInt(process.env.VILLAGE_HUB_PORT || '8080', 10);
-const GAME_PORT      = parseInt(process.env.VILLAGE_PORT || '7001', 10);
-const GAME_URL       = `http://127.0.0.1:${GAME_PORT}`;  // internal only
+const SERVER_PORT      = parseInt(process.env.VILLAGE_PORT || '7001', 10);
+const SERVER_URL       = `http://127.0.0.1:${SERVER_PORT}`;  // internal only
 const VILLAGE_SECRET = process.env.VILLAGE_SECRET || '';
 const VILLAGE_HUB_URL = process.env.VILLAGE_HUB_URL || `http://localhost:${HUB_PORT}`;
 const DATA_DIR       = process.env.VILLAGE_DATA_DIR || join(__dirname, 'data');
@@ -54,7 +54,7 @@ const remoteConfig = {
 const config = {
   VILLAGE_SECRET,
   VILLAGE_HUB_URL,
-  GAME_URL,
+  SERVER_URL,
   RELAY_TIMEOUT_MS,
   POLL_TIMEOUT_MS,
   remoteConfig,
@@ -68,7 +68,7 @@ const processManager = new ProcessManager('server.js', {
   cwd: __dirname,
   env: {
     ...process.env,
-    VILLAGE_PORT:      String(GAME_PORT),
+    VILLAGE_PORT:      String(SERVER_PORT),
     VILLAGE_RELAY_URL: `http://127.0.0.1:${HUB_PORT}`,
   },
 });
@@ -88,7 +88,7 @@ app.use(express.json());
 const routeDeps = { transport, tokenManager, botHealth, processManager, config, limiter };
 
 app.use('/api/village', createProtocolRouter(routeDeps));
-app.use('/api/village', createGameProxyRouter(routeDeps));
+app.use('/api/village', createWorldProxyRouter(routeDeps));
 
 const { villageRouter, hubRouter } = createOperatorRouters(routeDeps);
 app.use('/api/village', villageRouter);

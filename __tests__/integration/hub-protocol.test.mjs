@@ -1,8 +1,8 @@
 /**
  * Hub protocol integration tests.
  *
- * Spawns hub.js with VILLAGE_NO_SPAWN=1 (no game server child) and a
- * minimal mock game server. Tests the full relay/poll/respond transport
+ * Spawns hub.js with VILLAGE_NO_SPAWN=1 (no world server child) and a
+ * minimal mock world server. Tests the full relay/poll/respond transport
  * layer and all hub management endpoints.
  *
  * Does NOT require server.js, any game schema, or real LLM calls.
@@ -22,11 +22,11 @@ const VILLAGE_DIR = join(__dirname, '..', '..');
 
 // --- Test config ---
 const HUB_PORT  = 19080;
-const GAME_PORT = 19001;
+const SERVER_PORT = 19001;
 const SECRET    = 'test-secret-' + randomBytes(8).toString('hex');
 
 const HUB  = `http://127.0.0.1:${HUB_PORT}`;
-const GAME = `http://127.0.0.1:${GAME_PORT}`;
+const GAME = `http://127.0.0.1:${SERVER_PORT}`;
 
 // --- Tokens issued for tests ---
 let TOKEN_A;  // test-bot-a
@@ -36,9 +36,9 @@ let tmpDir;
 let hubProc;
 let mockGameServer;
 
-// --- Game server state (mutable by tests) ---
+// --- World server state (mutable by tests) ---
 const gameState = {
-  bots: {},   // botName → { inGame: bool }
+  bots: {},   // botName → { inWorld: bool }
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -92,12 +92,12 @@ function waitForHub(timeout = 10_000) {
   });
 }
 
-// ─── Mock game server ─────────────────────────────────────────────────────────
+// ─── Mock world server ─────────────────────────────────────────────────────────
 
 function startMockGameServer() {
   return new Promise((resolve) => {
     const server = createServer((req, res) => {
-      const url = new URL(req.url, `http://localhost:${GAME_PORT}`);
+      const url = new URL(req.url, `http://localhost:${SERVER_PORT}`);
       const path = url.pathname;
 
       // Auth check
@@ -114,12 +114,12 @@ function startMockGameServer() {
         req.on('data', c => { body += c; });
         req.on('end', () => {
           const { botName } = JSON.parse(body || '{}');
-          if (gameState.bots[botName]?.inGame) {
+          if (gameState.bots[botName]?.inWorld) {
             res.writeHead(409, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Already joined' }));
             return;
           }
-          gameState.bots[botName] = { inGame: true };
+          gameState.bots[botName] = { inWorld: true };
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ ok: true, game: { id: 'test', name: 'Test', description: '', version: '1' } }));
         });
@@ -132,7 +132,7 @@ function startMockGameServer() {
         req.on('data', c => { body += c; });
         req.on('end', () => {
           const { botName } = JSON.parse(body || '{}');
-          if (gameState.bots[botName]) gameState.bots[botName].inGame = false;
+          if (gameState.bots[botName]) gameState.bots[botName].inWorld = false;
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ ok: true }));
         });
@@ -143,9 +143,9 @@ function startMockGameServer() {
       const statusMatch = path.match(/^\/api\/bot\/([^/]+)\/status$/);
       if (statusMatch && req.method === 'GET') {
         const botName = statusMatch[1];
-        const inGame = gameState.bots[botName]?.inGame || false;
+        const inWorld = gameState.bots[botName]?.inWorld || false;
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ inGame, game: inGame ? { id: 'test', name: 'Test' } : null, failureCount: 0 }));
+        res.end(JSON.stringify({ inWorld, game: inWorld ? { id: 'test', name: 'Test' } : null, failureCount: 0 }));
         return;
       }
 
@@ -153,7 +153,7 @@ function startMockGameServer() {
       res.end(JSON.stringify({ error: 'Not found' }));
     });
 
-    server.listen(GAME_PORT, '127.0.0.1', () => resolve(server));
+    server.listen(SERVER_PORT, '127.0.0.1', () => resolve(server));
   });
 }
 
@@ -173,7 +173,7 @@ beforeAll(async () => {
   };
   await writeFile(join(tmpDir, 'village-tokens.json'), JSON.stringify(tokens, null, 2) + '\n', { mode: 0o600 });
 
-  // Start mock game server
+  // Start mock world server
   mockGameServer = await startMockGameServer();
 
   // Spawn hub
@@ -182,9 +182,9 @@ beforeAll(async () => {
     env: {
       ...process.env,
       VILLAGE_SECRET:   SECRET,
-      VILLAGE_GAME:     'social-village',
+      VILLAGE_WORLD:     'social-village',
       VILLAGE_HUB_PORT: String(HUB_PORT),
-      VILLAGE_PORT:     String(GAME_PORT),
+      VILLAGE_PORT:     String(SERVER_PORT),
       VILLAGE_DATA_DIR: tmpDir,
       VILLAGE_NO_SPAWN: '1',
     },
@@ -301,8 +301,8 @@ describe('heartbeat', () => {
 // ─── Join / Leave ─────────────────────────────────────────────────────────────
 
 describe('join / leave', () => {
-  it('join proxies to game server and returns ok + config', async () => {
-    gameState.bots['test-bot-a'] = { inGame: false };
+  it('join proxies to world server and returns ok + config', async () => {
+    gameState.bots['test-bot-a'] = { inWorld: false };
     const { status, data } = await req('POST', '/api/village/join', {});
     expect(status).toBe(200);
     expect(data.ok).toBe(true);
@@ -310,7 +310,7 @@ describe('join / leave', () => {
     expect(data.config.pollTimeoutMs).toBeGreaterThan(0);
   });
 
-  it('leave proxies to game server', async () => {
+  it('leave proxies to world server', async () => {
     const { status, data } = await req('POST', '/api/village/leave', {});
     expect(status).toBe(200);
     expect(data.ok).toBe(true);
@@ -555,7 +555,7 @@ describe('kick', () => {
     const { data: newTok } = await operatorReq('POST', '/api/hub/tokens', { botName: 'kick-target', displayName: 'Kick Target' });
     const kickToken = newTok.token;
 
-    // Kick (revokes token + notifies game server)
+    // Kick (revokes token + notifies world server)
     const { status: kickStatus, data: kickData } = await operatorReq(
       'POST', '/api/village/kick/kick-target', { reason: 'test kick' });
     expect(kickStatus).toBe(200);

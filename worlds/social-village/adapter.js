@@ -3,7 +3,7 @@
  *
  * Implements the GameAdapter interface for server.js:
  *   initState, loadState, advanceClock, recoverParticipants,
- *   joinBot, removeBot, tick, buildSSEInitPayload, isEventForGame
+ *   joinBot, removeBot, tick, buildSSEInitPayload, isEventForWorld
  *
  * server.js delegates all game-specific logic here.
  * No knowledge of HTTP, child processes, or token management.
@@ -11,7 +11,7 @@
 
 import { advanceClock as advanceClockImpl } from './logic.js';
 import { socialTick } from './tick.js';
-import { initNPCs, runNPCTick, probeAPIRouter, getNPCProfiles } from './npcs.js';
+import { initNPCs as initNPCsImpl, runNPCTick, probeAPIRouter as probeAPIRouterImpl, getNPCProfiles } from './npcs.js';
 import { getVillageTime } from './scene.js';
 import { generateAppearance } from './appearance.js';
 
@@ -23,7 +23,7 @@ export const hasFastTick = false;
 
 // --- State lifecycle ---
 
-export function initState(gameConfig) {
+export function initState(worldConfig) {
   const state = {
     locations: {},
     whispers: {},
@@ -40,7 +40,7 @@ export function initState(gameConfig) {
     newsBulletins: [],
     exiles: {},
   };
-  for (const loc of gameConfig.locationSlugs) {
+  for (const loc of worldConfig.locationSlugs) {
     state.locations[loc] = [];
     state.publicLogs[loc] = [];
     state.emptyTicks[loc] = 0;
@@ -48,7 +48,7 @@ export function initState(gameConfig) {
   return state;
 }
 
-export function loadState(raw, gameConfig) {
+export function loadState(raw, worldConfig) {
   const state = {
     locations: raw.locations || {},
     whispers: raw.whispers || {},
@@ -66,7 +66,7 @@ export function loadState(raw, gameConfig) {
     exiles: raw.exiles || {},
   };
   // Ensure all schema locations exist
-  for (const loc of gameConfig.locationSlugs) {
+  for (const loc of worldConfig.locationSlugs) {
     if (!state.locations[loc]) state.locations[loc] = [];
     if (!state.publicLogs[loc]) state.publicLogs[loc] = [];
     if (!state.emptyTicks[loc]) state.emptyTicks[loc] = 0;
@@ -86,8 +86,8 @@ export function loadState(raw, gameConfig) {
   return state;
 }
 
-export function advanceClock(state, gameConfig, ticksPerPhase) {
-  advanceClockImpl(state.clock, ticksPerPhase, gameConfig.phases);
+export function advanceClock(state, worldConfig, ticksPerPhase) {
+  advanceClockImpl(state.clock, ticksPerPhase, worldConfig.phases);
 }
 
 // --- Participant management ---
@@ -99,12 +99,12 @@ export function advanceClock(state, gameConfig, ticksPerPhase) {
  *
  * @param {object} state
  * @param {Map} participants  - mutated in place
- * @param {object} gameConfig
+ * @param {object} worldConfig
  * @returns {string[]} bot names to hard-remove
  */
-export async function recoverParticipants(state, participants, gameConfig) {
+export async function recoverParticipants(state, participants, worldConfig) {
   const allLocs = [
-    ...gameConfig.locationSlugs,
+    ...worldConfig.locationSlugs,
     ...Object.keys(state.customLocations || {}),
   ];
 
@@ -144,8 +144,8 @@ export async function recoverParticipants(state, participants, gameConfig) {
       appearance = await generateAppearance(botName, state.occupations?.[botName]?.title || null);
     } catch { /* non-critical */ }
     participants.set(botName, { displayName: entry.displayName || botName, appearance });
-    state.locations[gameConfig.spawnLocation].push(botName);
-    console.log(`[village] Recovery: ${botName} restored → ${gameConfig.spawnLocation}`);
+    state.locations[worldConfig.spawnLocation].push(botName);
+    console.log(`[village] Recovery: ${botName} restored → ${worldConfig.spawnLocation}`);
   }
 
   return toRemove;
@@ -155,7 +155,7 @@ export async function recoverParticipants(state, participants, gameConfig) {
  * Add a bot to the village world.
  * Returns { events, appearance } — server.js broadcasts events and updates participants.
  */
-export async function joinBot(state, botName, displayName, gameConfig) {
+export async function joinBot(state, botName, displayName, worldConfig) {
   let appearance = null;
   try {
     appearance = await generateAppearance(botName, state.occupations?.[botName]?.title || null);
@@ -164,20 +164,20 @@ export async function joinBot(state, botName, displayName, gameConfig) {
   }
 
   const allLocs = [
-    ...gameConfig.locationSlugs,
+    ...worldConfig.locationSlugs,
     ...Object.keys(state.customLocations || {}),
   ];
   const alreadyIn = allLocs.some(loc => (state.locations[loc] || []).includes(botName));
 
   const events = [];
   if (!alreadyIn) {
-    state.locations[gameConfig.spawnLocation].push(botName);
+    state.locations[worldConfig.spawnLocation].push(botName);
     events.push({
       type: 'movement', bot: botName, displayName,
-      action: 'join', location: gameConfig.spawnLocation, tick: state.clock.tick,
+      action: 'join', location: worldConfig.spawnLocation, tick: state.clock.tick,
       ...(appearance ? { appearance } : {}),
     });
-    (state.publicLogs[gameConfig.spawnLocation] ??= []).push({
+    (state.publicLogs[worldConfig.spawnLocation] ??= []).push({
       bot: botName, action: 'say',
       message: `*${displayName} has joined the village!*`,
     });
@@ -216,15 +216,15 @@ export const fastTick = null; // social village has no fast tick
 
 // --- Observer ---
 
-export function buildSSEInitPayload(state, participants, gameConfig, { nextTickAt, tickIntervalMs }) {
-  const vt = getVillageTime(gameConfig.timezone);
+export function buildSSEInitPayload(state, participants, worldConfig, { nextTickAt, tickIntervalMs }) {
+  const vt = getVillageTime(worldConfig.timezone);
   const allLocs = [
-    ...gameConfig.locationSlugs,
+    ...worldConfig.locationSlugs,
     ...Object.keys(state.customLocations || {}),
   ];
   return {
     type: 'init',
-    gameType: 'social',
+    worldType: 'social',
     tick: state.clock.tick,
     phase: vt.phase,
     villageTime: vt.timeStr,
@@ -232,10 +232,10 @@ export function buildSSEInitPayload(state, participants, gameConfig, { nextTickA
     nextTickAt,
     tickIntervalMs,
     game: {
-      id: gameConfig.raw.id,
-      name: gameConfig.raw.name,
-      description: gameConfig.raw.description,
-      version: gameConfig.raw.version,
+      id: worldConfig.raw.id,
+      name: worldConfig.raw.name,
+      description: worldConfig.raw.description,
+      version: worldConfig.raw.version,
     },
     locations: Object.fromEntries(
       allLocs.map(l => [l, (state.locations[l] || []).map(b => ({
@@ -258,14 +258,14 @@ export function buildSSEInitPayload(state, participants, gameConfig, { nextTickA
     newsBulletins: state.newsBulletins || [],
     villageCosts: state.villageCosts || {},
     locationFlavors: Object.fromEntries(
-      Object.entries(gameConfig.raw.locations || {}).map(([k, v]) => [k, v.flavor || ''])
+      Object.entries(worldConfig.raw.locations || {}).map(([k, v]) => [k, v.flavor || ''])
     ),
     npcProfiles: getNPCProfiles(),
   };
 }
 
 /** True if event belongs to this game type (used to filter /api/logs) */
-export function isEventForGame(event) {
+export function isEventForWorld(event) {
   if (SURVIVAL_TYPES.has(event.type)) return false;
   if (event.type === 'tick' && event.botStates && !event.actions) return false;
   return true;
@@ -273,10 +273,10 @@ export function isEventForGame(event) {
 
 // --- NPC lifecycle (social-only) ---
 
-export function initNPCsForGame(state, participants, gameConfig) {
-  initNPCs(state, participants, gameConfig);
+export function initNPCs(state, participants, worldConfig) {
+  initNPCsImpl(state, participants, worldConfig);
 }
 
-export function probeAPIRouterForGame() {
-  probeAPIRouter();
+export function probeAPIRouter() {
+  probeAPIRouterImpl();
 }

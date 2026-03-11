@@ -16,7 +16,7 @@ describe('relay → waiter path (poll waiting when relay arrives)', () => {
     // Bot starts polling
     const { promise: pollPromise } = t.poll('alice', 2000);
 
-    // Game server relays a scene
+    // World server relays a scene
     const relayPromise = t.relay('alice', { conversationId: 'c1', scene: 'hello' }, 2000);
 
     // Poll should immediately resolve with the scene

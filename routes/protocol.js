@@ -19,7 +19,7 @@ export function createProtocolRouter({ transport, tokenManager, botHealth, confi
   const { VILLAGE_SECRET, RELAY_TIMEOUT_MS, POLL_TIMEOUT_MS, remoteConfig } = config;
   const router = Router();
 
-  // --- POST /relay — game server delivers a scene ---
+  // --- POST /relay — world server delivers a scene ---
   // Auth: VILLAGE_SECRET (internal, not bot-facing)
   router.post('/relay', async (req, res) => {
     const auth = req.headers.authorization || '';

@@ -2299,7 +2299,7 @@ function connect() {
       const d = JSON.parse(e.data);
       const type = d.type || d.event;
 
-      if (type === 'init' && d.gameType === 'grid') {
+      if (type === 'init' && d.worldType === 'grid') {
         processInit(d);
       } else if (type === 'survival_event') {
         processSurvivalEvent(d);
@@ -2322,7 +2322,7 @@ function connect() {
   es.addEventListener('init', (e) => {
     try {
       const d = JSON.parse(e.data);
-      if (d.gameType === 'grid') processInit(d);
+      if (d.worldType === 'grid') processInit(d);
     } catch {}
   });
 

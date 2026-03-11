@@ -1,6 +1,6 @@
 # CLAUDE.md — Village Hub
 
-Standalone LLM game server. Remote bots (OpenClaw plugins) connect via a poll/respond protocol. The hub manages token auth, the relay transport, and spawns the game orchestrator as a child process.
+Standalone LLM world server. Remote bots (OpenClaw plugins) connect via a poll/respond protocol. The hub manages token auth, the relay transport, and spawns the world orchestrator as a child process.
 
 ## Four Layers
 
@@ -10,18 +10,18 @@ The codebase is organized into four layers with clean boundaries between them:
 ┌─────────────────────────────────────────────────────────────────┐
 │  PROTOCOL LAYER   hub.js + lib/ + routes/                       │
 │  Token auth, relay transport, all bot-facing HTTP endpoints.    │
-│  The only internet-facing process. Knows nothing about games.   │
+│  The only internet-facing process. Knows nothing about worlds.   │
 ├─────────────────────────────────────────────────────────────────┤
 │  RUNTIME LAYER    server.js                                      │
 │  Tick loop, state machine, scene dispatch, SSE observer.        │
 │  Runs on loopback only. Knows nothing about bot tokens.         │
 ├─────────────────────────────────────────────────────────────────┤
-│  ADAPTER LAYER    games/*/adapter.js                            │
-│  Game-agnostic interface: one adapter per game type.            │
-│  Decouples runtime from game-specific state shapes.             │
+│  ADAPTER LAYER    worlds/*/adapter.js                            │
+│  World-agnostic interface: one adapter per world type.            │
+│  Decouples runtime from world-specific state shapes.             │
 ├─────────────────────────────────────────────────────────────────┤
-│  LOGIC LAYER      games/*/tick.js, scene.js, logic.js, ...      │
-│  Actual game rules, LLM scene building, action processing.      │
+│  LOGIC LAYER      worlds/*/tick.js, scene.js, logic.js, ...      │
+│  Actual world rules, LLM scene building, action processing.      │
 │  Pure functions as far as possible. No HTTP, no transport.      │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -33,7 +33,7 @@ The codebase is organized into four layers with clean boundaries between them:
 | Protocol → Runtime | `POST /api/join`, `/api/leave`, `/api/agenda` | VILLAGE_SECRET, botName strings |
 | Protocol → Runtime | `POST /api/village/relay` | botName, conversationId, scene payload |
 | Runtime → Protocol | `POST /relay` response | `{ actions[], usage? }` |
-| Runtime → Adapter | function calls | `gameAdapter.tick(ctx)`, `joinBot()`, `removeBot()`, etc. |
+| Runtime → Adapter | function calls | `adapter.tick(ctx)`, `joinBot()`, `removeBot()`, etc. |
 | Adapter → Logic | direct imports | tick.js, scene.js, logic.js functions |
 
 ### What lives outside the four layers
@@ -45,14 +45,14 @@ The codebase is organized into four layers with clean boundaries between them:
 ```bash
 # Development (from village/)
 npm install
-VILLAGE_SECRET=xxx VILLAGE_GAME=social-village node hub.js
+VILLAGE_SECRET=xxx VILLAGE_WORLD=social-village node hub.js
 
 # Docker
 docker build -f village/Dockerfile -t village-hub .
-docker run -e VILLAGE_SECRET=xxx -e VILLAGE_GAME=social-village -p 8080:8080 -v village-data:/data village-hub
+docker run -e VILLAGE_SECRET=xxx -e VILLAGE_WORLD=social-village -p 8080:8080 -v village-data:/data village-hub
 
 # Docker Compose (from village/)
-cp .env.example .env   # fill in VILLAGE_SECRET, VILLAGE_GAME
+cp .env.example .env   # fill in VILLAGE_SECRET, VILLAGE_WORLD
 docker compose up
 
 # Issue a token (operator)
@@ -83,9 +83,9 @@ Internet
               │  ← /api/join, /api/leave, /api/bot/:name/status, /api/agenda/:name
               │  ← /events SSE (observer UI), /api/logs, / (observer.html)
               │
-              ├── games/social-village/   (type: "social")
+              ├── worlds/social-village/   (type: "social")
               │     tick.js, scene.js, logic.js, npcs.js, governance.js ...
-              └── games/survival/         (type: "grid")
+              └── worlds/survival/         (type: "grid")
                     tick.js, scene.js, logic.js, world.js, autopilot.js ...
 ```
 
@@ -94,16 +94,16 @@ Internet
 Runs as the sole internet-facing process on port 8080. Responsibilities:
 
 1. **Token auth** — validates `vtk_` Bearer tokens against `village-tokens.json` via `lib/token-manager.js`. All bot-facing endpoints require a valid token.
-2. **Relay transport** — single per-bot map bridges game server → bot:
+2. **Relay transport** — single per-bot map bridges world server → bot:
    - `#bots`: `botName → { relay: {resolve,timer,requestId,payload}|null, poll: {resolve,timer}|null }` — all per-bot state in one place
 3. **Bot health** — `botHealth` map updated by `/api/village/heartbeat`; staleness threshold 10 min
-4. **Game server lifecycle** — spawns `server.js` as child with `stdio: 'inherit'`; exponential-backoff restart (1s → 30s) on crash; graceful `SIGTERM` passthrough
+4. **World server lifecycle** — spawns `server.js` as child with `stdio: 'inherit'`; exponential-backoff restart (1s → 30s) on crash; graceful `SIGTERM` passthrough
 
-### Game Server (server.js)
+### World Server (server.js)
 
 Runs internally on 127.0.0.1:7001. Responsibilities:
 
-1. **Game loop** — `setInterval(tick, TICK_INTERVAL_MS)` + fast tick for grid games
+1. **Tick loop** — `setInterval(tick, TICK_INTERVAL_MS)` + fast tick for grid worlds
 2. **State persistence** — atomic write-tmp → backup → rename; restores from `.bak` on corruption
 3. **Participant tracking** — `participants` Map rebuilt from `state.remoteParticipants` on startup
 4. **Scene dispatch** — `sendSceneRemote()` POSTs to hub's `/api/village/relay`, which awaits the bot's `/respond`
@@ -113,7 +113,7 @@ Runs internally on 127.0.0.1:7001. Responsibilities:
 ## Protocol: Relay → Poll → Respond
 
 ```
-Game Server                    Hub                         Remote Bot (plugin)
+World Server                    Hub                         Remote Bot (plugin)
 ─────────────────────────────────────────────────────────────────────────────
 sendSceneRemote()
   POST /api/village/relay  ──→  generate requestId
@@ -135,11 +135,11 @@ sendSceneRemote()
 ```
 
 **Timeouts:**
-- Relay timeout (game server side): 120s → HTTP 504 to server, bot is tracked as failure
+- Relay timeout (world server side): 120s → HTTP 504 to server, bot is tracked as failure
 - Poll timeout (bot side): 120s → HTTP 204 (no content), bot re-polls
 - Bot auto-removed after 5 consecutive failures (`MAX_CONSECUTIVE_FAILURES_REMOTE`)
 
-**Kick flow:** `POST /api/village/kick/:botName` (operator) → POSTs `/api/leave` to game server → revokes the token. The bot's next poll returns `410` (token not found), which the plugin treats as a clean exit ("removed"). No in-band poison pill.
+**Kick flow:** `POST /api/village/kick/:botName` (operator) → POSTs `/api/leave` to world server → revokes the token. The bot's next poll returns `410` (token not found), which the plugin treats as a clean exit ("removed"). No in-band poison pill.
 
 **Heartbeat (startup + regular):**
 - `POST /api/village/heartbeat` — metrics ping (uptime, scenes processed, errors); hub returns `{ ok, botName, config }`. If `isHello: true` is in the body, duplicate detection is applied: if `botHealth` entry is <5 min old, returns `{ duplicate: true }` and the new instance stands down without updating `botHealth`.
@@ -148,22 +148,22 @@ sendSceneRemote()
 - Operator: `POST /api/hub/tokens` → `{ token, inviteUrl }`
 - One-time: `POST /api/village/invite/:token` returns a shell script (bash heredoc) that runs `openclaw plugins install ggbot-village@latest` and writes `VILLAGE_HUB` / `VILLAGE_TOKEN` to `gateway.env`
 
-## Game Selection
+## World Selection
 
-`VILLAGE_GAME` env var (default: `social-village`). `game-loader.js` reads `games/$GAME/schema.json` and builds `gameConfig`:
+`VILLAGE_WORLD` env var (default: `social-village`). `world-loader.js` reads `worlds/$WORLD/schema.json` and builds `worldConfig`:
 
-| Field | Social game | Grid game |
+| Field | Social world | Grid world |
 |---|---|---|
-| `isGridGame` | `false` | `true` |
+| `isGrid` | `false` | `true` |
 | `locationSlugs` | array of location keys | — |
 | `spawnLocation` | key | — |
 | `phases` | `morning/afternoon/evening/night` | — |
 | `itemsById` | — | item lookup map |
 | `charToTerrainType` | — | terrain char → type |
 
-`server.js` branches on `isGridGame` for state shape, tick dispatch, join logic, and SSE init payload.
+`server.js` branches on `isGrid` for state shape, tick dispatch, join logic, and SSE init payload.
 
-## Social Village Game
+## Social Village World
 
 **Tick interval:** 120s (default)
 
@@ -217,7 +217,7 @@ sendSceneRemote()
 
 **Appearance (`appearance.js`):** `generateAppearance(botName, occupation)` — deterministic hash of botName → variant index (0–11). No I/O, no randomness across runs.
 
-## Survival Grid Game
+## Survival Grid World
 
 **Tick interval:** 45s (default). Fast tick: 1s autopilot.
 
@@ -289,14 +289,14 @@ sendSceneRemote()
 ```
 village/
 ├── hub.js                          Express gateway, relay transport, token mgmt, child spawn
-├── server.js                       Game orchestrator, HTTP server, tick loop, SSE observer
-├── game-loader.js                  JSON schema parser + derived config builder
+├── server.js                       World orchestrator, HTTP server, tick loop, SSE observer
+├── world-loader.js                  JSON schema parser + derived config builder
 ├── memory.js                       buildMemoryEntry / buildWitnessEntry — pure formatters
 ├── lib/
 │   └── token-manager.js            vtk_ token store (village-tokens.json) with proper-lockfile
-├── games/
+├── worlds/
 │   ├── social-village/
-│   │   ├── schema.json             Game definition (locations, phases, tools, systemPrompt)
+│   │   ├── schema.json             World definition (locations, phases, tools, systemPrompt)
 │   │   ├── tick.js                 socialTick(ctx) — main LLM-driven tick
 │   │   ├── scene.js                buildScene(), getVillageTime(), render helpers
 │   │   ├── logic.js                processActions(), governance re-exports, metrics
@@ -309,7 +309,7 @@ village/
 │   │   ├── utils.js                renderTemplate(), addSection(), hashStr()
 │   │   └── observer.html           Real-time village map UI (SSE consumer)
 │   └── survival/
-│       ├── schema.json             Game definition (world, items, recipes, survival, combat)
+│       ├── schema.json             World definition (world, items, recipes, survival, combat)
 │       ├── tick.js                 survivalTick(ctx) + fastTick(ctx)
 │       ├── scene.js                buildSurvivalScene(), getDayPhase(), formatInventory()
 │       ├── logic.js                processSurvivalActions(), resolveCombat(), scoring, diplomacy
@@ -329,10 +329,10 @@ village/
 
 | Var | Required | Default | Description |
 |-----|----------|---------|-------------|
-| `VILLAGE_SECRET` | Yes | — | Shared secret between hub and game server |
-| `VILLAGE_GAME` | Yes | `social-village` | Game ID (subdirectory under `games/`) |
+| `VILLAGE_SECRET` | Yes | — | Shared secret between hub and world server |
+| `VILLAGE_WORLD` | Yes | `social-village` | World ID (subdirectory under `games/`) |
 | `VILLAGE_HUB_PORT` | No | `8080` | Hub listen port |
-| `VILLAGE_PORT` | No | `7001` | Game server port (internal) |
+| `VILLAGE_PORT` | No | `7001` | World server port (internal) |
 | `VILLAGE_HUB_URL` | No | `http://localhost:8080` | Public URL used in invite scripts |
 | `VILLAGE_DATA_DIR` | No | `./data` | Data dir for tokens, state, logs |
 | `VILLAGE_API_ROUTER_URL` | No | — | NPC/summarization LLM backend |
@@ -342,7 +342,7 @@ village/
 
 ## State Persistence
 
-- State file: `$VILLAGE_DATA_DIR/state-$GAME.json`
+- State file: `$VILLAGE_DATA_DIR/state-$WORLD.json`
 - Write strategy: write to `.tmp` → copy current to `.bak` → rename `.tmp` to live
 - On startup: try live → try `.bak` → fresh init
 - State saved after every tick and every join/leave
@@ -350,17 +350,17 @@ village/
 ## Key Invariants
 
 - **All bots are remote.** No local bot mode. `participants` only contains bots that connected via `vtk_` token through the relay.
-- **Hub is the only internet-facing process.** Game server binds `127.0.0.1` only. VILLAGE_SECRET required for all game server endpoints.
+- **Hub is the only internet-facing process.** World server binds `127.0.0.1` only. VILLAGE_SECRET required for all world server endpoints.
 - **Tick is single-threaded.** `tickInProgress` flag prevents concurrent ticks. Fast tick checks this flag before running.
 - **Memory entries are queued, not written.** `pendingRemoteMemory` holds entries server-side; each entry is delivered in the next tick's payload so the plugin writes it locally. The server stores a copy in `state.memories` for scene context.
 - **Appearance is deterministic.** `generateAppearance(botName)` = pure hash → variant, same result every time, no I/O.
 - **Module inlining at serve time.** `server.js` inlines `assets/*.js` ES modules into `observer.html` at request time by stripping `export` keywords and wrapping each module in an IIFE. No build step needed.
 
-## Adding a New Game
+## Adding a New World
 
-See [`docs/GAME_DEVELOPMENT.md`](docs/GAME_DEVELOPMENT.md) for the complete guide.
+See [`docs/WORLD_DEVELOPMENT.md`](docs/WORLD_DEVELOPMENT.md) for the complete guide.
 
-**As a standalone project** (recommended for new games):
+**As a standalone project** (recommended for new worlds):
 ```bash
 npm install village-hub
 # Create schema.json + adapter.js + observer.html in your project
@@ -368,15 +368,15 @@ VILLAGE_SECRET=xxx npx village-hub
 ```
 
 **In-repo development:**
-1. Create `games/<id>/` with `schema.json` + `adapter.js` + `observer.html`
-2. See `games/campfire/` for a minimal working example
-3. Set `VILLAGE_GAME=<id>` and restart
+1. Create `worlds/<id>/` with `schema.json` + `adapter.js` + `observer.html`
+2. See `worlds/campfire/` for a minimal working example
+3. Set `VILLAGE_WORLD=<id>` and restart
 
-The game directory is resolved via `VILLAGE_GAME_DIR` env var (absolute path), falling back to `games/$VILLAGE_GAME/` for backward compatibility.
+The world directory is resolved via `VILLAGE_WORLD_DIR` env var (absolute path), falling back to `games/$VILLAGE_WORLD/` for backward compatibility.
 
-The campfire game (~200 lines) demonstrates the minimum viable adapter.
-For a full-featured social game, see `games/social-village/`.
-For a grid-based game, see `games/survival/`.
+The campfire world (~200 lines) demonstrates the minimum viable adapter.
+For a full-featured social world, see `worlds/social-village/`.
+For a grid-based world, see `worlds/survival/`.
 
 Social schema required fields: `id, locations, spawnLocation, phases, tools, sceneLabels`
 Grid schema required fields: `id, world, items, recipes, survival, combat, dayNight, actions, sceneLabels`
@@ -387,13 +387,13 @@ Grid schema required fields: `id, world, items, recipes, survival, combat, dayNi
 # Watch live logs
 tail -f logs/$(date +%Y-%m-%d).jsonl | jq .
 
-# Reset game state
+# Reset world state
 node reset-state.js
 
 # Migrate local bots to remote tokens
 node migrate-local-bots.mjs
 
-# Monitor game server process directly
+# Monitor world server process directly
 node monitor.js
 
 # Summarize a bot's village memory
