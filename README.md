@@ -13,7 +13,7 @@ Village Hub is a general-purpose library for any scenario where multiple AI agen
 - **Collaborative tasks** — bots work together to solve problems, build things, debate ideas
 - **Research sandboxes** — study emergent behavior when LLM agents interact over time
 
-Three worlds ship with the repo: **Social Village** (location-based social sim), **Survival** (grid-based resource game), and **Campfire** (minimal starter template).
+Three worlds ship with the repo: **Tavern** (medieval tavern with chatting and arm-wrestling), **Campfire** (minimal starter template), and **Social Village** (full location-based social sim).
 
 ## Create Your Own World
 
@@ -80,116 +80,55 @@ This defines your world — its locations, tools, and scene labels.
 
 ### 3. Create `adapter.js`
 
-The adapter is the interface between the server and your world logic. It must export a set of lifecycle functions.
+The adapter is the interface between the runtime and your world logic. It exports a few pure functions and a tool handler map — the runtime handles everything else (tick loop, state persistence, participant tracking, SSE).
 
-Here's a minimal adapter (~80 lines) that supports chatting:
+Here's a minimal adapter (~40 lines) that supports chatting:
 
 ```js
-const LOG_CAP = 50;
-
-export const memoryFilename = 'my-world.md';
-export const hasFastTick = false;
-
-// --- State lifecycle ---
+// --- State (world-specific fields only) ---
 
 export function initState(worldConfig) {
-  return {
-    log: [], clock: { tick: 0 }, bots: [],
-    villageCosts: {}, remoteParticipants: {},
-  };
+  return { log: [] };
 }
 
-export function loadState(raw) {
-  return {
-    log: raw.log || [], clock: raw.clock || { tick: 0 },
-    bots: raw.bots || [],
-    villageCosts: raw.villageCosts || {},
-    remoteParticipants: raw.remoteParticipants || {},
-  };
+// --- Scene ---
+
+export function buildScene(bot, allBots, state, worldConfig) {
+  const others = allBots.filter(b => b.name !== bot.name);
+  const recent = state.log.slice(-10);
+  const lines = [
+    `## My World`,
+    '',
+    others.length ? `**Present:** ${others.map(b => b.displayName).join(', ')}` : `You're alone.`,
+    '',
+    '### Recent conversation',
+    ...(recent.length ? recent.map(e => `- **${e.displayName}:** ${e.message}`) : ['Silence.']),
+    '',
+    'What do you do?',
+  ];
+  return lines.join('\n');
 }
 
-export function advanceClock(state) { state.clock.tick++; }
+// --- Tool handlers ---
+// Each returns { action, message, ... } or null. Runtime stamps bot/tick/timestamp.
 
-// --- Participants ---
+export const tools = {
+  my_say(bot, params, state) {
+    if (!params?.message) return null;
+    return { action: 'say', message: params.message };
+  },
+};
 
-export async function recoverParticipants(state, participants) {
-  const toRemove = [];
-  for (const name of state.bots) {
-    const entry = state.remoteParticipants[name];
-    if (!entry) { toRemove.push(name); continue; }
-    participants.set(name, { displayName: entry.displayName || name });
-  }
-  return toRemove;
+// --- Optional hooks (called by runtime after managing participant lists) ---
+
+export function onJoin(state, botName, displayName) {
+  state.log.push({ bot: botName, displayName, action: 'join', message: `${displayName} entered.`, tick: state.clock.tick, timestamp: new Date().toISOString() });
+  return { message: `${displayName} entered.` };
 }
 
-export async function joinBot(state, botName, displayName) {
-  const events = [];
-  if (!state.bots.includes(botName)) {
-    state.bots.push(botName);
-    events.push({ type: 'join', bot: botName, displayName, tick: state.clock.tick });
-  }
-  return { events, appearance: null };
-}
-
-export function removeBot(state, botName, displayName, broadcastEvent) {
-  const idx = state.bots.indexOf(botName);
-  if (idx !== -1) {
-    state.bots.splice(idx, 1);
-    broadcastEvent({ type: 'leave', bot: botName, displayName, tick: state.clock.tick });
-  }
-}
-
-// --- Tick ---
-
-export async function tick(ctx) {
-  const { state, worldConfig, participants, sendSceneRemote,
-    accumulateResponseCost, broadcastEvent, saveState } = ctx;
-
-  if (participants.size === 0) { await saveState(); return; }
-
-  const results = await Promise.all([...participants.entries()].map(async ([name, p]) => {
-    const scene = `Tick ${state.clock.tick}. You are in the Main Room.\n\n`
-      + state.log.slice(-10).map(e => `${e.displayName}: ${e.message}`).join('\n');
-    const response = await sendSceneRemote(name, 'my-world', {
-      scene,
-      tools: worldConfig.raw.toolSchemas || [],
-      systemPrompt: worldConfig.raw.systemPrompt || '',
-      allowedReads: [], maxActions: 2,
-    });
-    accumulateResponseCost(name, response);
-    return { name, displayName: p.displayName, response };
-  }));
-
-  for (const { name, displayName, response } of results) {
-    if (response._error) continue;
-    for (const action of (response.actions || [])) {
-      if (action.tool === 'my_say' && action.params?.message) {
-        const entry = { bot: name, displayName, message: action.params.message, tick: state.clock.tick };
-        state.log.push(entry);
-        broadcastEvent({ type: 'say', ...entry });
-      }
-    }
-  }
-
-  if (state.log.length > LOG_CAP) state.log = state.log.slice(-LOG_CAP);
-  await saveState();
-}
-
-export const fastTick = null;
-
-// --- Observer ---
-
-export function buildSSEInitPayload(state, participants, worldConfig, { nextTickAt, tickIntervalMs }) {
-  return {
-    type: 'init', worldType: 'social', tick: state.clock.tick,
-    nextTickAt, tickIntervalMs,
-    bots: state.bots.map(n => ({ name: n, displayName: participants.get(n)?.displayName || n })),
-    log: state.log.slice(-30),
-  };
-}
-
-export function isEventForWorld(event) {
-  return ['say', 'join', 'leave', 'tick_start'].includes(event.type);
+export function onLeave(state, botName, displayName) {
+  state.log.push({ bot: botName, displayName, action: 'leave', message: `${displayName} left.`, tick: state.clock.tick, timestamp: new Date().toISOString() });
+  return { message: `${displayName} left.` };
 }
 ```
 
@@ -210,7 +149,7 @@ The observer connects to `/events` (SSE) and renders the world in real time. A m
       const data = JSON.parse(e.data);
       if (data.type === 'init') {
         for (const entry of (data.log || [])) addEntry(entry);
-      } else if (data.type === 'say') {
+      } else if (data.type === 'my-world_say') {
         addEntry(data);
       }
     };
@@ -259,35 +198,32 @@ That's it. Your bots are now talking to each other.
 
 | World | Type | Description |
 |-------|------|-------------|
-| `campfire` | social | Minimal starter. Bots sit around a fire, chat, tell stories. ~120 lines of adapter code. |
+| `tavern` | social | Medieval tavern. Bots chat, propose toasts, arm-wrestle. Great starter example. |
+| `campfire` | social | Minimal starter. Bots sit around a fire, chat, tell stories. ~80 lines of adapter code. |
 | `social-village` | social | Full social sim. Locations, governance, NPCs, memory, occupations, exiles. |
 | `survival` | grid | 2D grid with terrain, resources, crafting, combat, alliances, fog-of-war, autopilot. |
 
 Run a bundled world:
 
 ```bash
-VILLAGE_SECRET=secret VILLAGE_WORLD=campfire node hub.js
+VILLAGE_SECRET=secret VILLAGE_WORLD=tavern node hub.js
 ```
 
 ## Adapter Interface Reference
 
-Your `adapter.js` must export these functions and constants. See [docs/WORLD_DEVELOPMENT.md](docs/WORLD_DEVELOPMENT.md) for the full reference including tick context, tool schemas, memory system, and observer patterns.
+Your `adapter.js` exports world-specific logic. The runtime (`server.js`) handles everything else — tick loop, clock, state persistence, participant management, SSE, event broadcasting.
 
-| Export | Type | Purpose |
-|--------|------|---------|
-| `memoryFilename` | `string` | Filename for bot memory (e.g. `'campfire.md'`) |
-| `hasFastTick` | `boolean` | Enable ~1s fast tick loop (for autopilot mechanics) |
-| `initState(worldConfig)` | `fn → state` | Create initial state on first run |
-| `loadState(raw, worldConfig)` | `fn → state` | Load and migrate persisted state |
-| `advanceClock(state, worldConfig, ticksPerPhase)` | `fn` | Increment the clock each tick |
-| `recoverParticipants(state, participants, worldConfig)` | `async fn → string[]` | Rebuild participants after restart |
-| `joinBot(state, botName, displayName, worldConfig)` | `async fn → {events, appearance}` | Handle bot joining |
-| `removeBot(state, botName, displayName, broadcastEvent)` | `fn` | Handle bot leaving |
-| `tick(ctx)` | `async fn` | Main tick — build scenes, send to bots, process responses |
-| `buildSSEInitPayload(state, participants, worldConfig, timing)` | `fn → object` | Snapshot for new observer connections |
-| `isEventForWorld(event)` | `fn → boolean` | Filter events for `/api/logs` |
+See [docs/WORLD_DEVELOPMENT.md](docs/WORLD_DEVELOPMENT.md) for the full reference.
 
-**State must include `villageCosts` and `remoteParticipants`** — the server writes to these directly.
+| Export | Type | Required | Purpose |
+|--------|------|----------|---------|
+| `initState(worldConfig)` | `fn → object` | Yes | Return world-specific initial state (e.g. `{ log: [] }`) |
+| `buildScene(bot, allBots, state, worldConfig)` | `fn → string` | Yes | Build scene text for a bot each tick |
+| `tools` | `{ [name]: (bot, params, state) → entry\|null }` | Yes | Tool handler map — process bot actions |
+| `onJoin(state, botName, displayName)` | `fn → object?` | No | Hook called after bot joins; may mutate state, return extra event fields |
+| `onLeave(state, botName, displayName)` | `fn → object?` | No | Hook called after bot leaves; may mutate state, return extra event fields |
+
+**The runtime manages** `state.clock`, `state.bots`, `state.villageCosts`, `state.remoteParticipants`, and `state.log`. Your `initState` only returns world-specific fields — the runtime merges in its own bookkeeping.
 
 ## Architecture
 
@@ -339,7 +275,7 @@ docker compose up
 
 ```bash
 npm install
-VILLAGE_SECRET=secret VILLAGE_WORLD=campfire node hub.js
+VILLAGE_SECRET=secret VILLAGE_WORLD=tavern node hub.js
 
 # Run tests
 npx vitest run
