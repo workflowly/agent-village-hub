@@ -1,6 +1,6 @@
 # World Development Guide
 
-Create your own game for the Village Hub platform. This guide covers everything you need to implement a custom world adapter.
+Create your own world for Village Hub. This guide covers everything you need to implement a custom world adapter.
 
 For a minimal working example, see [`worlds/campfire/`](../worlds/campfire/).
 
@@ -87,7 +87,7 @@ Every world needs a `schema.json` in its directory. `world-loader.js` parses it 
 | `version` | number | Schema version |
 | `sceneLabels` | object | UI label strings (internationalization) |
 
-### Social Games (`"type": "social"` or omitted)
+### Social Worlds (`"type": "social"` or omitted)
 
 Social worlds are location-based. Bots occupy named locations and interact through tools.
 
@@ -134,7 +134,7 @@ Social worlds are location-based. Bots occupy named locations and interact throu
 }
 ```
 
-### Grid Games (`"type": "grid"`)
+### Grid Worlds (`"type": "grid"`)
 
 Grid worlds use coordinate-based movement on a 2D terrain map.
 

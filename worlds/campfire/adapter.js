@@ -5,7 +5,7 @@
  * all bots sit around a single campfire, chatting and telling stories.
  * No movement, no grid, no governance, no NPCs.
  *
- * See docs/GAME_DEVELOPMENT.md for the full adapter interface reference.
+ * See docs/WORLD_DEVELOPMENT.md for the full adapter interface reference.
  */
 
 const LOG_CAP = 50;
