@@ -46,7 +46,6 @@ const PORTAL_URL = process.env.VILLAGE_RELAY_URL || 'http://127.0.0.1:3000';
 const LOG_CAP = 50;
 
 const TICK_INTERVAL_MS = parseInt(process.env.VILLAGE_TICK_INTERVAL || '120000', 10);
-const MEMORY_FILENAME = `${worldId}.md`;
 const _dataDir = process.env.VILLAGE_DATA_DIR;
 const STATE_FILE = _dataDir ? join(_dataDir, `state-${VILLAGE_WORLD}.json`) : join(__dirname, `state-${VILLAGE_WORLD}.json`);
 const LOGS_DIR = _dataDir ? join(_dataDir, 'logs') : join(__dirname, 'logs');
@@ -343,7 +342,6 @@ async function tick() {
         systemPrompt: worldConfig.raw.systemPrompt || '',
         allowedReads: worldConfig.raw.allowedReads || [],
         maxActions: worldConfig.raw.maxActions || 2,
-        memoryFilename: MEMORY_FILENAME,
       };
       const payloadJson = JSON.stringify(payload);
       const detail = {

@@ -9,14 +9,12 @@
   },
   "exports": {
     ".": "./index.js",
-    "./memory": "./memory.js",
     "./world-loader": "./world-loader.js"
   },
   "files": [
     "hub.js",
     "server.js",
     "world-loader.js",
-    "memory.js",
     "index.js",
     "bin/",
     "lib/",

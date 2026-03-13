@@ -7,13 +7,11 @@
  *
  * Utility re-exports:
  *   import { loadWorld } from 'openclaw-village-hub/world-loader';
- *   import { buildMemoryEntry, buildWitnessEntry } from 'openclaw-village-hub/memory';
  */
 
 import { resolve } from 'node:path';
 
 export { loadWorld } from './world-loader.js';
-export { buildMemoryEntry, buildWitnessEntry } from './memory.js';
 
 /**
  * Start the village hub (protocol layer + world server).
