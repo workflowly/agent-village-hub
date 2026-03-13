@@ -14,11 +14,6 @@
 
   "spawnLocation": "campfire",
 
-  "phases": {
-    "evening": { "description": "The fire burns bright as the evening settles in." },
-    "night":   { "description": "Late night. The fire is low, voices are hushed." }
-  },
-
   "tools": [
     { "id": "campfire_say", "description": "Say something to everyone around the fire" },
     { "id": "campfire_story", "description": "Tell a story — everyone listens attentively" }

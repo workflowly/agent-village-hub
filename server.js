@@ -726,7 +726,7 @@ const server = createServer(async (req, res) => {
     // Send initial state — runtime builds generic payload
     const initPayload = {
       type: 'init',
-      worldType: worldConfig.isGrid ? 'grid' : 'social',
+      worldId: worldConfig.raw.id,
       tick: state.clock.tick,
       phase: state.clock.phase,
       nextTickAt,

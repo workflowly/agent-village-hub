@@ -1,6 +1,6 @@
 /**
  * World schema loader — reads a JSON world definition and builds derived
- * lookup maps consumed by logic.js, scene.js, and server.js.
+ * lookup maps consumed by the adapter and server.js.
  *
  * Pure function, no side effects — easily testable.
  */
@@ -17,166 +17,42 @@ import { readFileSync } from 'node:fs';
 export function loadWorld(filePath) {
   const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
 
-  const worldType = raw.type || 'social';
-
-  if (worldType === 'grid') {
-    validateGrid(raw, filePath);
-    return buildGridConfig(raw);
-  }
-
-  // Social (default) world type
   validate(raw, filePath);
 
-  const locationSlugs = Object.keys(raw.locations);
+  const locationSlugs = Object.keys(raw.locations || {});
   const locationNames = {};
   const locationFlavors = {};
   const locationPurposes = {};
-  for (const [slug, loc] of Object.entries(raw.locations)) {
+  for (const [slug, loc] of Object.entries(raw.locations || {})) {
     locationNames[slug] = loc.name;
     locationFlavors[slug] = loc.flavor;
     if (loc.purpose) locationPurposes[slug] = loc.purpose;
   }
 
-  const phases = Object.keys(raw.phases);
-  const phaseDescriptions = {};
-  for (const [phase, cfg] of Object.entries(raw.phases)) {
-    phaseDescriptions[phase] = cfg.description;
-  }
-
   return {
     raw,
-    isGrid: false,
     locationSlugs,
     locationNames,
     locationFlavors,
     locationPurposes,
     spawnLocation: raw.spawnLocation,
-    phases,
-    phaseDescriptions,
     timezone: raw.timezone,
     tools: raw.tools,
     sceneLabels: raw.sceneLabels,
     locationTools: raw.locationTools || {},
-    defaultLocationTools: raw.defaultLocationTools || raw.tools.map(t => t.id),
+    defaultLocationTools: raw.defaultLocationTools || (raw.tools || []).map(t => t.id),
   };
 }
 
 /**
- * Build config for grid-based worlds.
- */
-function buildGridConfig(raw) {
-  // Build derived lookup maps
-  const itemsById = {};
-  for (const [id, cfg] of Object.entries(raw.items)) {
-    itemsById[id] = { ...cfg, id };
-  }
-
-  const charToTerrainType = {};
-  for (const [type, cfg] of Object.entries(raw.world.terrain)) {
-    charToTerrainType[cfg.char] = type;
-  }
-
-  return {
-    raw,
-    isGrid: true,
-    itemsById,
-    charToTerrainType,
-    sceneLabels: raw.sceneLabels,
-  };
-}
-
-/**
- * Validate required fields for grid-based world schemas.
- */
-function validateGrid(raw, filePath) {
-  const required = ['id', 'world', 'items', 'recipes', 'survival', 'combat', 'dayNight', 'actions', 'sceneLabels'];
-  for (const field of required) {
-    if (raw[field] === undefined || raw[field] === null) {
-      throw new Error(`World schema ${filePath}: missing required field "${field}"`);
-    }
-  }
-
-  // Validate world
-  const world = raw.world;
-  if (!world.width || !world.height) {
-    throw new Error(`World schema ${filePath}: world must have width and height`);
-  }
-  if (!world.terrain || Object.keys(world.terrain).length === 0) {
-    throw new Error(`World schema ${filePath}: world.terrain must have at least one entry`);
-  }
-  for (const [type, cfg] of Object.entries(world.terrain)) {
-    if (cfg.char === undefined) {
-      throw new Error(`World schema ${filePath}: world.terrain.${type} missing "char"`);
-    }
-    if (cfg.moveCost === undefined) {
-      throw new Error(`World schema ${filePath}: world.terrain.${type} missing "moveCost"`);
-    }
-  }
-
-  // Validate items
-  for (const [id, cfg] of Object.entries(raw.items)) {
-    if (!cfg.type) {
-      throw new Error(`World schema ${filePath}: items.${id} missing "type"`);
-    }
-  }
-
-  // Validate recipes reference valid items
-  for (let i = 0; i < raw.recipes.length; i++) {
-    const recipe = raw.recipes[i];
-    if (!recipe.inputs || !recipe.output) {
-      throw new Error(`World schema ${filePath}: recipes[${i}] missing inputs or output`);
-    }
-    for (const input of recipe.inputs) {
-      if (!raw.items[input]) {
-        throw new Error(`World schema ${filePath}: recipes[${i}] references unknown item "${input}"`);
-      }
-    }
-    if (!raw.items[recipe.output]) {
-      throw new Error(`World schema ${filePath}: recipes[${i}] output "${recipe.output}" is not a valid item`);
-    }
-  }
-
-  // Validate dayNight
-  if (!raw.dayNight.cycleTicks || !raw.dayNight.phases) {
-    throw new Error(`World schema ${filePath}: dayNight must have cycleTicks and phases`);
-  }
-
-  // Validate survival
-  const survReq = ['hungerPerTick', 'maxHealth', 'maxHunger', 'inventorySlots'];
-  for (const field of survReq) {
-    if (raw.survival[field] === undefined) {
-      throw new Error(`World schema ${filePath}: survival.${field} is required`);
-    }
-  }
-}
-
-/**
- * Validate required fields and cross-references in the social world schema.
+ * Validate required fields in the world schema.
  */
 function validate(raw, filePath) {
-  const required = ['id', 'locations', 'spawnLocation', 'phases',
-    'tools', 'sceneLabels'];
+  const required = ['id', 'sceneLabels'];
 
   for (const field of required) {
     if (raw[field] === undefined || raw[field] === null) {
       throw new Error(`World schema ${filePath}: missing required field "${field}"`);
     }
   }
-
-  const locationSlugs = Object.keys(raw.locations);
-  if (locationSlugs.length === 0) {
-    throw new Error(`World schema ${filePath}: "locations" must have at least one entry`);
-  }
-
-  if (!locationSlugs.includes(raw.spawnLocation)) {
-    throw new Error(`World schema ${filePath}: "spawnLocation" "${raw.spawnLocation}" is not a valid location key`);
-  }
-
-  // Validate phases have descriptions
-  for (const [phase, cfg] of Object.entries(raw.phases)) {
-    if (!cfg.description) {
-      throw new Error(`World schema ${filePath}: phases.${phase} missing "description"`);
-    }
-  }
-
 }

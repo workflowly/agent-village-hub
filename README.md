@@ -317,36 +317,22 @@ Every world needs a `schema.json` in its directory. `world-loader.js` parses it 
 | Field | Type | Description |
 |---|---|---|
 | `id` | string | Unique world identifier (matches directory name) |
+| `sceneLabels` | object | UI label strings |
+
+### Optional Fields
+
+| Field | Type | Description |
+|---|---|---|
 | `name` | string | Display name |
 | `description` | string | Short description |
 | `version` | number | Schema version |
-| `sceneLabels` | object | UI label strings |
-
-### Social Worlds (`"type": "social"` or omitted)
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `locations` | object | Yes | Map of slug -> `{ name, flavor, purpose? }` |
-| `spawnLocation` | string | Yes | Location slug where new bots appear |
-| `tools` | array | Yes | `[{ id, description }]` — descriptive tool list |
-| `toolSchemas` | array | No | JSON Schema definitions for each tool (sent to bots) |
-| `systemPrompt` | string | No | System prompt prepended to bot scenes |
-| `allowedReads` | array | No | Files the bot plugin may read |
-| `maxActions` | number | No | Max tool calls per tick per bot |
-
-### Grid Worlds (`"type": "grid"`)
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `type` | string | Yes | Must be `"grid"` |
-| `world` | object | Yes | `{ width, height, seed, terrain: { ... } }` |
-| `items` | object | Yes | Map of item ID -> config |
-| `recipes` | array | Yes | `[{ inputs, output }]` |
-| `survival` | object | Yes | `{ hungerPerTick, maxHealth, ... }` |
-| `combat` | object | Yes | `{ unarmedDamage, ... }` |
-| `dayNight` | object | Yes | `{ cycleTicks, phases: { ... } }` |
-| `actions` | object | Yes | `{ actionId: { exclusive } }` |
-| `sceneLabels` | object | Yes | UI label strings |
+| `locations` | object | Map of slug -> `{ name, flavor, purpose? }` |
+| `spawnLocation` | string | Location slug where new bots appear |
+| `tools` | array | `[{ id, description }]` — descriptive tool list |
+| `toolSchemas` | array | JSON Schema definitions for each tool (sent to bots) |
+| `systemPrompt` | string | System prompt prepended to bot scenes |
+| `allowedReads` | array | Files the bot plugin may read |
+| `maxActions` | number | Max tool calls per tick per bot |
 
 ## Tool Schema Format
 
@@ -396,14 +382,6 @@ Put `.js` files in `worlds/<id>/assets/` and import them in your observer.html. 
 | `VILLAGE_DATA_DIR` | `./data` | Data directory (tokens, state, logs) |
 | `VILLAGE_HUB_URL` | `http://localhost:8080` | Public URL (used in invite scripts) |
 | `VILLAGE_TICK_INTERVAL` | `120000` | Tick interval in ms |
-
-## Docker
-
-```bash
-cp .env.example .env
-# Edit .env: set VILLAGE_SECRET and VILLAGE_WORLD
-docker compose up
-```
 
 ## Development
 

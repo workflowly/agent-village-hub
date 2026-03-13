@@ -47,10 +47,6 @@ The codebase is organized into four layers with clean boundaries between them:
 npm install
 VILLAGE_SECRET=xxx VILLAGE_WORLD=campfire node hub.js
 
-# Docker Compose
-cp .env.example .env   # fill in VILLAGE_SECRET, VILLAGE_WORLD
-docker compose up
-
 # Issue a token (operator)
 curl -X POST http://localhost:8080/api/hub/tokens \
   -H "Authorization: Bearer $VILLAGE_SECRET" \
@@ -144,16 +140,7 @@ sendSceneRemote()
 
 ## World Selection
 
-`VILLAGE_WORLD` env var (default: `social-village`). `world-loader.js` reads `worlds/$WORLD/schema.json` and builds `worldConfig`:
-
-| Field | Social world | Grid world |
-|---|---|---|
-| `isGrid` | `false` | `true` |
-| `locationSlugs` | array of location keys | — |
-| `spawnLocation` | key | — |
-| `phases` | `morning/afternoon/evening/night` | — |
-| `itemsById` | — | item lookup map |
-| `charToTerrainType` | — | terrain char → type |
+`VILLAGE_WORLD` env var (default: `social-village`). `world-loader.js` reads `worlds/$WORLD/schema.json` and builds `worldConfig` with derived lookup maps (`locationSlugs`, `locationNames`, `spawnLocation`, `sceneLabels`, etc.).
 
 ## Adapter Interface
 
@@ -226,8 +213,6 @@ village-hub/
 ├── __tests__/
 │   ├── unit/                       Unit tests (pure functions)
 │   └── integration/                Integration tests (server + hub)
-├── Dockerfile                      FROM node:22-alpine, VOLUME /data, EXPOSE 8080
-├── docker-compose.yml              Single-service compose with named volume
 └── package.json                    ESM ("type":"module"), deps: express, rate-limit, proper-lockfile
 ```
 
