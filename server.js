@@ -6,10 +6,21 @@
  *
  * World-specific logic lives in the adapter module which exports:
  *   initState(worldConfig)            → world-specific initial state
- *   buildScene(bot, allBots, state, worldConfig) → scene text string
+ *   phases                            → { phaseName: { turn, tools, scene, transitions, onEnter? } }
  *   tools                             → { toolName: (bot, params, state) → entry|null }
  *   onJoin?(state, botName, displayName)  → extra event fields (optional)
  *   onLeave?(state, botName, displayName) → extra event fields (optional)
+ *
+ * Adapter phase definition:
+ *   turn: 'parallel' | 'round-robin' | 'none'
+ *   tools: string[]                   — tool names available in this phase
+ *   scene: (bot, ctx) → string        — ctx = { allBots, state, worldConfig, phase, log }
+ *   transitions: [{ to, when: (state) → bool }]
+ *   onEnter?: (state) → void
+ *
+ * Tool handlers return entries with a visibility field:
+ *   visibility: 'public' | 'private' | 'targets'
+ *   targets?: string[]                — required when visibility is 'targets'
  *
  * Uses Node.js built-ins only.
  */
@@ -35,6 +46,10 @@ console.log(`[village] Loaded world: ${worldId} (${worldConfig.raw.name})`);
 
 // --- Load adapter ---
 const adapter = await import(pathToFileURL(join(WORLD_DIR, 'adapter.js')).href);
+const adapterPhases = adapter.phases;
+const adapterTools = adapter.tools;
+const phaseNames = Object.keys(adapterPhases);
+const initialPhase = phaseNames[0];
 
 // --- Config ---
 const PORT = parseInt(process.env.VILLAGE_PORT || '7001', 10);
@@ -112,7 +127,7 @@ async function loadState() {
   // Initialize fresh state
   const worldState = adapter.initState(worldConfig);
   state = {
-    clock: { tick: 0 },
+    clock: { tick: 0, phase: initialPhase, phaseEnteredAt: 0, roundRobinIndex: 0 },
     bots: [],
     log: [],
     villageCosts: {},
@@ -124,10 +139,24 @@ async function loadState() {
 
 function ensureRuntimeFields() {
   if (!state.clock) state.clock = { tick: 0 };
+  if (!state.clock.phase) state.clock.phase = initialPhase;
+  if (!state.clock.phaseEnteredAt) state.clock.phaseEnteredAt = state.clock.tick;
+  if (state.clock.roundRobinIndex == null) state.clock.roundRobinIndex = 0;
   if (!state.bots) state.bots = [];
   if (!state.log) state.log = [];
   if (!state.villageCosts) state.villageCosts = {};
   if (!state.remoteParticipants) state.remoteParticipants = {};
+}
+
+// --- Visibility helper ---
+
+function isVisibleTo(entry, botName) {
+  if (!entry.visibility || entry.visibility === 'public') return true;
+  if (entry.visibility === 'private') return entry.bot === botName;
+  if (entry.visibility === 'targets') {
+    return entry.bot === botName || (entry.targets || []).includes(botName);
+  }
+  return true;
 }
 
 let _saveInProgress = false;
@@ -313,9 +342,18 @@ async function tick() {
     state.clock.tick++;
     nextTickAt = tickStart + TICK_INTERVAL_MS;
 
+    const phase = adapterPhases[state.clock.phase];
+    if (!phase) {
+      console.error(`[village] Unknown phase "${state.clock.phase}", resetting to "${initialPhase}"`);
+      state.clock.phase = initialPhase;
+    }
+    const currentPhase = adapterPhases[state.clock.phase];
+
     broadcastEvent({
       type: 'tick_start',
       tick: state.clock.tick,
+      phase: state.clock.phase,
+      turnStrategy: currentPhase.turn,
       timestamp: new Date().toISOString(),
       bots: [...participants.keys()],
       relayTimeoutMs: REMOTE_SCENE_TIMEOUT_MS,
@@ -323,6 +361,7 @@ async function tick() {
     });
 
     if (participants.size === 0) {
+      checkTransitions(currentPhase);
       await saveState();
       return;
     }
@@ -331,14 +370,43 @@ async function tick() {
       name, displayName: p.displayName,
     }));
 
-    // Send scene to each bot in parallel
+    // Determine which bots act this tick based on turn strategy
+    let activeBots;
+    switch (currentPhase.turn) {
+      case 'none':
+        activeBots = [];
+        break;
+      case 'round-robin': {
+        const idx = state.clock.roundRobinIndex % allBots.length;
+        activeBots = [allBots[idx]];
+        state.clock.roundRobinIndex = (idx + 1) % allBots.length;
+        break;
+      }
+      case 'parallel':
+      default:
+        activeBots = allBots;
+        break;
+    }
+
+    // Filter tool schemas to those allowed in this phase
+    const allSchemas = worldConfig.raw.toolSchemas || [];
+    const allowedTools = new Set(currentPhase.tools);
+    const phaseSchemas = allSchemas.filter(s => allowedTools.has(s.name));
+
+    // Send scene to each active bot
     const botDetails = [];
-    const results = await Promise.all(allBots.map(async (bot) => {
-      const scene = adapter.buildScene(bot, allBots, state, worldConfig);
-      const tools = worldConfig.raw.toolSchemas || [];
+    const results = await Promise.all(activeBots.map(async (bot) => {
+      const ctx = {
+        allBots,
+        state,
+        worldConfig,
+        phase: state.clock.phase,
+        log: state.log.filter(e => isVisibleTo(e, bot.name)),
+      };
+      const scene = currentPhase.scene(bot, ctx);
       const payload = {
         scene,
-        tools,
+        tools: phaseSchemas,
         systemPrompt: worldConfig.raw.systemPrompt || '',
         allowedReads: worldConfig.raw.allowedReads || [],
         maxActions: worldConfig.raw.maxActions || 2,
@@ -348,7 +416,7 @@ async function tick() {
         name: bot.name,
         displayName: bot.displayName,
         payloadSize: payloadJson.length,
-        toolCount: tools.length,
+        toolCount: phaseSchemas.length,
         payload,
         deliveryMs: 0,
         deliveryStatus: 'ok',
@@ -373,14 +441,15 @@ async function tick() {
       return { bot, response, detail };
     }));
 
-    // Process actions via adapter tool handlers
+    // Process actions via adapter tool handlers (only allowed tools)
     const ts = new Date().toISOString();
     for (const { bot, response, detail } of results) {
       if (response._error) continue;
       detail.rawActions = response.actions;
       const processedActions = [];
       for (const action of (response.actions || [])) {
-        const handler = adapter.tools?.[action.tool];
+        if (!allowedTools.has(action.tool)) continue;
+        const handler = adapterTools?.[action.tool];
         if (!handler) continue;
         const entry = handler(bot, action.params, state);
         if (!entry) continue;
@@ -404,9 +473,13 @@ async function tick() {
     broadcastEvent({
       type: 'tick_detail',
       tick: state.clock.tick,
+      phase: state.clock.phase,
       timestamp: ts,
       bots: botDetails,
     });
+
+    // Check phase transitions after actions are processed
+    checkTransitions(currentPhase);
 
     // Cap the log
     if (state.log.length > LOG_CAP) {
@@ -418,6 +491,34 @@ async function tick() {
     console.error(`[village] Tick error: ${err.message}`);
   } finally {
     tickInProgress = false;
+  }
+}
+
+// --- Phase transitions ---
+
+function checkTransitions(currentPhase) {
+  if (!currentPhase.transitions) return;
+  for (const transition of currentPhase.transitions) {
+    if (transition.when(state)) {
+      const oldPhase = state.clock.phase;
+      state.clock.phase = transition.to;
+      state.clock.phaseEnteredAt = state.clock.tick;
+      state.clock.roundRobinIndex = 0;
+
+      broadcastEvent({
+        type: 'phase_change',
+        from: oldPhase,
+        to: transition.to,
+        tick: state.clock.tick,
+        timestamp: new Date().toISOString(),
+      });
+
+      console.log(`[village] Phase: ${oldPhase} → ${transition.to}`);
+
+      const nextPhase = adapterPhases[transition.to];
+      if (nextPhase?.onEnter) nextPhase.onEnter(state);
+      break; // first match wins
+    }
   }
 }
 
@@ -627,6 +728,7 @@ const server = createServer(async (req, res) => {
       type: 'init',
       worldType: worldConfig.isGrid ? 'grid' : 'social',
       tick: state.clock.tick,
+      phase: state.clock.phase,
       nextTickAt,
       tickIntervalMs: TICK_INTERVAL_MS,
       world: {

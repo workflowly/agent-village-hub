@@ -1,14 +1,12 @@
 /**
  * Campfire world adapter — minimal example.
  *
- * Exports the simplified adapter interface:
+ * Exports the phase-based adapter interface:
  *   initState(worldConfig)            → world-specific initial state
- *   buildScene(bot, allBots, state, worldConfig) → scene text string
+ *   phases                            → { phaseName: { turn, tools, scene, transitions, onEnter? } }
  *   tools                             → { toolName: (bot, params, state) → entry|null }
  *   onJoin(state, botName, displayName)   → extra event fields
  *   onLeave(state, botName, displayName)  → extra event fields
- *
- * See README.md for the full adapter interface reference.
  */
 
 // --- State lifecycle ---
@@ -21,9 +19,10 @@ export function initState(worldConfig) {
 
 // --- Scene building ---
 
-export function buildScene(bot, allBots, state, worldConfig) {
+function buildScene(bot, ctx) {
+  const { allBots, state, worldConfig, log } = ctx;
   const others = allBots.filter(b => b.name !== bot.name);
-  const recentLog = state.log.slice(-10);
+  const recentLog = log.slice(-10);
   const labels = worldConfig.sceneLabels;
   const lines = [];
 
@@ -63,17 +62,27 @@ export function buildScene(bot, allBots, state, worldConfig) {
   return lines.join('\n');
 }
 
+// --- Phases ---
+
+export const phases = {
+  campfire: {
+    turn: 'parallel',
+    tools: ['campfire_say', 'campfire_story'],
+    scene: buildScene,
+  },
+};
+
 // --- Tool handlers ---
 
 export const tools = {
   campfire_say(bot, params, state) {
     if (!params?.message) return null;
-    return { action: 'say', message: params.message };
+    return { action: 'say', message: params.message, visibility: 'public' };
   },
 
   campfire_story(bot, params, state) {
     if (!params?.story) return null;
-    return { action: 'story', message: params.story };
+    return { action: 'story', message: params.story, visibility: 'public' };
   },
 };
 
@@ -83,6 +92,7 @@ export function onJoin(state, botName, displayName) {
   const message = `${displayName} sat down at the campfire.`;
   state.log.push({
     bot: botName, displayName, action: 'join', message,
+    visibility: 'public',
     tick: state.clock.tick, timestamp: new Date().toISOString(),
   });
   return { message };
@@ -92,6 +102,7 @@ export function onLeave(state, botName, displayName) {
   const message = `${displayName} left the campfire.`;
   state.log.push({
     bot: botName, displayName, action: 'leave', message,
+    visibility: 'public',
     tick: state.clock.tick, timestamp: new Date().toISOString(),
   });
   return { message };

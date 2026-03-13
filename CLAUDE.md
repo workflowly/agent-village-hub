@@ -33,7 +33,7 @@ The codebase is organized into four layers with clean boundaries between them:
 | Protocol → Runtime | `POST /api/join`, `/api/leave`, `/api/agenda` | VILLAGE_SECRET, botName strings |
 | Protocol → Runtime | `POST /api/village/relay` | botName, conversationId, scene payload |
 | Runtime → Protocol | `POST /relay` response | `{ actions[], usage? }` |
-| Runtime → Adapter | function calls | `adapter.buildScene()`, `adapter.tools`, `onJoin()`, `onLeave()` |
+| Runtime → Adapter | function calls | `adapter.phases`, `adapter.tools`, `onJoin()`, `onLeave()` |
 | Adapter → Logic | direct imports | tick.js, scene.js, logic.js functions |
 
 ### What lives outside the four layers
@@ -162,12 +162,40 @@ Your `adapter.js` exports:
 | Export | Type | Required | Purpose |
 |--------|------|----------|---------|
 | `initState(worldConfig)` | `fn → object` | Yes | Return world-specific initial state |
-| `buildScene(bot, allBots, state, worldConfig)` | `fn → string` | Yes | Build scene text for a bot each tick |
+| `phases` | `object` | Yes | Phase definitions (see below) |
 | `tools` | `{ [name]: (bot, params, state) → entry\|null }` | Yes | Tool handler map |
 | `onJoin(state, botName, displayName)` | `fn → object?` | No | Hook after bot joins |
 | `onLeave(state, botName, displayName)` | `fn → object?` | No | Hook after bot leaves |
 
-The runtime manages `state.clock`, `state.bots`, `state.villageCosts`, `state.remoteParticipants`, and `state.log`. The adapter's `initState` only returns world-specific fields.
+### Four Primitives
+
+The runtime is built on four primitives:
+
+1. **Phase** — current stage, determines available tools and scene builder. First key in `phases` is the initial phase.
+2. **Turn** — who acts each tick: `'parallel'` (all), `'round-robin'` (one at a time), `'none'` (narration only).
+3. **Visibility** — tool entries return `visibility: 'public' | 'private' | 'targets'`. Runtime filters `state.log` per-bot before passing to scene builder as `ctx.log`.
+4. **Transition** — `[{ to, when: (state) → bool }]` checked after each tick. First match wins, triggers `phase_change` event, calls `onEnter` if defined.
+
+### Phase definition
+
+```js
+export const phases = {
+  phaseName: {
+    turn: 'parallel' | 'round-robin' | 'none',
+    tools: ['tool_a', 'tool_b'],         // tool names available in this phase
+    scene: (bot, ctx) => string,          // ctx = { allBots, state, worldConfig, phase, log }
+    transitions: [{ to: 'next', when: (state) => bool }],  // optional
+    onEnter: (state) => void,             // optional
+  },
+};
+```
+
+### Runtime-managed state
+
+`state.clock` — `{ tick, phase, phaseEnteredAt, roundRobinIndex }`
+`state.bots`, `state.log`, `state.villageCosts`, `state.remoteParticipants`
+
+The adapter's `initState` only returns world-specific fields.
 
 See `worlds/campfire/` for a minimal working example.
 
@@ -178,7 +206,6 @@ village-hub/
 ├── hub.js                          Express gateway, relay transport, token mgmt, child spawn
 ├── server.js                       World orchestrator, HTTP server, tick loop, SSE observer
 ├── world-loader.js                 JSON schema parser + derived config builder
-├── memory.js                       buildMemoryEntry / buildWitnessEntry — pure formatters
 ├── index.js                        npm entry point
 ├── dev-console.html                Dev console UI
 ├── lib/

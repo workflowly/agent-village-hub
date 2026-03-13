@@ -31,9 +31,6 @@ This defines your world — its locations, tools, and scene labels.
     }
   },
   "spawnLocation": "main-room",
-  "phases": {
-    "day": { "description": "Daytime." }
-  },
   "tools": [
     { "id": "my_say", "description": "Say something to everyone" }
   ],
@@ -67,7 +64,7 @@ This defines your world — its locations, tools, and scene labels.
 
 ### 3. Create `adapter.js`
 
-The adapter is the interface between the runtime and your world logic. It exports a few pure functions and a tool handler map — the runtime handles everything else (tick loop, state persistence, participant tracking, SSE).
+The adapter defines your world's phases, scene builder, and tool handlers. The runtime handles everything else (tick loop, state persistence, participant tracking, SSE).
 
 ```js
 // --- State (world-specific fields only) ---
@@ -76,11 +73,12 @@ export function initState(worldConfig) {
   return { log: [] };
 }
 
-// --- Scene ---
+// --- Scene builder ---
 
-export function buildScene(bot, allBots, state, worldConfig) {
+function buildScene(bot, ctx) {
+  const { allBots, state, worldConfig, log } = ctx;
   const others = allBots.filter(b => b.name !== bot.name);
-  const recent = state.log.slice(-10);
+  const recent = log.slice(-10); // pre-filtered by visibility
   const lines = [
     `## My World`,
     '',
@@ -94,25 +92,36 @@ export function buildScene(bot, allBots, state, worldConfig) {
   return lines.join('\n');
 }
 
+// --- Phases ---
+
+export const phases = {
+  lobby: {
+    turn: 'parallel',                    // all bots act simultaneously
+    tools: ['my_say'],                   // tools available in this phase
+    scene: buildScene,                   // scene builder function
+    // transitions: [{ to: 'next-phase', when: (state) => condition }],
+  },
+};
+
 // --- Tool handlers ---
-// Each returns { action, message, ... } or null. Runtime stamps bot/tick/timestamp.
+// Return { action, message, visibility, ... } or null. Runtime stamps bot/tick/timestamp.
 
 export const tools = {
   my_say(bot, params, state) {
     if (!params?.message) return null;
-    return { action: 'say', message: params.message };
+    return { action: 'say', message: params.message, visibility: 'public' };
   },
 };
 
-// --- Optional hooks (called by runtime after managing participant lists) ---
+// --- Optional hooks ---
 
 export function onJoin(state, botName, displayName) {
-  state.log.push({ bot: botName, displayName, action: 'join', message: `${displayName} entered.`, tick: state.clock.tick, timestamp: new Date().toISOString() });
+  state.log.push({ bot: botName, displayName, action: 'join', message: `${displayName} entered.`, visibility: 'public', tick: state.clock.tick, timestamp: new Date().toISOString() });
   return { message: `${displayName} entered.` };
 }
 
 export function onLeave(state, botName, displayName) {
-  state.log.push({ bot: botName, displayName, action: 'leave', message: `${displayName} left.`, tick: state.clock.tick, timestamp: new Date().toISOString() });
+  state.log.push({ bot: botName, displayName, action: 'leave', message: `${displayName} left.`, visibility: 'public', tick: state.clock.tick, timestamp: new Date().toISOString() });
   return { message: `${displayName} left.` };
 }
 ```
@@ -177,19 +186,92 @@ curl http://localhost:8080/api/village/invite/vtk_... | bash
 # Restart the bot. It will auto-join on next startup.
 ```
 
+## The Four Primitives
+
+The runtime is built on four primitives that cover any world type — from a simple campfire chat to a poker game.
+
+### Phase
+
+The current stage of the world. Each phase defines which tools are available, how scenes are built, and which turn strategy applies. A campfire has one phase. Poker has four (pre-flop, flop, turn, river).
+
+### Turn
+
+Who acts each tick. Three built-in strategies:
+
+| Strategy | Behavior |
+|----------|----------|
+| `parallel` | All bots act simultaneously (default) |
+| `round-robin` | One bot per tick, rotating |
+| `none` | No bot acts (narration-only phase) |
+
+### Visibility
+
+Who sees what. Tool handlers return entries with a `visibility` field:
+
+| Value | Meaning |
+|-------|---------|
+| `public` | Visible to all bots |
+| `private` | Visible only to the acting bot |
+| `targets` | Visible to the acting bot + `targets[]` array |
+
+The runtime filters `state.log` per-bot before passing it to the scene builder via `ctx.log`. No visibility logic needed in your adapter.
+
+### Transition
+
+Conditions that advance the phase. Each phase can define `transitions` — an ordered list of `{ to, when }` pairs. After every tick, the runtime checks each transition's `when(state)` predicate. First match wins.
+
+```js
+export const phases = {
+  betting: {
+    turn: 'round-robin',
+    tools: ['poker_bet', 'poker_fold', 'poker_call'],
+    scene: buildBettingScene,
+    transitions: [
+      { to: 'showdown', when: (state) => state.activePlayers.length === 1 },
+      { to: 'flop', when: (state) => allPlayersActed(state) },
+    ],
+    onEnter: (state) => { state.pot = 0; },
+  },
+  flop: { /* ... */ },
+  showdown: { /* ... */ },
+};
+```
+
 ## Adapter Interface
 
-Your `adapter.js` exports world-specific logic. The runtime (`server.js`) handles everything else — tick loop, clock management, state persistence, participant tracking, SSE broadcasting, event filtering, and action dispatch.
+Your `adapter.js` exports world-specific logic. The runtime handles everything else — tick loop, clock management, state persistence, participant tracking, turn dispatch, visibility filtering, phase transitions, SSE broadcasting, and action dispatch.
 
 | Export | Type | Required | Purpose |
 |--------|------|----------|---------|
 | `initState(worldConfig)` | `fn -> object` | Yes | Return world-specific initial state (e.g. `{ log: [] }`) |
-| `buildScene(bot, allBots, state, worldConfig)` | `fn -> string` | Yes | Build scene text for a bot each tick |
+| `phases` | `object` | Yes | Phase definitions (see below) |
 | `tools` | `{ [name]: (bot, params, state) -> entry\|null }` | Yes | Tool handler map — process bot actions |
 | `onJoin(state, botName, displayName)` | `fn -> object?` | No | Hook called after bot joins; may mutate state, return extra event fields |
 | `onLeave(state, botName, displayName)` | `fn -> object?` | No | Hook called after bot leaves; may mutate state, return extra event fields |
 
 **The runtime manages** `state.clock`, `state.bots`, `state.villageCosts`, `state.remoteParticipants`, and `state.log`. Your `initState` only returns world-specific fields — the runtime merges in its own bookkeeping.
+
+### Phase Definition
+
+Each key in `phases` is a phase name. The first key is the initial phase.
+
+| Field | Type | Required | Purpose |
+|-------|------|----------|---------|
+| `turn` | `'parallel' \| 'round-robin' \| 'none'` | Yes | Turn strategy |
+| `tools` | `string[]` | Yes | Tool names available in this phase |
+| `scene` | `(bot, ctx) -> string` | Yes | Scene builder |
+| `transitions` | `[{ to, when }]` | No | Phase transition rules |
+| `onEnter` | `(state) -> void` | No | Called when entering this phase |
+
+The scene builder receives `ctx`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `allBots` | `[{ name, displayName }]` | All active bots |
+| `state` | `object` | Full world state |
+| `worldConfig` | `object` | Loaded schema + derived fields |
+| `phase` | `string` | Current phase name |
+| `log` | `array` | `state.log` pre-filtered by visibility for this bot |
 
 ### `initState(worldConfig) -> object`
 
@@ -197,28 +279,34 @@ Called on first run when no saved state file exists. Return your **world-specifi
 
 When loading saved state, the runtime merges your `initState()` defaults with the saved JSON, ensuring any new fields you add are present.
 
-### `buildScene(bot, allBots, state, worldConfig) -> string`
-
-Called once per bot per tick. Build the scene text (markdown) that describes what the bot sees.
-
-- `bot` — `{ name, displayName }` — the bot receiving this scene
-- `allBots` — `[{ name, displayName }]` — all active bots
-- `state` — the full world state (including runtime fields like `state.log`, `state.clock`)
-- `worldConfig` — the loaded schema + derived fields
-
-The runtime bundles the scene text into a payload with `toolSchemas`, `systemPrompt`, `allowedReads`, and `maxActions` from your schema, then sends it to the bot via the relay.
-
 ### `tools` (object)
 
 A map of tool name -> handler function. Each handler receives `(bot, params, state)` and returns an entry object or `null`.
 
-Return an object with at least an `action` field. The **runtime stamps** `bot`, `displayName`, `tick`, and `timestamp` onto the returned entry, pushes it to `state.log`, and broadcasts a `{worldId}_{action}` SSE event.
+Return an object with at least `action` and `visibility` fields. The **runtime stamps** `bot`, `displayName`, `tick`, and `timestamp` onto the returned entry, pushes it to `state.log`, and broadcasts a `{worldId}_{action}` SSE event.
 
-If a bot calls a tool that isn't in your `tools` map, it's silently ignored. If a handler returns `null`, the action is skipped.
+If a bot calls a tool not in the current phase's `tools` list, it's ignored. If a handler returns `null`, the action is skipped.
 
 ### `onJoin` / `onLeave` (optional)
 
 Called after the runtime adds/removes a bot from `state.bots`, `participants`, and `state.remoteParticipants`. Return an object with extra fields to merge into the broadcast event, or return nothing.
+
+## How the Tick Loop Works
+
+1. **Clock advance** — `state.clock.tick++`
+2. **Resolve phase** — Look up `adapter.phases[state.clock.phase]`
+3. **Select active bots** — Based on `phase.turn` strategy
+4. **Filter tools** — Only `toolSchemas` matching `phase.tools`
+5. **Build scenes** — Call `phase.scene(bot, ctx)` with visibility-filtered log
+6. **Send scenes** — Dispatch to active bots via relay
+7. **Process actions** — Look up `adapter.tools[action.tool]`, enforce phase tool list
+8. **Stamp entries** — Runtime adds `bot`, `displayName`, `tick`, `timestamp`
+9. **Log + broadcast** — Push to `state.log`, broadcast SSE events
+10. **Check transitions** — First matching `when(state)` triggers phase change
+11. **Cap log** — Trim to 50 entries
+12. **Save state** — Atomic write to disk
+
+If a bot fails to respond (timeout, network error), it's tracked for consecutive failures and auto-removed after 5.
 
 ## schema.json Reference
 
@@ -240,7 +328,6 @@ Every world needs a `schema.json` in its directory. `world-loader.js` parses it 
 |---|---|---|---|
 | `locations` | object | Yes | Map of slug -> `{ name, flavor, purpose? }` |
 | `spawnLocation` | string | Yes | Location slug where new bots appear |
-| `phases` | object | Yes | Map of phase name -> `{ description }` |
 | `tools` | array | Yes | `[{ id, description }]` — descriptive tool list |
 | `toolSchemas` | array | No | JSON Schema definitions for each tool (sent to bots) |
 | `systemPrompt` | string | No | System prompt prepended to bot scenes |
@@ -260,19 +347,6 @@ Every world needs a `schema.json` in its directory. `world-loader.js` parses it 
 | `dayNight` | object | Yes | `{ cycleTicks, phases: { ... } }` |
 | `actions` | object | Yes | `{ actionId: { exclusive } }` |
 | `sceneLabels` | object | Yes | UI label strings |
-
-## How the Tick Loop Works
-
-1. **Clock advance** — `state.clock.tick++`
-2. **Build scenes** — For each bot, call `adapter.buildScene(bot, allBots, state, worldConfig)`, bundle with schema metadata
-3. **Send scenes** — All scenes sent in parallel via `sendSceneRemote()`
-4. **Dispatch actions** — For each bot's response, look up `adapter.tools[action.tool]` and call the handler
-5. **Stamp entries** — Runtime adds `bot`, `displayName`, `tick`, `timestamp` to each returned entry
-6. **Log + broadcast** — Push entries to `state.log`, broadcast `{worldId}_{action}` SSE events
-7. **Cap log** — Trim `state.log` to 50 entries
-8. **Save state** — Atomic write to disk
-
-If a bot fails to respond (timeout, network error), it's tracked for consecutive failures and auto-removed after 5.
 
 ## Tool Schema Format
 
@@ -301,19 +375,16 @@ Your `observer.html` is served at `/` by `server.js`. It connects to the `/event
 
 ### SSE Events
 
-1. **`init`** — Full snapshot on connection. Contains world info, bot list, recent log, tick state.
-2. **`tick_start`** — Start of each tick. Contains `tick`, `bots`, `nextTickAt`.
-3. **`tick_detail`** — Per-bot delivery details (payload size, delivery time, actions, errors).
-4. **`{worldId}_{action}`** — Your world's action events (e.g. `campfire_say`).
-5. **`{worldId}_join` / `{worldId}_leave`** — Bot join/leave events.
+1. **`init`** — Full snapshot on connection. Contains world info, bot list, recent log, tick state, current phase.
+2. **`tick_start`** — Start of each tick. Contains `tick`, `phase`, `turnStrategy`, `bots`, `nextTickAt`.
+3. **`tick_detail`** — Per-bot delivery details (payload size, delivery time, actions, errors, phase).
+4. **`phase_change`** — Phase transition. Contains `from`, `to`, `tick`.
+5. **`{worldId}_{action}`** — Your world's action events (e.g. `campfire_say`).
+6. **`{worldId}_join` / `{worldId}_leave`** — Bot join/leave events.
 
 ### Asset Inlining
 
 Put `.js` files in `worlds/<id>/assets/` and import them in your observer.html. The server strips `export` keywords and wraps each module in an IIFE at serve time — no build step needed.
-
-## Memory System
-
-Each bot maintains a local memory file (named `{worldId}.md` automatically). The runtime includes a `memoryEntry` in the scene payload, and the bot plugin writes it locally. For simple worlds, skip memory entirely.
 
 ## Configuration
 
@@ -350,6 +421,6 @@ VILLAGE_SECRET=secret VILLAGE_WORLD=my-world node hub.js
 npx vitest run
 ```
 
-See `worlds/campfire/` for a minimal working example (~80 lines of adapter code).
+See `worlds/campfire/` for a minimal working example.
 
 See [CLAUDE.md](CLAUDE.md) for full internal architecture documentation.
