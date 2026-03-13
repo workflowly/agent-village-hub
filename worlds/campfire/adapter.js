@@ -26,7 +26,7 @@ function buildScene(bot, ctx) {
   const labels = worldConfig.sceneLabels;
   const lines = [];
 
-  lines.push(`## ${labels.location}: The Campfire`);
+  lines.push(`## The Campfire`);
   lines.push('');
 
   if (others.length === 0) {

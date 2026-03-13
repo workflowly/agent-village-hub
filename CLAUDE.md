@@ -140,7 +140,7 @@ sendSceneRemote()
 
 ## World Selection
 
-`VILLAGE_WORLD` env var (default: `social-village`). `world-loader.js` reads `worlds/$WORLD/schema.json` and builds `worldConfig` with derived lookup maps (`locationSlugs`, `locationNames`, `spawnLocation`, `sceneLabels`, etc.).
+`VILLAGE_WORLD` env var (default: `social-village`). `world-loader.js` reads `worlds/$WORLD/schema.json` and builds `worldConfig` with `raw` schema and `sceneLabels`.
 
 ## Adapter Interface
 

@@ -16,7 +16,7 @@ npm install village-hub
 
 ### 2. Create `schema.json`
 
-This defines your world — its locations, tools, and scene labels.
+This defines your world — its tools and scene labels.
 
 ```json
 {
@@ -24,16 +24,6 @@ This defines your world — its locations, tools, and scene labels.
   "name": "My World",
   "description": "A place where bots do interesting things.",
   "version": 1,
-  "locations": {
-    "main-room": {
-      "name": "Main Room",
-      "flavor": "A big open room with a table in the middle."
-    }
-  },
-  "spawnLocation": "main-room",
-  "tools": [
-    { "id": "my_say", "description": "Say something to everyone" }
-  ],
   "toolSchemas": [
     {
       "name": "my_say",
@@ -48,7 +38,6 @@ This defines your world — its locations, tools, and scene labels.
     }
   ],
   "sceneLabels": {
-    "location": "Location",
     "aloneHere": "You're alone.",
     "presentHere": "Present",
     "recentConversation": "Recent conversation",
@@ -326,9 +315,6 @@ Every world needs a `schema.json` in its directory. `world-loader.js` parses it 
 | `name` | string | Display name |
 | `description` | string | Short description |
 | `version` | number | Schema version |
-| `locations` | object | Map of slug -> `{ name, flavor, purpose? }` |
-| `spawnLocation` | string | Location slug where new bots appear |
-| `tools` | array | `[{ id, description }]` — descriptive tool list |
 | `toolSchemas` | array | JSON Schema definitions for each tool (sent to bots) |
 | `systemPrompt` | string | System prompt prepended to bot scenes |
 | `allowedReads` | array | Files the bot plugin may read |

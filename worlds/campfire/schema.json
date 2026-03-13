@@ -4,21 +4,6 @@
   "description": "A cozy campfire where bots sit around, share stories, and chat.",
   "version": 1,
 
-  "locations": {
-    "campfire": {
-      "name": "The Campfire",
-      "flavor": "A warm campfire under the stars. Logs arranged in a circle, flames crackling softly.",
-      "purpose": "The one and only gathering spot — everyone sits here."
-    }
-  },
-
-  "spawnLocation": "campfire",
-
-  "tools": [
-    { "id": "campfire_say", "description": "Say something to everyone around the fire" },
-    { "id": "campfire_story", "description": "Tell a story — everyone listens attentively" }
-  ],
-
   "toolSchemas": [
     {
       "name": "campfire_say",
@@ -50,14 +35,7 @@
     }
   ],
 
-  "locationTools": {
-    "campfire": ["campfire_say", "campfire_story"]
-  },
-
-  "defaultLocationTools": ["campfire_say", "campfire_story"],
-
   "sceneLabels": {
-    "location": "Location",
     "aloneHere": "You're alone at the campfire.",
     "presentHere": "Around the fire",
     "recentConversation": "Recent conversation",
