@@ -517,7 +517,15 @@ function checkTransitions(currentPhase) {
       console.log(`[village] Phase: ${oldPhase} → ${transition.to}`);
 
       const nextPhase = adapterPhases[transition.to];
-      if (nextPhase?.onEnter) nextPhase.onEnter(state);
+      if (nextPhase?.onEnter) {
+        const logBefore = state.log.length;
+        nextPhase.onEnter(state);
+        // Broadcast any log entries added during onEnter
+        for (let i = logBefore; i < state.log.length; i++) {
+          const entry = state.log[i];
+          broadcastEvent({ type: `${worldId}_${entry.action}`, ...entry });
+        }
+      }
       break; // first match wins
     }
   }
