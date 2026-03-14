@@ -394,6 +394,7 @@ async function tick() {
           const bot = allBots.find(b => b.name === botName);
           if (bot) activeBots = [bot];
           else activeBots = [];
+
         } else {
           activeBots = [];
         }
