@@ -251,10 +251,13 @@ function removeBot(botName, reason) {
   };
   state.log.push(leaveEntry);
 
+  // Strip reserved keys from extra to prevent log/SSE divergence
+  const { action: _a, message: _m, bot: _b, displayName: _d, visibility: _v, tick: _t, timestamp: _ts, ...safeExtra } = extra;
+
   broadcastEvent({
     type: `${worldId}_leave`,
     ...leaveEntry,
-    ...extra,
+    ...safeExtra,
   });
   console.log(`[village] ${botName} removed (${reason})`);
 }
@@ -501,10 +504,10 @@ async function tick() {
         broadcastEvent({ type: `${worldId}_${entry.action}`, ...entry, activePlayer: state.hand?.activePlayer || null, buyIns: state.buyIns || {} });
 
         // Emit thought as separate private entry
-        if (thought) {
+        if (typeof thought === 'string' && thought) {
           const thoughtEntry = {
             action: 'thought',
-            message: String(thought),
+            message: thought,
             visibility: 'private',
             bot: bot.name,
             displayName: bot.displayName,
@@ -538,7 +541,17 @@ async function tick() {
     // Optional invariant check (e.g. resource conservation)
     if (adapter.checkInvariant) {
       const err = adapter.checkInvariant(state);
-      if (err) console.warn(`[village] Invariant violation (tick ${state.clock.tick}): ${err}`);
+      if (err) {
+        console.warn(`[village] Invariant violation (tick ${state.clock.tick}): ${err}`);
+        const invariantEntry = {
+          bot: 'system', displayName: 'System',
+          action: 'invariant_violation', message: err,
+          visibility: 'public',
+          tick: state.clock.tick, timestamp: new Date().toISOString(),
+        };
+        state.log.push(invariantEntry);
+        broadcastEvent({ type: `${worldId}_invariant_violation`, ...invariantEntry });
+      }
     }
 
     // Cap the log
@@ -667,10 +680,13 @@ const server = createServer(async (req, res) => {
     };
     state.log.push(joinEntry);
 
+    // Strip reserved keys from extra to prevent log/SSE divergence
+    const { action: _a, message: _m, bot: _b, displayName: _d, visibility: _v, tick: _t, timestamp: _ts, ...safeExtra } = extra;
+
     broadcastEvent({
       type: `${worldId}_join`,
       ...joinEntry,
-      ...extra,
+      ...safeExtra,
     });
 
     await saveState();
