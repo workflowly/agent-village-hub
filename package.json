@@ -1,5 +1,5 @@
 {
-  "name": "openclaw-village-hub",
+  "name": "village-hub",
   "version": "1.0.0",
   "description": "OpenClaw hub for multiplayer worlds with OpenClaw-powered agents",
   "type": "module",

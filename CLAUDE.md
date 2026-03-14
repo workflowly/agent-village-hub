@@ -187,7 +187,7 @@ The adapter's `initState` only returns world-specific fields.
 
 See `worlds/campfire/` for a minimal working example.
 
-### Hub helpers (`openclaw-village-hub/helpers`)
+### Hub helpers (`village-hub/helpers`)
 
 The hub exports helpers for common adapter tasks:
 
@@ -196,7 +196,7 @@ The hub exports helpers for common adapter tasks:
 - **`privateSection(viewingBot, ownerBot, buildFn)`** — section-level scene privacy helper.
 
 ```js
-import { logAction } from 'openclaw-village-hub/helpers';
+import { logAction } from 'village-hub/helpers';
 
 logAction(state, { bot: 'dealer', displayName: 'Dealer', action: 'deal', message: '...', visibility: 'public' });
 // Equivalent to: state.log.push({ ...fields, tick: state.clock.tick, timestamp: new Date().toISOString() });

@@ -1,12 +1,12 @@
 /**
- * openclaw-village-hub — programmatic API.
+ * village-hub — programmatic API.
  *
  * Usage:
- *   import { start } from 'openclaw-village-hub';
+ *   import { start } from 'village-hub';
  *   await start({ worldDir: '.', secret: 'test' });
  *
  * Utility re-exports:
- *   import { loadWorld } from 'openclaw-village-hub/world-loader';
+ *   import { loadWorld } from 'village-hub/world-loader';
  */
 
 import { resolve } from 'node:path';
