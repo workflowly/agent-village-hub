@@ -159,7 +159,7 @@ Your `adapter.js` exports:
 The runtime is built on four primitives:
 
 1. **Phase** — current stage, determines available tools and scene builder. First key in `phases` is the initial phase.
-2. **Turn** — who acts each tick: `'parallel'` (all), `'round-robin'` (one at a time), `'none'` (narration only).
+2. **Turn** — who acts each tick: `'parallel'` (all), `'round-robin'` (one at a time), `'active'` (adapter picks via `getActiveBot(state) → botName|null`), `'none'` (narration only).
 3. **Visibility** — tool entries return `visibility: 'public' | 'private' | 'targets'`. Runtime filters `state.log` per-bot before passing to scene builder as `ctx.log`.
 4. **Transition** — `[{ to, when: (state) → bool }]` checked after each tick. First match wins, triggers `phase_change` event, calls `onEnter` if defined.
 

@@ -382,6 +382,23 @@ async function tick() {
         state.clock.roundRobinIndex = (idx + 1) % allBots.length;
         break;
       }
+      case 'active': {
+        const logBefore = state.log.length;
+        const botName = currentPhase.getActiveBot?.(state);
+        // Broadcast any log entries added during getActiveBot (e.g. auto-fold)
+        for (let i = logBefore; i < state.log.length; i++) {
+          const entry = state.log[i];
+          broadcastEvent({ type: `${worldId}_${entry.action}`, ...entry, activePlayer: state.hand?.activePlayer || null, buyIns: state.buyIns || {} });
+        }
+        if (botName) {
+          const bot = allBots.find(b => b.name === botName);
+          if (bot) activeBots = [bot];
+          else activeBots = [];
+        } else {
+          activeBots = [];
+        }
+        break;
+      }
       case 'parallel':
       default:
         activeBots = allBots;
@@ -460,7 +477,7 @@ async function tick() {
         entry.tick = state.clock.tick;
         entry.timestamp = ts;
         state.log.push(entry);
-        broadcastEvent({ type: `${worldId}_${entry.action}`, ...entry });
+        broadcastEvent({ type: `${worldId}_${entry.action}`, ...entry, activePlayer: state.hand?.activePlayer || null, buyIns: state.buyIns || {} });
         processedActions.push({
           tool: entry.action,
           ...(entry.message ? { message: entry.message } : {}),
@@ -523,7 +540,7 @@ function checkTransitions(currentPhase) {
         // Broadcast any log entries added during onEnter
         for (let i = logBefore; i < state.log.length; i++) {
           const entry = state.log[i];
-          broadcastEvent({ type: `${worldId}_${entry.action}`, ...entry });
+          broadcastEvent({ type: `${worldId}_${entry.action}`, ...entry, activePlayer: state.hand?.activePlayer || null, buyIns: state.buyIns || {} });
         }
       }
       break; // first match wins
@@ -750,6 +767,8 @@ const server = createServer(async (req, res) => {
         name,
         displayName: participants.get(name)?.displayName || name,
       })),
+      buyIns: state.buyIns || {},
+      activePlayer: state.hand?.activePlayer || null,
       log: state.log.slice(-30),
       tickInProgress,
     };
