@@ -10,6 +10,7 @@
  *   tools                             → { toolName: (bot, params, state) → entry|null }
  *   onJoin?(state, botName, displayName)  → extra event fields (optional)
  *   onLeave?(state, botName, displayName) → extra event fields (optional)
+ *   checkInvariant?(state)               → string|null (optional, dev-mode sanity check)
  *
  * Adapter phase definition:
  *   turn: 'parallel' | 'round-robin' | 'none'
@@ -21,6 +22,12 @@
  * Tool handlers return entries with a visibility field:
  *   visibility: 'public' | 'private' | 'targets'
  *   targets?: string[]                — required when visibility is 'targets'
+ *
+ * Built-in thought convention:
+ *   If a tool handler returns an entry with a `thought` field, the runtime
+ *   automatically extracts it and emits a separate private log entry
+ *   (visible only to the acting bot in scenes, but streamed to observers via SSE).
+ *   This lets any tool support private reasoning without adapter wiring.
  *
  * Uses Node.js built-ins only.
  */
@@ -232,13 +239,25 @@ function removeBot(botName, reason) {
   // Optional adapter hook — may mutate state and return extra event fields
   const extra = adapter.onLeave?.(state, botName, displayName) || {};
 
-  broadcastEvent({
-    type: `${worldId}_leave`,
+  // Auto-log leave to state.log (adapters don't need to do this themselves)
+  const leaveEntry = {
     bot: botName,
     displayName,
+    action: 'leave',
+    message: extra.message || `${displayName} left.`,
+    visibility: 'public',
     tick: state.clock.tick,
     timestamp: new Date().toISOString(),
-    ...extra,
+  };
+  state.log.push(leaveEntry);
+
+  // Strip reserved keys from extra to prevent log/SSE divergence
+  const { action: _a, message: _m, bot: _b, displayName: _d, visibility: _v, tick: _t, timestamp: _ts, ...safeExtra } = extra;
+
+  broadcastEvent({
+    type: `${worldId}_leave`,
+    ...leaveEntry,
+    ...safeExtra,
   });
   console.log(`[village] ${botName} removed (${reason})`);
 }
@@ -470,8 +489,12 @@ async function tick() {
         if (!allowedTools.has(action.tool)) continue;
         const handler = adapterTools?.[action.tool];
         if (!handler) continue;
-        const entry = handler(bot, action.params, state);
-        if (!entry) continue;
+        const rawEntry = handler(bot, action.params, state);
+        if (!rawEntry) continue;
+
+        // Extract thought — hub-level convention
+        const { thought, ...entry } = rawEntry;
+
         // Runtime stamps metadata
         entry.bot = bot.name;
         entry.displayName = bot.displayName;
@@ -479,6 +502,21 @@ async function tick() {
         entry.timestamp = ts;
         state.log.push(entry);
         broadcastEvent({ type: `${worldId}_${entry.action}`, ...entry, activePlayer: state.hand?.activePlayer || null, buyIns: state.buyIns || {} });
+
+        // Emit thought as separate private entry
+        if (typeof thought === 'string' && thought) {
+          const thoughtEntry = {
+            action: 'thought',
+            message: thought,
+            visibility: 'private',
+            bot: bot.name,
+            displayName: bot.displayName,
+            tick: state.clock.tick,
+            timestamp: ts,
+          };
+          state.log.push(thoughtEntry);
+          broadcastEvent({ type: `${worldId}_thought`, ...thoughtEntry });
+        }
         processedActions.push({
           tool: entry.action,
           ...(entry.message ? { message: entry.message } : {}),
@@ -499,6 +537,22 @@ async function tick() {
 
     // Check phase transitions after actions are processed
     checkTransitions(currentPhase);
+
+    // Optional invariant check (e.g. resource conservation)
+    if (adapter.checkInvariant) {
+      const err = adapter.checkInvariant(state);
+      if (err) {
+        console.warn(`[village] Invariant violation (tick ${state.clock.tick}): ${err}`);
+        const invariantEntry = {
+          bot: 'system', displayName: 'System',
+          action: 'invariant_violation', message: err,
+          visibility: 'public',
+          tick: state.clock.tick, timestamp: new Date().toISOString(),
+        };
+        state.log.push(invariantEntry);
+        broadcastEvent({ type: `${worldId}_invariant_violation`, ...invariantEntry });
+      }
+    }
 
     // Cap the log
     if (state.log.length > LOG_CAP) {
@@ -614,13 +668,25 @@ const server = createServer(async (req, res) => {
     // Optional adapter hook — may mutate state and return extra event fields
     const extra = adapter.onJoin?.(state, botName, name) || {};
 
-    broadcastEvent({
-      type: `${worldId}_join`,
+    // Auto-log join to state.log (adapters don't need to do this themselves)
+    const joinEntry = {
       bot: botName,
       displayName: name,
+      action: 'join',
+      message: extra.message || `${name} joined.`,
+      visibility: 'public',
       tick: state.clock.tick,
       timestamp: new Date().toISOString(),
-      ...extra,
+    };
+    state.log.push(joinEntry);
+
+    // Strip reserved keys from extra to prevent log/SSE divergence
+    const { action: _a, message: _m, bot: _b, displayName: _d, visibility: _v, tick: _t, timestamp: _ts, ...safeExtra } = extra;
+
+    broadcastEvent({
+      type: `${worldId}_join`,
+      ...joinEntry,
+      ...safeExtra,
     });
 
     await saveState();
