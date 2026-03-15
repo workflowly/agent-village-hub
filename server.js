@@ -836,6 +836,7 @@ const server = createServer(async (req, res) => {
       })),
       buyIns: state.buyIns || {},
       activePlayer: state.hand?.activePlayer || null,
+      handsPlayed: state.handsPlayed || 0,
       log: state.log.slice(-30),
       tickInProgress,
     };
