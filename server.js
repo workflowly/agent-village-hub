@@ -363,11 +363,38 @@ function runPlayerCode(codeString, gameState) {
   }
 }
 
+// --- Human play mode: pending actions map ---
+const pendingHumanActions = new Map(); // botName → { resolve, timer }
+
 // --- Send scene to a hub-managed bot (local LLM call) ---
 
 async function sendSceneLocal(botName, strategy, payload) {
   // Run player's custom code if present
   const hubBot = state.hubBots?.[botName];
+
+  // Human play mode: skip LLM, wait for human input
+  if (hubBot?.playMode === 'human') {
+    // Broadcast the scene to the human player via SSE
+    broadcastEvent({
+      type: 'your_turn',
+      botName: botName,
+      scene: payload.scene,
+      tools: payload.tools.map(t => t.name),
+      pot: state.hand?.pot,
+      toCall: Math.max(0, (state.hand?.currentBet || 0) - (state.hand?.players?.[botName]?.bet || 0)),
+      minRaise: Math.max((state.hand?.currentBet || 0) * 2, state.hand?.bigBlind || 20),
+      chips: state.hand?.players?.[botName]?.chips || 0,
+    });
+
+    // Wait for human input (60s timeout → auto-fold)
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingHumanActions.delete(botName);
+        resolve({ actions: [{ tool: 'poker_fold', params: { thought: 'Auto-folded (timeout)' } }] });
+      }, 60000);
+      pendingHumanActions.set(botName, { resolve, timer });
+    });
+  }
   if (hubBot?.customCode) {
     const gameState = {
       myCards: state.hand?.players?.[botName]?.cards || [],
@@ -1804,7 +1831,7 @@ function ensureArenaState() {
 
 // --- Add/remove players dynamically ---
 
-function addPlayerToTable(username, strategy, token, customCode) {
+function addPlayerToTable(username, strategy, token, customCode, playMode) {
   const botName = 'player-' + username.toLowerCase().replace(/[^a-z0-9_-]/g, '');
   if (Object.keys(state.hubBots || {}).length >= MAX_TABLE_PLAYERS) {
     return { error: 'table_full' };
@@ -1821,6 +1848,7 @@ function addPlayerToTable(username, strategy, token, customCode) {
     sessionHandCount: 0,
     maxHandsPerSession: MAX_HANDS_PER_SESSION,
     customCode: customCode || null,
+    playMode: playMode || 'bot',
   };
 
   // Add to game
@@ -1908,7 +1936,7 @@ function promoteFromWaitlist() {
   // First: promote real waitlisted players
   while (state.waitlist?.length > 0 && Object.keys(state.hubBots).length < MAX_TABLE_PLAYERS) {
     const entry = state.waitlist.shift();
-    addPlayerToTable(entry.username, entry.strategy, entry.token, entry.customCode);
+    addPlayerToTable(entry.username, entry.strategy, entry.token, entry.customCode, entry.playMode);
   }
 
   // Auto-backfill: if fewer than MIN_PLAYERS and no waitlist, add house bots from BOT_POOL
@@ -2478,6 +2506,7 @@ const server = createServer(async (req, res) => {
         sessionHandCount: hub.sessionHandCount || 0,
         maxHandsPerSession: MAX_HANDS_PER_SESSION,
         hasCode: !!hub.customCode,
+        playMode: hub.playMode || 'bot',
       };
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -2675,6 +2704,72 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // --- Human action endpoint ---
+
+  if (path === '/api/arena/action' && req.method === 'POST') {
+    let body;
+    try { body = await readJsonBody(req); } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const { action, amount, say, thought, claimToken } = body || {};
+
+    if (!claimToken) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing claimToken' }));
+      return;
+    }
+
+    // Validate action
+    const validActions = ['check', 'call', 'raise', 'fold'];
+    if (!action || !validActions.includes(action)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid action. Must be one of: check, call, raise, fold' }));
+      return;
+    }
+
+    // Find bot by claimToken
+    let botName = null;
+    for (const [name, hub] of Object.entries(state.hubBots || {})) {
+      if (hub.claimToken === claimToken) {
+        botName = name;
+        break;
+      }
+    }
+
+    if (!botName) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'No seat found for this token' }));
+      return;
+    }
+
+    const pending = pendingHumanActions.get(botName);
+    if (!pending) {
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Not your turn or action already submitted' }));
+      return;
+    }
+
+    clearTimeout(pending.timer);
+    pending.resolve({
+      actions: [{
+        tool: 'poker_' + action,
+        params: {
+          amount: action === 'raise' ? amount : undefined,
+          thought: thought || 'Human decision',
+          say: say || undefined,
+        },
+      }],
+    });
+    pendingHumanActions.delete(botName);
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
   // --- Waitlist endpoints ---
 
   if (path === '/api/arena/waitlist' && req.method === 'POST') {
@@ -2685,7 +2780,7 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    const { username, strategy, token, pin, customCode } = body || {};
+    const { username, strategy, token, pin, customCode, playMode } = body || {};
 
     // Validate username
     if (!username || typeof username !== 'string' || username.length < 1 || username.length > 20 || !/^[a-zA-Z0-9_-]+$/.test(username)) {
@@ -2745,6 +2840,7 @@ const server = createServer(async (req, res) => {
         // Update strategy if provided
         if (strategy) state.hubBots[existingBotName].strategy = strategy;
         if (sanitizedCode !== undefined) state.hubBots[existingBotName].customCode = sanitizedCode;
+        if (validPlayMode) state.hubBots[existingBotName].playMode = validPlayMode;
         await saveState();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, restored: true, seated: true, botName: existingBotName }));
@@ -2756,10 +2852,11 @@ const server = createServer(async (req, res) => {
         w.username.toLowerCase() === userKey
       );
       if (queueIdx !== -1) {
-        // Update waitlist entry token, strategy, and custom code
+        // Update waitlist entry token, strategy, custom code, and play mode
         state.waitlist[queueIdx].token = token;
         if (strategy) state.waitlist[queueIdx].strategy = strategy;
         if (sanitizedCode !== undefined) state.waitlist[queueIdx].customCode = sanitizedCode;
+        if (validPlayMode) state.waitlist[queueIdx].playMode = validPlayMode;
         await saveState();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, restored: true, position: queueIdx + 1 }));
@@ -2777,9 +2874,12 @@ const server = createServer(async (req, res) => {
       };
     }
 
+    // Validate playMode
+    const validPlayMode = (playMode === 'human') ? 'human' : 'bot';
+
     // Try to seat directly if table has room and not in betting phase
     if (Object.keys(state.hubBots || {}).length < MAX_TABLE_PLAYERS && state.clock.phase !== 'betting') {
-      const result = addPlayerToTable(username, strategy, token, sanitizedCode);
+      const result = addPlayerToTable(username, strategy, token, sanitizedCode, validPlayMode);
       if (result.ok) {
         await saveState();
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -2795,6 +2895,7 @@ const server = createServer(async (req, res) => {
       joinedAt: new Date().toISOString(),
       token,
       customCode: sanitizedCode,
+      playMode: validPlayMode,
     });
 
     broadcastEvent({

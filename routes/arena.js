@@ -99,14 +99,36 @@ export function createArenaRouter({ config, limiter }) {
     }
   });
 
+  // --- POST /action ---
+  router.post('/action', async (req, res) => {
+    const { action, amount, say, thought } = req.body || {};
+    const cookies = parseCookies(req);
+    const token = cookies.arena_token;
+
+    if (!token) return res.status(401).json({ error: 'No arena token' });
+
+    try {
+      const resp = await fetch(`${SERVER_URL}/api/arena/action`, {
+        method: 'POST',
+        headers: serverHeaders(),
+        body: JSON.stringify({ action, amount, say, thought, claimToken: token }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      res.status(resp.status).json(await resp.json());
+    } catch (err) {
+      console.error(`[hub] arena action failed: ${err.message}`);
+      res.status(502).json({ error: 'World server unreachable' });
+    }
+  });
+
   // --- POST /waitlist ---
   router.post('/waitlist', claimLimiter, async (req, res) => {
-    const { username, strategy, pin, customCode } = req.body || {};
+    const { username, strategy, pin, customCode, playMode } = req.body || {};
 
     if (!username || typeof username !== 'string' || username.length < 1 || username.length > 20 || !/^[a-zA-Z0-9_-]+$/.test(username)) {
       return res.status(400).json({ error: 'Invalid username: 1-20 chars, alphanumeric/underscore/hyphen only' });
     }
-    if (typeof strategy !== 'string' || strategy.trim().length === 0) {
+    if (playMode !== 'human' && (typeof strategy !== 'string' || strategy.trim().length === 0)) {
       return res.status(400).json({ error: 'Strategy is required' });
     }
     if (strategy.length > 2000) {
@@ -122,7 +144,7 @@ export function createArenaRouter({ config, limiter }) {
     const token = crypto.randomUUID();
 
     try {
-      const waitlistBody = { username, strategy, token, pin };
+      const waitlistBody = { username, strategy, token, pin, playMode: playMode || 'bot' };
       if (customCode !== undefined) waitlistBody.customCode = customCode;
       const resp = await fetch(`${SERVER_URL}/api/arena/waitlist`, {
         method: 'POST',
