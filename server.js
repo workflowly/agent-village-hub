@@ -2637,20 +2637,40 @@ const server = createServer(async (req, res) => {
 
   if (path === '/api/arena/leaderboard' && req.method === 'GET') {
     const entries = [];
+    const seen = new Set();
+
+    // Current table players
     for (const [botName, hubBot] of Object.entries(state.hubBots || {})) {
-      const lb = state.leaderboard?.[botName];
+      seen.add(botName);
       const stats = state.stats?.[botName] || createEmptyStats();
       entries.push({
         botName,
         displayName: hubBot.displayName || botName,
         username: hubBot.claimedBy || null,
         wins: stats.handsWon || 0,
-        gamesPlayed: lb?.gamesPlayed || 0,
         chips: state.buyIns?.[botName] || 0,
         stats,
         score: computeScore(stats),
+        atTable: true,
       });
     }
+
+    // All historical players from stats (not currently at table)
+    for (const [botName, stats] of Object.entries(state.stats || {})) {
+      if (seen.has(botName) || !stats.handsPlayed) continue;
+      seen.add(botName);
+      entries.push({
+        botName,
+        displayName: stats.username || botName.replace('player-', ''),
+        username: stats.username || null,
+        wins: stats.handsWon || 0,
+        chips: 0,
+        stats,
+        score: computeScore(stats),
+        atTable: false,
+      });
+    }
+
     entries.sort((a, b) => (b.stats?.elo || 1200) - (a.stats?.elo || 1200));
 
     // Persistent player rankings across all sessions
