@@ -1446,9 +1446,9 @@ function addPlayerToTable(username, strategy, token, customCode) {
     broadcastEvent({ type: `${worldId}_join`, ...joinEntry });
   }
 
-  // Init stats
+  // Init stats — preserve existing stats for returning players (house bots cycle)
   if (!state.stats) state.stats = {};
-  state.stats[botName] = createEmptyStats();
+  if (!state.stats[botName]) state.stats[botName] = createEmptyStats();
   state.stats[botName].username = username;
 
   broadcastEvent({ type: 'player_joined', botName, username, playerCount: Object.keys(state.hubBots).length, maxPlayers: MAX_TABLE_PLAYERS });
@@ -1479,8 +1479,7 @@ function removePlayerFromTable(botName) {
   participants.delete(botName);
   if (state.remoteParticipants) delete state.remoteParticipants[botName];
 
-  // Clean up stats
-  if (state.stats?.[botName]) state.stats[botName] = createEmptyStats();
+  // Keep stats for historical leaderboard — don't wipe on leave
 
   // Delete hub bot
   delete state.hubBots[botName];
