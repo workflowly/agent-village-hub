@@ -878,6 +878,8 @@ function trackHandResultStats(state) {
       }
     }
   }
+
+  updateEloRatings(state);
 }
 
 // --- Hand archival ---
@@ -1011,17 +1013,61 @@ function recordPlayerHand(state, botName, handRecord) {
 // --- Leaderboard scoring ---
 
 function computeScore(stats) {
-  if (!stats || stats.handsPlayed === 0) return 0;
-  const winRate = stats.handsWon / stats.handsPlayed;
-  const bluffSuccess = (stats.bluffsWon || 0) / Math.max((stats.bluffsWon || 0) + (stats.bluffsCaught || 0), 1);
+  // Keep for backward compat — returns Elo rating
+  return stats?.elo || 1200;
+}
 
-  const score = (stats.handsWon * 10)
-    + (winRate * 100)
-    + (bluffSuccess * 50)
-    + ((stats.biggestPot || 0) * 0.01)
-    - ((stats.bluffsCaught || 0) * 5);
+function updateEloRatings(state) {
+  const hand = state.hand;
+  if (!hand || !hand.result) return;
 
-  return Math.round(score * 10) / 10;
+  const players = Object.entries(hand.players || {});
+  if (players.length < 2) return;
+
+  // Calculate chip profit for each player
+  const profits = {};
+  const winners = new Set(hand.result.winners || []);
+  const pot = hand.pot || 0;
+  const share = winners.size > 0 ? Math.floor(pot / winners.size) : 0;
+
+  for (const [botName, player] of players) {
+    const totalBet = player.totalBet || 0;
+    profits[botName] = winners.has(botName) ? (share - totalBet) : -totalBet;
+  }
+
+  // Pairwise Elo updates
+  const K = 32;
+  const botNames = Object.keys(profits);
+
+  for (let i = 0; i < botNames.length; i++) {
+    for (let j = i + 1; j < botNames.length; j++) {
+      const a = botNames[i];
+      const b = botNames[j];
+
+      if (!state.stats[a]) state.stats[a] = createEmptyStats();
+      if (!state.stats[b]) state.stats[b] = createEmptyStats();
+
+      const rA = state.stats[a].elo || 1200;
+      const rB = state.stats[b].elo || 1200;
+
+      const eA = 1 / (1 + Math.pow(10, (rB - rA) / 400));
+      const eB = 1 - eA;
+
+      let sA, sB;
+      if (profits[a] > profits[b]) { sA = 1; sB = 0; }
+      else if (profits[a] < profits[b]) { sA = 0; sB = 1; }
+      else { sA = 0.5; sB = 0.5; }
+
+      state.stats[a].elo = Math.round((rA + K * (sA - eA)) * 10) / 10;
+      state.stats[b].elo = Math.round((rB + K * (sB - eB)) * 10) / 10;
+    }
+  }
+
+  // Track chip profit
+  for (const [botName, profit] of Object.entries(profits)) {
+    if (!state.stats[botName]) state.stats[botName] = createEmptyStats();
+    state.stats[botName].chipProfit = (state.stats[botName].chipProfit || 0) + profit;
+  }
 }
 
 // --- Session rotation ---
@@ -1204,6 +1250,8 @@ function createEmptyStats() {
     preflopFolds: 0,
     streakCurrent: 0, streakBest: 0, lossStreakCurrent: 0,
     bluffsWon: 0, bluffsCaught: 0,
+    elo: 1200,
+    chipProfit: 0,
   };
 }
 
@@ -2603,12 +2651,12 @@ const server = createServer(async (req, res) => {
         score: computeScore(stats),
       });
     }
-    entries.sort((a, b) => b.score - a.score || b.wins - a.wins);
+    entries.sort((a, b) => (b.stats?.elo || 1200) - (a.stats?.elo || 1200));
 
     // Persistent player rankings across all sessions
     const playerRankings = Object.values(state.playerStats || {})
       .map(ps => ({ ...ps, score: computeScore(ps) }))
-      .sort((a, b) => b.score - a.score || b.handsWon - a.handsWon);
+      .sort((a, b) => (b.elo || 1200) - (a.elo || 1200));
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
