@@ -109,6 +109,7 @@ function flushLogBufferSync() {
 let state = {};
 
 let tickInProgress = false;
+let tickStartedAt = 0;
 let nextTickAt = 0;
 let startTime = Date.now();
 
@@ -489,6 +490,7 @@ function broadcastEvent(event) {
 async function tick() {
   if (tickInProgress) return;
   tickInProgress = true;
+  tickStartedAt = Date.now();
   const tickStart = Date.now();
 
   try {
@@ -3568,4 +3570,29 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log(`[village] Orchestrator listening on 127.0.0.1:${PORT}`);
   console.log(`[village] Tick interval: ${TICK_INTERVAL_MS / 1000}s`);
   startTickLoop();
+
+  // Watchdog: if a tick has been running for >3 minutes, the game is stuck.
+  // Force-reset the hand and unlock the tick loop.
+  setInterval(() => {
+    if (!tickInProgress || !tickStartedAt) return;
+    const elapsed = Date.now() - tickStartedAt;
+    if (elapsed < 180_000) return; // 3 minutes
+    console.error(`[village] WATCHDOG: tick stuck for ${Math.round(elapsed / 1000)}s — force-resetting hand`);
+    try {
+      state.clock.phase = 'waiting';
+      state.hand = null;
+      state.winner = null;
+      // Give busted players fresh chips
+      for (const bot of (state.bots || [])) {
+        if (!state.buyIns?.[bot] || state.buyIns[bot] <= 0) {
+          state.buyIns[bot] = 1000;
+        }
+      }
+    } catch (e) {
+      console.error(`[village] WATCHDOG reset error: ${e.message}`);
+    }
+    tickInProgress = false;
+    tickStartedAt = 0;
+    scheduleNextTick();
+  }, 30_000); // Check every 30s
 });
