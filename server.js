@@ -386,11 +386,14 @@ async function sendSceneLocal(botName, strategy, payload) {
       chips: state.hand?.players?.[botName]?.chips || 0,
     });
 
-    // Wait for human input (60s timeout → auto-fold)
+    // Wait for human input (60s timeout → auto-check if possible, else auto-fold)
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         pendingHumanActions.delete(botName);
-        resolve({ actions: [{ tool: 'poker_fold', params: { thought: 'Auto-folded (timeout)' } }] });
+        const hp = state.hand?.players?.[botName];
+        const canCheck = hp && hp.bet >= (state.hand?.currentBet || 0);
+        const tool = canCheck ? 'poker_check' : 'poker_fold';
+        resolve({ actions: [{ tool, params: { thought: 'Timed out' } }] });
       }, 60000);
       pendingHumanActions.set(botName, { resolve, timer });
     });
