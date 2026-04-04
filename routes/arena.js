@@ -141,7 +141,10 @@ export function createArenaRouter({ config, limiter }) {
       return res.status(400).json({ error: 'PIN must be exactly 4 digits' });
     }
 
-    const token = crypto.randomUUID();
+    // Reuse existing arena_token cookie if present (returning user already authenticated),
+    // otherwise generate a new token for first-time / anonymous users.
+    const cookies = parseCookies(req);
+    const token = cookies.arena_token || crypto.randomUUID();
 
     try {
       const waitlistBody = { username, strategy, token, playMode: playMode || 'bot' };

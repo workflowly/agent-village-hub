@@ -2959,13 +2959,14 @@ const server = createServer(async (req, res) => {
     const account = state.accounts[userKey];
 
     if (account) {
-      // Existing account — PIN required to reclaim
-      if (!hasPin) {
+      // Existing account — PIN or valid token required to reclaim
+      const tokenMatchesAccount = account.lastToken && account.lastToken === token;
+      if (!hasPin && !tokenMatchesAccount) {
         res.writeHead(403, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'This username has a PIN. Enter it to reclaim your seat.' }));
         return;
       }
-      if (hashPin(username, pin) !== account.pinHash) {
+      if (hasPin && hashPin(username, pin) !== account.pinHash) {
         res.writeHead(403, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Wrong PIN' }));
         return;
@@ -3027,9 +3028,24 @@ const server = createServer(async (req, res) => {
     const defaultBotNames = new Set(HUB_BOT_DEFAULTS.map(d => d.displayName.toLowerCase()));
 
     if (!defaultBotNames.has(userKey)) {
-      // 1. If a registered account exists and the user didn't provide a PIN,
-      //    we already rejected above (line ~2963). But guard against the case
-      //    where another *anonymous* session is using this name at the table.
+      // 0. If a registered account exists, only the owner can use this username.
+      //    Owner is identified by valid PIN or matching token (already authenticated).
+      const acct = state.accounts[userKey];
+      if (acct) {
+        const tokenMatch = acct.lastToken && acct.lastToken === token;
+        if (!hasPin && !tokenMatch) {
+          res.writeHead(409, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Username is taken. Enter your PIN if this is your account.' }));
+          return;
+        }
+        if (hasPin && hashPin(username, pin) !== acct.pinHash) {
+          res.writeHead(409, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Username is taken. Enter your PIN if this is your account.' }));
+          return;
+        }
+      }
+
+      // 1. Check if another session is using this name at the table.
       const seatedByOther = Object.values(state.hubBots || {}).some(b =>
         (b.claimedBy || b.displayName || '').toLowerCase() === userKey
       );
@@ -3293,6 +3309,7 @@ const server = createServer(async (req, res) => {
     }
 
     account.lastSeen = new Date().toISOString();
+    account.lastToken = token; // Store token so returning users can rejoin without PIN
 
     // Check if they have a seat
     let seatName = null;
