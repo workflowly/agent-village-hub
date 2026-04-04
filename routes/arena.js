@@ -41,13 +41,6 @@ export function createArenaRouter({ config, limiter }) {
     message: { error: 'Too many claim attempts. Try again later.' },
   });
 
-  const loginLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 30,
-    keyGenerator: (req) => req.ip,
-    message: { error: 'Too many login attempts. Try again later.' },
-  });
-
   // --- GET /seats ---
   router.get('/seats', async (req, res) => {
     try {
@@ -123,7 +116,7 @@ export function createArenaRouter({ config, limiter }) {
 
   // --- POST /waitlist ---
   router.post('/waitlist', claimLimiter, async (req, res) => {
-    const { username, strategy, pin, customCode, playMode } = req.body || {};
+    const { username, strategy, customCode, playMode } = req.body || {};
 
     if (!username || typeof username !== 'string' || username.length < 1 || username.length > 20 || !/^[a-zA-Z0-9_-]+$/.test(username)) {
       return res.status(400).json({ error: 'Invalid username: 1-20 chars, alphanumeric/underscore/hyphen only' });
@@ -137,9 +130,6 @@ export function createArenaRouter({ config, limiter }) {
     if (customCode && typeof customCode === 'string' && customCode.length > 5000) {
       return res.status(400).json({ error: 'Custom code must be 5000 chars or less' });
     }
-    if (pin && (typeof pin !== 'string' || !/^\d{4}$/.test(pin))) {
-      return res.status(400).json({ error: 'PIN must be exactly 4 digits' });
-    }
 
     // Reuse existing arena_token cookie if present (returning user already authenticated),
     // otherwise generate a new token for first-time / anonymous users.
@@ -148,7 +138,6 @@ export function createArenaRouter({ config, limiter }) {
 
     try {
       const waitlistBody = { username, strategy, token, playMode: playMode || 'bot' };
-      if (pin) waitlistBody.pin = pin;
       if (customCode !== undefined) waitlistBody.customCode = customCode;
       const resp = await fetch(`${SERVER_URL}/api/arena/waitlist`, {
         method: 'POST',
@@ -163,7 +152,7 @@ export function createArenaRouter({ config, limiter }) {
         path: '/',
         httpOnly: false,
         sameSite: 'Strict',
-        maxAge: 604800 * 1000,
+        maxAge: 30 * 24 * 60 * 60 * 1000,
       });
 
       // Set appropriate cookies based on response
@@ -173,14 +162,14 @@ export function createArenaRouter({ config, limiter }) {
           path: '/',
           httpOnly: false,
           sameSite: 'Strict',
-          maxAge: 604800 * 1000,
+          maxAge: 30 * 24 * 60 * 60 * 1000,
         });
       } else {
         res.cookie('arena_waitlist_user', username, {
           path: '/',
           httpOnly: false,
           sameSite: 'Strict',
-          maxAge: 604800 * 1000,
+          maxAge: 30 * 24 * 60 * 60 * 1000,
         });
       }
 
@@ -300,58 +289,9 @@ export function createArenaRouter({ config, limiter }) {
     }
   });
 
-  // --- POST /login ---
-  router.post('/login', loginLimiter, async (req, res) => {
-    const { username, pin } = req.body || {};
-
-    if (!username || typeof username !== 'string' || username.length < 1 || username.length > 20 || !/^[a-zA-Z0-9_-]+$/.test(username)) {
-      return res.status(400).json({ error: 'Invalid username: 1-20 chars, alphanumeric/underscore/hyphen only' });
-    }
-    if (!pin || typeof pin !== 'string' || !/^\d{4}$/.test(pin)) {
-      return res.status(400).json({ error: 'PIN must be exactly 4 digits' });
-    }
-
-    const token = crypto.randomUUID();
-
-    try {
-      const resp = await fetch(`${SERVER_URL}/api/arena/login`, {
-        method: 'POST',
-        headers: serverHeaders(),
-        body: JSON.stringify({ username, pin, token }),
-        signal: AbortSignal.timeout(10_000),
-      });
-      const data = await resp.json();
-      if (!resp.ok) return res.status(resp.status).json(data);
-
-      // Set arena_token cookie
-      res.cookie('arena_token', token, {
-        path: '/',
-        httpOnly: false,
-        sameSite: 'Strict',
-        maxAge: 604800 * 1000,
-      });
-
-      if (data.seated && data.botName) {
-        res.cookie('arena_bot', data.botName, {
-          path: '/',
-          httpOnly: false,
-          sameSite: 'Strict',
-          maxAge: 604800 * 1000,
-        });
-      } else if (data.queued) {
-        res.cookie('arena_waitlist_user', username, {
-          path: '/',
-          httpOnly: false,
-          sameSite: 'Strict',
-          maxAge: 604800 * 1000,
-        });
-      }
-
-      res.json(data);
-    } catch (err) {
-      console.error(`[hub] arena login failed: ${err.message}`);
-      res.status(502).json({ error: 'World server unreachable' });
-    }
+  // --- POST /login (disabled — PIN/account system removed) ---
+  router.post('/login', (req, res) => {
+    res.status(410).json({ error: 'Login not supported' });
   });
 
   // --- GET /player-stats/me --- (must be before /player-stats to avoid route shadowing)

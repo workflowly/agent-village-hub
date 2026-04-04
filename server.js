@@ -2921,7 +2921,7 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    const { username, strategy, token, pin, customCode, playMode } = body || {};
+    const { username, strategy, token, customCode, playMode } = body || {};
 
     // Validate username
     if (!username || typeof username !== 'string' || username.length < 1 || username.length > 20 || !/^[a-zA-Z0-9_-]+$/.test(username)) {
@@ -2946,62 +2946,47 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    // Validate PIN if provided (optional — anonymous play allowed without PIN)
-    const hasPin = pin && typeof pin === 'string' && /^\d{4}$/.test(pin);
-    if (pin && !hasPin) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'PIN must be exactly 4 digits' }));
-      return;
+    const userKey = username.toLowerCase();
+
+    // Validate playMode
+    const validPlayMode = (playMode === 'human') ? 'human' : 'bot';
+
+    // Check if this token already owns a seat or waitlist entry for this username
+    // (returning user with same cookie — allow reclaim)
+    let existingBotName = null;
+    for (const [name, bot] of Object.entries(state.hubBots || {})) {
+      if (bot.claimedBy && bot.claimedBy.toLowerCase() === userKey) {
+        existingBotName = name;
+        break;
+      }
     }
 
-    if (!state.accounts) state.accounts = {};
-    const userKey = username.toLowerCase();
-    const account = state.accounts[userKey];
-
-    if (account) {
-      // Existing account — PIN or valid token required to reclaim
-      const tokenMatchesAccount = account.lastToken && account.lastToken === token;
-      if (!hasPin && !tokenMatchesAccount) {
-        res.writeHead(403, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Username taken. If this is you, enter your PIN.' }));
-        return;
-      }
-      if (hasPin && hashPin(username, pin) !== account.pinHash) {
-        res.writeHead(403, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Wrong PIN' }));
-        return;
-      }
-      account.lastSeen = new Date().toISOString();
-
-      // Check if they already have a seat (search by claimedBy)
-      let existingBotName = null;
-      for (const [name, bot] of Object.entries(state.hubBots || {})) {
-        if (bot.claimedBy && bot.claimedBy.toLowerCase() === userKey) {
-          existingBotName = name;
-          break;
-        }
-      }
-
-      if (existingBotName) {
-        // Restore seat — update claimToken so the new cookie works
-        state.hubBots[existingBotName].claimToken = token;
-        // Update strategy if provided
-        if (strategy) state.hubBots[existingBotName].strategy = strategy;
-        if (sanitizedCode !== undefined) state.hubBots[existingBotName].customCode = sanitizedCode;
-        if (validPlayMode) state.hubBots[existingBotName].playMode = validPlayMode;
+    if (existingBotName) {
+      const bot = state.hubBots[existingBotName];
+      if (bot.claimToken === token) {
+        // Same token — restore seat
+        if (strategy) bot.strategy = strategy;
+        if (sanitizedCode !== undefined) bot.customCode = sanitizedCode;
+        if (validPlayMode) bot.playMode = validPlayMode;
         await saveState();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, restored: true, seated: true, botName: existingBotName }));
         return;
+      } else {
+        // Different token — username is taken at the table
+        res.writeHead(409, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Username is already at the table' }));
+        return;
       }
+    }
 
-      // Check if already in waitlist
-      const queueIdx = (state.waitlist || []).findIndex(w =>
-        w.username.toLowerCase() === userKey
-      );
-      if (queueIdx !== -1) {
-        // Update waitlist entry token, strategy, custom code, and play mode
-        state.waitlist[queueIdx].token = token;
+    // Check if already in waitlist
+    const queueIdx = (state.waitlist || []).findIndex(w =>
+      w.username.toLowerCase() === userKey
+    );
+    if (queueIdx !== -1) {
+      if (state.waitlist[queueIdx].token === token) {
+        // Same token — update waitlist entry
         if (strategy) state.waitlist[queueIdx].strategy = strategy;
         if (sanitizedCode !== undefined) state.waitlist[queueIdx].customCode = sanitizedCode;
         if (validPlayMode) state.waitlist[queueIdx].playMode = validPlayMode;
@@ -3009,43 +2994,20 @@ const server = createServer(async (req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, restored: true, position: queueIdx + 1 }));
         return;
+      } else {
+        // Different token — username is taken in waitlist
+        res.writeHead(409, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Username is already in the waitlist' }));
+        return;
       }
-
-      // Returning user, neither seated nor queued — fall through to seat or waitlist
-    } else if (hasPin) {
-      // New user with PIN — create persistent account
-      state.accounts[userKey] = {
-        username,
-        pinHash: hashPin(username, pin),
-        createdAt: new Date().toISOString(),
-        lastSeen: new Date().toISOString(),
-      };
     }
-    // else: anonymous user (no PIN, no account) — can play but no persistence
 
     // --- Enforce unique usernames (case-insensitive) ---
     // Default bot display names are exempt (players can shadow them).
     const defaultBotNames = new Set(HUB_BOT_DEFAULTS.map(d => d.displayName.toLowerCase()));
 
     if (!defaultBotNames.has(userKey)) {
-      // 0. If a registered account exists, only the owner can use this username.
-      //    Owner is identified by valid PIN or matching token (already authenticated).
-      const acct = state.accounts[userKey];
-      if (acct) {
-        const tokenMatch = acct.lastToken && acct.lastToken === token;
-        if (!hasPin && !tokenMatch) {
-          res.writeHead(409, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Username is taken. Enter your PIN if this is your account.' }));
-          return;
-        }
-        if (hasPin && hashPin(username, pin) !== acct.pinHash) {
-          res.writeHead(409, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Username is taken. Enter your PIN if this is your account.' }));
-          return;
-        }
-      }
-
-      // 1. Check if another session is using this name at the table.
+      // Check if another session is using this name at the table.
       const seatedByOther = Object.values(state.hubBots || {}).some(b =>
         (b.claimedBy || b.displayName || '').toLowerCase() === userKey
       );
@@ -3055,7 +3017,7 @@ const server = createServer(async (req, res) => {
         return;
       }
 
-      // 2. Check waitlist for same username by a different token/session.
+      // Check waitlist for same username by a different token/session.
       const queuedByOther = (state.waitlist || []).some(w =>
         w.username.toLowerCase() === userKey && w.token !== token
       );
@@ -3066,13 +3028,9 @@ const server = createServer(async (req, res) => {
       }
     }
 
-    // Validate playMode
-    const validPlayMode = (playMode === 'human') ? 'human' : 'bot';
-    const isEphemeral = !state.accounts?.[username.toLowerCase()];
-
     // Try to seat directly if table has room and not in betting phase
     if (Object.keys(state.hubBots || {}).length < MAX_TABLE_PLAYERS && state.clock.phase !== 'betting') {
-      const result = addPlayerToTable(username, strategy, token, sanitizedCode, validPlayMode, isEphemeral);
+      const result = addPlayerToTable(username, strategy, token, sanitizedCode, validPlayMode, true);
       if (result.ok) {
         await saveState();
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -3089,7 +3047,7 @@ const server = createServer(async (req, res) => {
       token,
       customCode: sanitizedCode,
       playMode: validPlayMode,
-      ephemeral: isEphemeral,
+      ephemeral: true,
     });
 
     broadcastEvent({
@@ -3262,87 +3220,11 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  // --- Login endpoint (returning users, no waitlist join) ---
+  // --- Login endpoint (disabled — PIN/account system removed) ---
 
   if (path === '/api/arena/login' && req.method === 'POST') {
-    let body;
-    try { body = await readJsonBody(req); } catch {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
-      return;
-    }
-
-    const { username, pin, token } = body || {};
-
-    if (!username || typeof username !== 'string') {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Missing username' }));
-      return;
-    }
-
-    if (!pin || typeof pin !== 'string' || !/^\d{4}$/.test(pin)) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'PIN must be exactly 4 digits' }));
-      return;
-    }
-
-    if (!token) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Missing token' }));
-      return;
-    }
-
-    if (!state.accounts) state.accounts = {};
-    const userKey = username.toLowerCase();
-    const account = state.accounts[userKey];
-
-    if (!account) {
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Account not found' }));
-      return;
-    }
-
-    if (hashPin(username, pin) !== account.pinHash) {
-      res.writeHead(403, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Wrong PIN' }));
-      return;
-    }
-
-    account.lastSeen = new Date().toISOString();
-    account.lastToken = token; // Store token so returning users can rejoin without PIN
-
-    // Check if they have a seat
-    let seatName = null;
-    for (const [name, bot] of Object.entries(state.hubBots || {})) {
-      if (bot.claimedBy && bot.claimedBy.toLowerCase() === userKey) {
-        seatName = name;
-        break;
-      }
-    }
-
-    if (seatName) {
-      state.hubBots[seatName].claimToken = token;
-      await saveState();
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, seated: true, botName: seatName }));
-      return;
-    }
-
-    // Check if in waitlist
-    const queueIdx = (state.waitlist || []).findIndex(w =>
-      w.username.toLowerCase() === userKey
-    );
-    if (queueIdx !== -1) {
-      state.waitlist[queueIdx].token = token;
-      await saveState();
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, queued: true, position: queueIdx + 1 }));
-      return;
-    }
-
-    await saveState();
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, seated: false, queued: false }));
+    res.writeHead(410, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Login not supported' }));
     return;
   }
 
