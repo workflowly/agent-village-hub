@@ -2766,6 +2766,47 @@ const server = createServer(async (req, res) => {
 
   // --- Human action endpoint ---
 
+  // --- Chat endpoint (table talk anytime for seated players) ---
+  if (path === '/api/arena/chat' && req.method === 'POST') {
+    let body;
+    try { body = await readJsonBody(req); } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON' }));
+      return;
+    }
+    const { token, message } = body || {};
+    if (!token || !message) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing token or message' }));
+      return;
+    }
+    // Find bot by token
+    let botName = null;
+    for (const [name, hub] of Object.entries(state.hubBots || {})) {
+      if (hub.claimToken === token) { botName = name; break; }
+    }
+    if (!botName) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'No seat found' }));
+      return;
+    }
+    const displayName = state.hubBots[botName]?.displayName || botName;
+    const entry = {
+      bot: botName,
+      displayName,
+      action: 'say',
+      message: message.slice(0, 200),
+      visibility: 'public',
+      tick: state.clock.tick,
+      timestamp: new Date().toISOString(),
+    };
+    state.log.push(entry);
+    broadcastEvent({ type: `${VILLAGE_WORLD}_say`, ...entry });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
   if (path === '/api/arena/action' && req.method === 'POST') {
     let body;
     try { body = await readJsonBody(req); } catch {

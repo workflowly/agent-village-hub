@@ -188,6 +188,31 @@ export function createArenaRouter({ config, limiter }) {
     }
   });
 
+  // --- POST /chat (table talk anytime) ---
+  router.post('/chat', async (req, res) => {
+    const cookies = parseCookies(req);
+    const token = cookies.arena_token;
+    if (!token) return res.status(401).json({ error: 'Not authenticated' });
+    const { message } = req.body || {};
+    if (!message || typeof message !== 'string' || message.trim().length === 0) {
+      return res.status(400).json({ error: 'Message required' });
+    }
+    if (message.length > 200) {
+      return res.status(400).json({ error: 'Message too long (200 char max)' });
+    }
+    try {
+      const resp = await fetch(`${SERVER_URL}/api/arena/chat`, {
+        method: 'POST',
+        headers: serverHeaders(),
+        body: JSON.stringify({ token, message: message.trim() }),
+        signal: AbortSignal.timeout(5_000),
+      });
+      res.status(resp.status).json(await resp.json());
+    } catch (err) {
+      res.status(502).json({ error: 'World server unreachable' });
+    }
+  });
+
   // --- GET /my-cards (returns only the requesting player's hole cards) ---
   router.get('/my-cards', async (req, res) => {
     const cookies = parseCookies(req);
