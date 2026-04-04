@@ -137,14 +137,15 @@ export function createArenaRouter({ config, limiter }) {
     if (customCode && typeof customCode === 'string' && customCode.length > 5000) {
       return res.status(400).json({ error: 'Custom code must be 5000 chars or less' });
     }
-    if (!pin || typeof pin !== 'string' || !/^\d{4}$/.test(pin)) {
+    if (pin && (typeof pin !== 'string' || !/^\d{4}$/.test(pin))) {
       return res.status(400).json({ error: 'PIN must be exactly 4 digits' });
     }
 
     const token = crypto.randomUUID();
 
     try {
-      const waitlistBody = { username, strategy, token, pin, playMode: playMode || 'bot' };
+      const waitlistBody = { username, strategy, token, playMode: playMode || 'bot' };
+      if (pin) waitlistBody.pin = pin;
       if (customCode !== undefined) waitlistBody.customCode = customCode;
       const resp = await fetch(`${SERVER_URL}/api/arena/waitlist`, {
         method: 'POST',

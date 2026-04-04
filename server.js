@@ -2821,8 +2821,9 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    // Validate PIN (required for all users)
-    if (!pin || typeof pin !== 'string' || !/^\d{4}$/.test(pin)) {
+    // Validate PIN if provided (optional — anonymous play allowed without PIN)
+    const hasPin = pin && typeof pin === 'string' && /^\d{4}$/.test(pin);
+    if (pin && !hasPin) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'PIN must be exactly 4 digits' }));
       return;
@@ -2833,7 +2834,12 @@ const server = createServer(async (req, res) => {
     const account = state.accounts[userKey];
 
     if (account) {
-      // Existing user — verify PIN
+      // Existing account — PIN required to reclaim
+      if (!hasPin) {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'This username has a PIN. Enter it to reclaim your seat.' }));
+        return;
+      }
       if (hashPin(username, pin) !== account.pinHash) {
         res.writeHead(403, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Wrong PIN' }));
@@ -2880,8 +2886,8 @@ const server = createServer(async (req, res) => {
       }
 
       // Returning user, neither seated nor queued — fall through to seat or waitlist
-    } else {
-      // New user — create account
+    } else if (hasPin) {
+      // New user with PIN — create persistent account
       state.accounts[userKey] = {
         username,
         pinHash: hashPin(username, pin),
@@ -2889,6 +2895,7 @@ const server = createServer(async (req, res) => {
         lastSeen: new Date().toISOString(),
       };
     }
+    // else: anonymous user (no PIN, no account) — can play but no persistence
 
     // Validate playMode
     const validPlayMode = (playMode === 'human') ? 'human' : 'bot';
