@@ -1935,8 +1935,14 @@ function promoteFromWaitlist() {
 
   // First: promote real waitlisted players
   while (state.waitlist?.length > 0 && Object.keys(state.hubBots).length < MAX_TABLE_PLAYERS) {
-    const entry = state.waitlist.shift();
-    addPlayerToTable(entry.username, entry.strategy, entry.token, entry.customCode, entry.playMode);
+    const entry = state.waitlist[0];
+    try {
+      addPlayerToTable(entry.username, entry.strategy, entry.token, entry.customCode, entry.playMode);
+      state.waitlist.shift(); // Only remove after successful add
+    } catch (err) {
+      console.error(`[village] Failed to promote ${entry.username} from waitlist:`, err.message);
+      state.waitlist.shift(); // Remove broken entry to avoid infinite loop
+    }
   }
 
   // Auto-backfill: if fewer than MIN_PLAYERS and no waitlist, add house bots from BOT_POOL
@@ -2203,6 +2209,16 @@ const server = createServer(async (req, res) => {
       })),
       buyIns: state.buyIns || {},
       activePlayer: state.hand?.activePlayer || null,
+      holeCards: (() => {
+        // Send current hole cards so observers see them after refresh
+        const hc = {};
+        if (state.hand?.players) {
+          for (const [botName, p] of Object.entries(state.hand.players)) {
+            if (p.cards) hc[botName] = p.cards;
+          }
+        }
+        return hc;
+      })(),
       maxPlayers: MAX_TABLE_PLAYERS,
       playerCount: Object.keys(state.hubBots || {}).length,
       handsPlayed: state.handsPlayed || 0,
