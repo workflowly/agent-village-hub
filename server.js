@@ -48,10 +48,6 @@ const ivm = _require('isolated-vm');
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function hashPin(username, pin) {
-  return createHash('sha256').update(`${username.toLowerCase()}:${pin}`).digest('hex');
-}
-
 // --- Load world schema ---
 const VILLAGE_WORLD = process.env.VILLAGE_WORLD || 'social-village';
 const WORLD_DIR = process.env.VILLAGE_WORLD_DIR
@@ -168,7 +164,6 @@ function ensureRuntimeFields() {
   if (!state.villageCosts) state.villageCosts = {};
   if (!state.remoteParticipants) state.remoteParticipants = {};
   if (!state.waitlist) state.waitlist = [];
-  if (!state.accounts) state.accounts = {};
   if (!state.playerStats) state.playerStats = {};
   if (!state.handHistory) state.handHistory = [];
   if (!state.playerGameRecords) state.playerGameRecords = {};
@@ -1761,7 +1756,6 @@ function getRecentTimeBuckets() {
 function ensureArenaState() {
   state.hubBots = state.hubBots || {};
   state.waitlist = state.waitlist || [];
-  state.accounts = state.accounts || {};
   if (!state.stats) state.stats = {};
 
   // Migrate old seat-* entries to player-* format
@@ -2952,7 +2946,6 @@ const server = createServer(async (req, res) => {
     const validPlayMode = (playMode === 'human') ? 'human' : 'bot';
 
     // Check if this token already owns a seat or waitlist entry for this username
-    // (returning user with same cookie — allow reclaim)
     let existingBotName = null;
     for (const [name, bot] of Object.entries(state.hubBots || {})) {
       if (bot.claimedBy && bot.claimedBy.toLowerCase() === userKey) {
@@ -3217,14 +3210,6 @@ const server = createServer(async (req, res) => {
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true }));
-    return;
-  }
-
-  // --- Login endpoint (disabled — PIN/account system removed) ---
-
-  if (path === '/api/arena/login' && req.method === 'POST') {
-    res.writeHead(410, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Login not supported' }));
     return;
   }
 
