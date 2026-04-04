@@ -2247,6 +2247,23 @@ const server = createServer(async (req, res) => {
     }
     res.write(`data: ${JSON.stringify(initPayload)}\n\n`);
 
+    // If a human player is currently waiting for input, re-send your_turn
+    if (pendingHumanActions.size > 0) {
+      for (const [botName] of pendingHumanActions) {
+        const hp = state.hand?.players?.[botName];
+        if (hp) {
+          res.write(`data: ${JSON.stringify({
+            type: 'your_turn',
+            botName,
+            pot: state.hand?.pot,
+            toCall: Math.max(0, (state.hand?.currentBet || 0) - (hp.bet || 0)),
+            minRaise: Math.max((state.hand?.currentBet || 0) * 2, state.hand?.bigBlind || 20),
+            chips: hp.chips || 0,
+          })}\n\n`);
+        }
+      }
+    }
+
     // Keepalive
     const keepalive = setInterval(() => {
       try { res.write(': ping\n\n'); } catch { /* closed */ }
