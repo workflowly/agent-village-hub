@@ -3419,28 +3419,26 @@ const server = createServer(async (req, res) => {
 
   if (path === '/api/arena/my-records' && req.method === 'GET') {
     const tokenParam = url.searchParams.get('token');
-    if (!tokenParam) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Missing token query param' }));
-      return;
-    }
+    const usernameParam = url.searchParams.get('username');
 
-    // Find username by token
-    let foundUsername = null;
-    for (const [name, bot] of Object.entries(state.hubBots || {})) {
-      if (bot.claimToken === tokenParam) {
-        foundUsername = bot.claimedBy;
-        break;
+    // Find username by token or direct username param
+    let foundUsername = usernameParam || null;
+    if (tokenParam && !foundUsername) {
+      for (const [name, bot] of Object.entries(state.hubBots || {})) {
+        if (bot.claimToken === tokenParam) {
+          foundUsername = bot.claimedBy;
+          break;
+        }
+      }
+      if (!foundUsername) {
+        const wEntry = (state.waitlist || []).find(w => w.token === tokenParam);
+        if (wEntry) foundUsername = wEntry.username;
       }
     }
-    if (!foundUsername) {
-      const wEntry = (state.waitlist || []).find(w => w.token === tokenParam);
-      if (wEntry) foundUsername = wEntry.username;
-    }
 
     if (!foundUsername) {
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Token not found' }));
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing token or username' }));
       return;
     }
 

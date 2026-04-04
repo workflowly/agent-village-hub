@@ -460,11 +460,16 @@ export function createArenaRouter({ config, limiter }) {
   router.get('/my-records', async (req, res) => {
     const cookies = parseCookies(req);
     const token = cookies.arena_token;
+    const username = req.query.username;
 
-    if (!token) return res.status(401).json({ error: 'No arena token cookie' });
+    if (!token && !username) return res.status(401).json({ error: 'No arena token cookie or username' });
+
+    const params = new URLSearchParams();
+    if (token) params.set('token', token);
+    if (username) params.set('username', username);
 
     try {
-      const resp = await fetch(`${SERVER_URL}/api/arena/my-records?token=${encodeURIComponent(token)}`, {
+      const resp = await fetch(`${SERVER_URL}/api/arena/my-records?${params.toString()}`, {
         headers: VILLAGE_SECRET ? { 'Authorization': `Bearer ${VILLAGE_SECRET}` } : {},
         signal: AbortSignal.timeout(10_000),
       });
