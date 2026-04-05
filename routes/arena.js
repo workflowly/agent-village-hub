@@ -438,5 +438,33 @@ export function createArenaRouter({ config, limiter }) {
     }
   });
 
+  // --- GET /strategies ---
+  router.get('/strategies', async (req, res) => {
+    try {
+      const resp = await fetch(`${SERVER_URL}/api/arena/strategies`, {
+        headers: VILLAGE_SECRET ? { 'Authorization': `Bearer ${VILLAGE_SECRET}` } : {},
+        signal: AbortSignal.timeout(10_000),
+      });
+      res.status(resp.status).json(await resp.json());
+    } catch (err) {
+      console.error(`[hub] arena strategies failed: ${err.message}`);
+      res.status(502).json({ error: 'World server unreachable' });
+    }
+  });
+
+  // --- GET /tournament ---
+  router.get('/tournament', async (req, res) => {
+    try {
+      const resp = await fetch(`${SERVER_URL}/api/arena/tournament`, {
+        headers: VILLAGE_SECRET ? { 'Authorization': `Bearer ${VILLAGE_SECRET}` } : {},
+        signal: AbortSignal.timeout(10_000),
+      });
+      res.status(resp.status).json(await resp.json());
+    } catch (err) {
+      console.error(`[hub] arena tournament failed: ${err.message}`);
+      res.status(502).json({ error: 'World server unreachable' });
+    }
+  });
+
   return router;
 }

@@ -79,7 +79,7 @@ const TOURNAMENT_LOBBY_DURATION = 60000;  // 60s lobby countdown
 const TOURNAMENT_RESULTS_DURATION = 30000; // 30s results display
 const TOURNAMENT_STARTING_CHIPS = 1000;
 const TOURNAMENT_POINTS = [0, 10, 7, 5, 3, 2, 1]; // index = position (1st=10, 2nd=7, ...)
-const TOURNAMENT_AI_SEATS = 4;
+const TOURNAMENT_AI_SEATS = 2;
 const TOURNAMENT_HUMAN_SEATS = 2;
 const TOURNAMENT_MAX_HISTORY = 20;
 
@@ -3992,6 +3992,52 @@ const server = createServer(async (req, res) => {
         })),
       },
     }));
+    return;
+  }
+
+  // --- Strategies (community DNA browser) ---
+  if (path === '/api/arena/strategies' && req.method === 'GET') {
+    const strategies = [];
+    const lineage = state.evolution?.lineage || {};
+
+    // Current table bots
+    for (const [botName, hub] of Object.entries(state.hubBots || {})) {
+      if (hub.playMode === 'human') continue;
+      const stats = state.stats?.[botName] || {};
+      const lin = lineage[botName] || {};
+      strategies.push({
+        name: hub.displayName || botName,
+        strategy: hub.strategy || '',
+        generation: lin.generation || 0,
+        parents: lin.parents || null,
+        author: hub.claimedBy || 'house',
+        tournamentWins: (state.tournament?.points?.[hub.displayName?.toLowerCase()] || 0),
+        handsPlayed: stats.handsPlayed || 0,
+        winRate: stats.handsPlayed > 0 ? Math.round((stats.handsWon || 0) / stats.handsPlayed * 100) : 0,
+        atTable: true,
+      });
+    }
+
+    // Bot pool (not at table)
+    for (const poolBot of (BOT_POOL || [])) {
+      const alreadyListed = strategies.some(s => s.name === poolBot.name);
+      if (alreadyListed) continue;
+      const lin = lineage['player-' + poolBot.name.toLowerCase()] || lineage[poolBot.name] || {};
+      strategies.push({
+        name: poolBot.name,
+        strategy: poolBot.strategy || '',
+        generation: lin.generation || 0,
+        parents: lin.parents || null,
+        author: 'house',
+        tournamentWins: 0,
+        handsPlayed: 0,
+        winRate: 0,
+        atTable: false,
+      });
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, strategies }));
     return;
   }
 
