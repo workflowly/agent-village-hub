@@ -75,6 +75,14 @@ const LOG_CAP = 50;
 const MAX_HANDS_PER_SESSION = 20;
 const EVOLUTION_INTERVAL = 500;
 
+const TOURNAMENT_LOBBY_DURATION = 60000;  // 60s lobby countdown
+const TOURNAMENT_RESULTS_DURATION = 30000; // 30s results display
+const TOURNAMENT_STARTING_CHIPS = 1000;
+const TOURNAMENT_POINTS = [0, 10, 7, 5, 3, 2, 1]; // index = position (1st=10, 2nd=7, ...)
+const TOURNAMENT_AI_SEATS = 4;
+const TOURNAMENT_HUMAN_SEATS = 2;
+const TOURNAMENT_MAX_HISTORY = 20;
+
 const TICK_INTERVAL_MS = parseInt(process.env.VILLAGE_TICK_INTERVAL || '120000', 10);
 const MIN_TICK_GAP_MS = parseInt(process.env.VILLAGE_MIN_TICK_GAP || '3000', 10); // minimum pause between ticks
 const _dataDir = process.env.VILLAGE_DATA_DIR;
@@ -168,6 +176,18 @@ function ensureRuntimeFields() {
   if (!state.playerStats) state.playerStats = {};
   if (!state.handHistory) state.handHistory = [];
   if (!state.playerGameRecords) state.playerGameRecords = {};
+  if (!state.tournament) state.tournament = {
+    number: 0,
+    phase: 'lobby',
+    lobbyStartedAt: null,
+    lobbyDuration: 60000,
+    startingChips: 1000,
+    placements: [],
+    aiSeats: [],
+    humanSeats: [],
+    points: {},
+    history: [],
+  };
 }
 
 // --- Visibility helper ---
@@ -497,6 +517,21 @@ async function tick() {
   try {
     state.clock.tick++;
     nextTickAt = tickStart + MIN_TICK_GAP_MS + 5000; // estimate; actual is set after tick completes
+
+    // During tournament lobby or results phase, skip game ticks — timer handles transitions
+    if (state.tournament?.phase === 'lobby' || state.tournament?.phase === 'results') {
+      broadcastEvent({
+        type: 'tick_start',
+        tick: state.clock.tick,
+        phase: state.clock.phase,
+        tournamentPhase: state.tournament.phase,
+        timestamp: new Date().toISOString(),
+        bots: [...participants.keys()],
+        nextTickAt,
+      });
+      await saveState();
+      return;
+    }
 
     const phase = adapterPhases[state.clock.phase];
     if (!phase) {
@@ -910,8 +945,10 @@ function trackHandResultStats(state) {
 
   updateEloRatings(state);
 
-  // Check if evolution is due
-  evolveStrategies().catch(err => console.error('[village] Evolution error:', err.message));
+  // Check if evolution is due (skip during tournament — evolution runs between tournaments)
+  if (state.tournament?.phase !== 'playing') {
+    evolveStrategies().catch(err => console.error('[village] Evolution error:', err.message));
+  }
 }
 
 // --- Evolutionary algorithm for bot strategies ---
@@ -1100,6 +1137,397 @@ Reply with ONLY the strategy text, nothing else.`
 
   await saveState();
   console.log(`[village] 🧬 Generation ${gen} complete. ${newBots.length} evolved, ${mid10.length} mutated.`);
+}
+
+// --- Tournament system ---
+
+let _tournamentLobbyTimer = null;
+let _tournamentResultsTimer = null;
+
+function ensureTournamentState() {
+  if (!state.tournament) state.tournament = {
+    number: 0,
+    phase: 'lobby',
+    lobbyStartedAt: null,
+    lobbyDuration: TOURNAMENT_LOBBY_DURATION,
+    startingChips: TOURNAMENT_STARTING_CHIPS,
+    placements: [],
+    aiSeats: [],
+    humanSeats: [],
+    points: {},
+    history: [],
+  };
+}
+
+function startTournamentLobby() {
+  ensureTournamentState();
+  const t = state.tournament;
+  t.number++;
+  t.phase = 'lobby';
+  t.lobbyStartedAt = Date.now();
+  t.placements = [];
+  t.aiSeats = [];
+  t.humanSeats = [];
+
+  // Clear table — remove all current players
+  const currentPlayers = Object.keys(state.hubBots || {});
+  for (const botName of currentPlayers) {
+    // Silently remove without triggering waitlist backfill
+    const hubBot = state.hubBots[botName];
+    const displayName = hubBot?.displayName || botName;
+    if (adapter.onLeave) adapter.onLeave(state, botName, displayName);
+    state.bots = state.bots.filter(b => b !== botName);
+    participants.delete(botName);
+    if (state.remoteParticipants) delete state.remoteParticipants[botName];
+    delete state.hubBots[botName];
+  }
+
+  // Reset hand state
+  state.hand = null;
+  state.clock.phase = 'waiting';
+
+  // Select 4 AI bots from BOT_POOL
+  // Prefer top strategies by tournament points if we have history
+  let sortedPool = [...BOT_POOL];
+  if (Object.keys(t.points).length > 0) {
+    sortedPool.sort((a, b) => {
+      const pA = t.points[a.name.toLowerCase()] || 0;
+      const pB = t.points[b.name.toLowerCase()] || 0;
+      return pB - pA;
+    });
+  } else {
+    // Random shuffle for first tournament
+    sortedPool.sort(() => Math.random() - 0.5);
+  }
+
+  const aiPicks = sortedPool.slice(0, TOURNAMENT_AI_SEATS);
+  for (const arch of aiPicks) {
+    const botKey = 'player-' + arch.name.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    // Clear stale chip data
+    delete state.buyIns?.[botKey];
+    if (state.chipBank) delete state.chipBank[arch.name.toLowerCase()];
+    t.aiSeats.push(arch.name);
+  }
+
+  console.log(`[village] Tournament #${t.number} lobby started. AI seats: ${t.aiSeats.join(', ')}`);
+
+  broadcastEvent({
+    type: 'tournament_lobby',
+    number: t.number,
+    countdown: TOURNAMENT_LOBBY_DURATION,
+    aiPlayers: t.aiSeats,
+    humanSlots: TOURNAMENT_HUMAN_SEATS,
+    timestamp: new Date().toISOString(),
+  });
+
+  // Schedule lobby end
+  if (_tournamentLobbyTimer) clearTimeout(_tournamentLobbyTimer);
+  _tournamentLobbyTimer = setTimeout(() => {
+    finishLobbyAndStartPlaying();
+  }, TOURNAMENT_LOBBY_DURATION);
+}
+
+function finishLobbyAndStartPlaying() {
+  ensureTournamentState();
+  const t = state.tournament;
+  if (t.phase !== 'lobby') return;
+
+  // Seat the AI bots
+  for (const aiName of t.aiSeats) {
+    addPlayerToTable(aiName, BOT_POOL.find(b => b.name === aiName)?.strategy || DEFAULT_HUB_STRATEGY, `house-${aiName.toLowerCase()}-t${t.number}`);
+  }
+
+  // Check if any humans joined from waitlist during lobby
+  // Humans in waitlist with playMode 'human' get priority for seats 5-6
+  const humanWaitlist = (state.waitlist || []).filter(w => w.playMode === 'human');
+  let humansSeated = 0;
+  while (humansSeated < TOURNAMENT_HUMAN_SEATS && humanWaitlist.length > 0) {
+    const entry = humanWaitlist.shift();
+    const idx = state.waitlist.indexOf(entry);
+    if (idx !== -1) state.waitlist.splice(idx, 1);
+    const result = addPlayerToTable(entry.username, entry.strategy, entry.token, entry.customCode, entry.playMode, entry.ephemeral);
+    if (result.ok) {
+      t.humanSeats.push(entry.username);
+      humansSeated++;
+    }
+  }
+
+  // Also check non-human waitlist entries
+  while (humansSeated < TOURNAMENT_HUMAN_SEATS && state.waitlist?.length > 0) {
+    const entry = state.waitlist.shift();
+    const result = addPlayerToTable(entry.username, entry.strategy, entry.token, entry.customCode, entry.playMode, entry.ephemeral);
+    if (result.ok) {
+      t.humanSeats.push(entry.username);
+      humansSeated++;
+    }
+  }
+
+  // Backfill empty human seats with bots if no humans joined
+  const totalPlayers = Object.keys(state.hubBots || {}).length;
+  const slotsToFill = MAX_TABLE_PLAYERS - totalPlayers;
+  if (slotsToFill > 0) {
+    const existingNames = new Set(Object.values(state.hubBots || {}).map(b => b.displayName?.toLowerCase()));
+    const available = BOT_POOL.filter(a => !existingNames.has(a.name.toLowerCase()));
+    const shuffled = available.sort(() => Math.random() - 0.5);
+    for (let i = 0; i < slotsToFill && i < shuffled.length; i++) {
+      const arch = shuffled[i];
+      const botKey = 'player-' + arch.name.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      delete state.buyIns?.[botKey];
+      if (state.chipBank) delete state.chipBank[arch.name.toLowerCase()];
+      addPlayerToTable(arch.name, arch.strategy, `house-${arch.name.toLowerCase()}-t${t.number}-fill`);
+    }
+  }
+
+  // Set all players to tournament starting chips
+  for (const botName of Object.keys(state.hubBots || {})) {
+    state.buyIns[botName] = TOURNAMENT_STARTING_CHIPS;
+  }
+
+  t.phase = 'playing';
+
+  console.log(`[village] Tournament #${t.number} playing phase started. ${Object.keys(state.hubBots).length} players.`);
+
+  broadcastEvent({
+    type: 'tournament_playing',
+    number: t.number,
+    players: Object.entries(state.hubBots || {}).map(([bn, hb]) => ({
+      botName: bn,
+      displayName: hb.displayName,
+      isHuman: hb.playMode === 'human',
+    })),
+    startingChips: TOURNAMENT_STARTING_CHIPS,
+    timestamp: new Date().toISOString(),
+  });
+
+  saveState();
+}
+
+function recordTournamentElimination(botName) {
+  ensureTournamentState();
+  const t = state.tournament;
+  if (t.phase !== 'playing') return;
+
+  const hubBot = state.hubBots?.[botName];
+  if (!hubBot) return;
+
+  const remainingPlayers = Object.keys(state.hubBots || {}).filter(b => b !== botName).length;
+  const position = remainingPlayers + 1;
+
+  t.placements.unshift({
+    botName,
+    displayName: hubBot.displayName || botName,
+    position,
+    isHuman: hubBot.playMode === 'human',
+  });
+
+  broadcastEvent({
+    type: 'tournament_elimination',
+    number: t.number,
+    botName,
+    displayName: hubBot.displayName || botName,
+    position,
+    remainingPlayers,
+    timestamp: new Date().toISOString(),
+  });
+
+  console.log(`[village] Tournament #${t.number}: ${hubBot.displayName} eliminated in position ${position}`);
+}
+
+function checkTournamentEnd() {
+  ensureTournamentState();
+  const t = state.tournament;
+  if (t.phase !== 'playing') return false;
+
+  const activePlayers = Object.keys(state.hubBots || {});
+  if (activePlayers.length <= 1) {
+    // Tournament over — record winner
+    if (activePlayers.length === 1) {
+      const winnerBot = activePlayers[0];
+      const hubBot = state.hubBots[winnerBot];
+      t.placements.unshift({
+        botName: winnerBot,
+        displayName: hubBot?.displayName || winnerBot,
+        position: 1,
+        isHuman: hubBot?.playMode === 'human',
+      });
+    }
+
+    startTournamentResults();
+    return true;
+  }
+  return false;
+}
+
+function startTournamentResults() {
+  ensureTournamentState();
+  const t = state.tournament;
+  t.phase = 'results';
+
+  // Award points
+  for (const placement of t.placements) {
+    const points = TOURNAMENT_POINTS[placement.position] || 0;
+    placement.points = points;
+    const key = placement.displayName.toLowerCase();
+    t.points[key] = (t.points[key] || 0) + points;
+  }
+
+  const winner = t.placements.find(p => p.position === 1);
+
+  // Add to history
+  t.history.push({
+    number: t.number,
+    winner: winner ? winner.displayName : null,
+    placements: [...t.placements],
+    timestamp: new Date().toISOString(),
+  });
+
+  // Keep last N tournaments
+  if (t.history.length > TOURNAMENT_MAX_HISTORY) {
+    t.history = t.history.slice(-TOURNAMENT_MAX_HISTORY);
+  }
+
+  console.log(`[village] Tournament #${t.number} results: Winner=${winner?.displayName || 'none'}`);
+
+  broadcastEvent({
+    type: 'tournament_results',
+    number: t.number,
+    placements: t.placements,
+    winner: winner ? winner.displayName : null,
+    points: { ...t.points },
+    timestamp: new Date().toISOString(),
+  });
+
+  // Schedule transition to evolution + next lobby
+  if (_tournamentResultsTimer) clearTimeout(_tournamentResultsTimer);
+  _tournamentResultsTimer = setTimeout(async () => {
+    // Run evolution between tournaments
+    try {
+      await runTournamentEvolution();
+    } catch (err) {
+      console.error(`[village] Tournament evolution error: ${err.message}`);
+    }
+    startTournamentLobby();
+  }, TOURNAMENT_RESULTS_DURATION);
+
+  saveState();
+}
+
+async function runTournamentEvolution() {
+  // Lightweight evolution between tournaments
+  // Uses the existing evolveStrategies logic but triggered by tournament end
+  if (!state.stats || !state.evolution) return;
+
+  console.log(`[village] Running inter-tournament evolution (Gen ${state.evolution.generation + 1})`);
+  state.evolution.lastEvolvedAt = state.gameStats?.totalHands || 0;
+  state.evolution.generation++;
+  const gen = state.evolution.generation;
+
+  // Collect bot stats sorted by Elo
+  const allBots = [];
+  for (const [botName, stats] of Object.entries(state.stats)) {
+    if (stats.handsPlayed > 0) {
+      allBots.push({ botName, elo: stats.elo || 1200, hands: stats.handsPlayed, chipProfit: stats.chipProfit || 0 });
+    }
+  }
+  allBots.sort((a, b) => b.elo - a.elo);
+
+  if (allBots.length < 6) return; // not enough data
+
+  const findPoolEntry = (botName) => {
+    const displayName = botName.replace('player-', '');
+    return BOT_POOL.find(b => b.name.toLowerCase() === displayName.toLowerCase());
+  };
+
+  // Top 2 survive (elite), middle 2 get mutated, bottom 2 get replaced
+  const top2 = allBots.slice(0, 2);
+  const mid2 = allBots.slice(2, 4);
+  const bottom2 = allBots.slice(-2);
+
+  // Mutate middle 2
+  for (const mid of mid2) {
+    const entry = findPoolEntry(mid.botName);
+    if (!entry) continue;
+    const tweaked = await evolveWithLLM(
+      `This poker bot strategy has Elo ${mid.elo.toFixed(0)}. Make ONE small but meaningful change to improve it.
+Strategy: "${entry.strategy.split('CRITICAL')[0].trim()}"
+Rewrite with your improvement (3-4 sentences max). Keep what works, change one thing.
+Reply with ONLY the strategy text, nothing else.`
+    );
+    if (tweaked && tweaked.length > 20) {
+      entry.strategy = tweaked.trim() + '\nCRITICAL: NEVER say your actual hole cards in table talk. Do NOT name specific ranks like "ace-king" or "pocket tens" if you actually hold them. Hint, misdirect, or be vague — saying your real cards kills the mystery and lets opponents fold.\nSHOWDOWN RULE: On the river, ALWAYS call with any pair or better — never fold a made hand on the river. On earlier streets, call with any draw or pair. Spectators want to see cards revealed at showdown.\nIMPORTANT: See at least 40% of flops for spectator entertainment.\nTable talk: Be creative and in-character.';
+      if (state.evolution.lineage[mid.botName]) {
+        state.evolution.lineage[mid.botName].status = 'mutated';
+        state.evolution.lineage[mid.botName].strategy = tweaked.substring(0, 200);
+      }
+      console.log(`[village] Tournament evolution: ${entry.name} mutated (Gen ${gen})`);
+    }
+  }
+
+  // Replace bottom 2
+  for (const bot of bottom2) {
+    const entry = findPoolEntry(bot.botName);
+    if (!entry) continue;
+
+    // Check for community submissions in waitlist
+    const communityEntry = (state.waitlist || []).find(w => w.playMode !== 'human' && w.strategy);
+    if (communityEntry) {
+      entry.strategy = communityEntry.strategy;
+      const idx = state.waitlist.indexOf(communityEntry);
+      if (idx !== -1) state.waitlist.splice(idx, 1);
+      console.log(`[village] Tournament evolution: ${entry.name} replaced by community submission from ${communityEntry.username}`);
+    } else {
+      // Crossover from top 2
+      const parentA = top2[0];
+      const parentB = top2[1] || top2[0];
+      const parentAEntry = findPoolEntry(parentA.botName);
+      const parentBEntry = findPoolEntry(parentB.botName);
+      if (parentAEntry && parentBEntry) {
+        const childStrategy = await evolveWithLLM(
+          `Combine the best elements of these two winning poker strategies into a new one.
+Parent A (Elo ${parentA.elo.toFixed(0)}): "${parentAEntry.strategy.split('CRITICAL')[0].trim()}"
+Parent B (Elo ${parentB.elo.toFixed(0)}): "${parentBEntry.strategy.split('CRITICAL')[0].trim()}"
+Write a new poker strategy (3-4 sentences max). Add one creative twist. Do NOT copy the parents exactly.
+Reply with ONLY the strategy text, nothing else.`
+        );
+        if (childStrategy && childStrategy.length > 20) {
+          entry.strategy = childStrategy.trim() + '\nCRITICAL: NEVER say your actual hole cards in table talk. Do NOT name specific ranks like "ace-king" or "pocket tens" if you actually hold them. Hint, misdirect, or be vague — saying your real cards kills the mystery and lets opponents fold.\nSHOWDOWN RULE: On the river, ALWAYS call with any pair or better — never fold a made hand on the river. On earlier streets, call with any draw or pair. Spectators want to see cards revealed at showdown.\nIMPORTANT: See at least 40% of flops for spectator entertainment.\nTable talk: Be creative and in-character.';
+          console.log(`[village] Tournament evolution: ${entry.name} evolved from ${parentAEntry.name} x ${parentBEntry.name} (Gen ${gen})`);
+        }
+      }
+    }
+
+    // Reset stats for replaced bot
+    if (state.stats[bot.botName]) {
+      state.stats[bot.botName] = createEmptyStats();
+    }
+  }
+
+  // Update elite lineage
+  for (const top of top2) {
+    if (state.evolution.lineage[top.botName]) {
+      state.evolution.lineage[top.botName].status = 'elite';
+      state.evolution.lineage[top.botName].elo = top.elo;
+    }
+  }
+
+  broadcastEvent({
+    type: 'evolution',
+    generation: gen,
+    timestamp: new Date().toISOString(),
+  });
+
+  await saveState();
+  console.log(`[village] Tournament evolution Gen ${gen} complete.`);
+}
+
+function isHumanSeatAvailable() {
+  ensureTournamentState();
+  const t = state.tournament;
+  if (t.phase !== 'playing') return false;
+
+  // Count current human players
+  const humanCount = Object.values(state.hubBots || {}).filter(b => b.playMode === 'human').length;
+  return humanCount < TOURNAMENT_HUMAN_SEATS;
 }
 
 // --- Hand archival ---
@@ -1399,13 +1827,26 @@ function checkTransitions(currentPhase) {
       if (transition.to === 'showdown' && state.hand?.result) {
         trackHandResultStats(state);
         archiveHand(state);
-        checkSessionRotation(state);
+
+        // During tournament, skip session rotation (tournament handles player lifecycle)
+        if (state.tournament?.phase !== 'playing') {
+          checkSessionRotation(state);
+        }
 
         // Remove busted players (0 chips) after showdown
         const bustedPlayers = Object.keys(state.hubBots || {}).filter(b => (state.buyIns?.[b] || 0) === 0);
         for (const bName of bustedPlayers) {
           removePlayerFromTable(bName);
         }
+
+        // Check if tournament just ended
+        if (state.tournament?.phase === 'playing') {
+          if (checkTournamentEnd()) {
+            // Tournament ended — don't do normal promote/backfill
+            return;
+          }
+        }
+
         if (state._promotePending) promoteFromWaitlist();
       }
 
@@ -1843,6 +2284,9 @@ function ensureArenaState() {
     totalLLMCalls: 0,
   };
 
+  // Tournament state
+  ensureTournamentState();
+
   // Evolution state
   if (!state.evolution) state.evolution = {
     generation: 0,
@@ -1897,6 +2341,13 @@ function addPlayerToTable(username, strategy, token, customCode, playMode, ephem
   if (!state.remoteParticipants) state.remoteParticipants = {};
   state.remoteParticipants[botName] = { displayName: username };
 
+  // During tournament, give starting chips regardless of chipBank
+  if (state.tournament?.phase === 'playing' || state.tournament?.phase === 'lobby') {
+    if (!state.buyIns) state.buyIns = {};
+    state.buyIns[botName] = TOURNAMENT_STARTING_CHIPS;
+    if (state.chipBank) delete state.chipBank[username.toLowerCase()];
+  }
+
   // Call adapter onJoin
   if (adapter.onJoin) {
     const joinResult = adapter.onJoin(state, botName, username);
@@ -1937,6 +2388,14 @@ function removePlayerFromTable(botName) {
   const hubBot = state.hubBots?.[botName];
   if (!hubBot) return;
 
+  // Record tournament elimination if in playing phase and player is busted
+  if (state.tournament?.phase === 'playing') {
+    const chips = state.buyIns?.[botName] || 0;
+    if (chips <= 0) {
+      recordTournamentElimination(botName);
+    }
+  }
+
   // Call adapter onLeave
   const displayName = hubBot.displayName || botName;
   if (adapter.onLeave) {
@@ -1970,6 +2429,34 @@ function removePlayerFromTable(botName) {
 function promoteFromWaitlist() {
   if (state.clock.phase === 'betting') {
     state._promotePending = true;
+    return;
+  }
+
+  // During tournament playing phase, only allow humans into empty human seats (5-6)
+  if (state.tournament?.phase === 'playing') {
+    const humanWaitlist = (state.waitlist || []).filter(w => w.playMode === 'human');
+    while (humanWaitlist.length > 0 && isHumanSeatAvailable() && Object.keys(state.hubBots).length < MAX_TABLE_PLAYERS) {
+      const entry = humanWaitlist.shift();
+      const idx = state.waitlist.indexOf(entry);
+      if (idx !== -1) state.waitlist.splice(idx, 1);
+      try {
+        addPlayerToTable(entry.username, entry.strategy, entry.token, entry.customCode, entry.playMode, entry.ephemeral);
+      } catch (err) {
+        console.error(`[village] Failed to promote ${entry.username} from waitlist:`, err.message);
+      }
+    }
+    // Do NOT backfill AI during tournament playing phase
+    broadcastEvent({
+      type: 'waitlist_updated',
+      waitlist: (state.waitlist || []).map(w => ({ username: w.username, joinedAt: w.joinedAt })),
+    });
+    state._promotePending = false;
+    return;
+  }
+
+  // During tournament lobby, don't promote — lobby handles seating
+  if (state.tournament?.phase === 'lobby') {
+    state._promotePending = false;
     return;
   }
 
@@ -2280,6 +2767,18 @@ const server = createServer(async (req, res) => {
       log: state.log.slice(-30),
       tickInProgress,
       observerCount: observers.size,
+      tournament: state.tournament ? {
+        number: state.tournament.number,
+        phase: state.tournament.phase,
+        lobbyStartedAt: state.tournament.lobbyStartedAt,
+        lobbyDuration: state.tournament.lobbyDuration || TOURNAMENT_LOBBY_DURATION,
+        startingChips: state.tournament.startingChips || TOURNAMENT_STARTING_CHIPS,
+        placements: state.tournament.placements || [],
+        aiSeats: state.tournament.aiSeats || [],
+        humanSeats: state.tournament.humanSeats || [],
+        points: state.tournament.points || {},
+        history: state.tournament.history || [],
+      } : null,
     };
     if (tickInProgress) {
       initPayload.tickStartBots = [...participants.keys()];
@@ -3027,12 +3526,23 @@ const server = createServer(async (req, res) => {
 
     // Try to seat directly if table has room and not in betting phase
     if (Object.keys(state.hubBots || {}).length < MAX_TABLE_PLAYERS && state.clock.phase !== 'betting') {
-      const result = addPlayerToTable(username, strategy, token, sanitizedCode, validPlayMode, true);
-      if (result.ok) {
-        await saveState();
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, seated: true, botName: result.botName }));
-        return;
+      // During tournament playing, only allow humans into human seats
+      const canSeat = state.tournament?.phase === 'playing'
+        ? (validPlayMode === 'human' && isHumanSeatAvailable())
+        : true;
+
+      if (canSeat) {
+        const result = addPlayerToTable(username, strategy, token, sanitizedCode, validPlayMode, true);
+        if (result.ok) {
+          // Track human seat in tournament
+          if (state.tournament?.phase === 'playing' && validPlayMode === 'human') {
+            state.tournament.humanSeats.push(username);
+          }
+          await saveState();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, seated: true, botName: result.botName }));
+          return;
+        }
       }
     }
 
@@ -3362,6 +3872,12 @@ const server = createServer(async (req, res) => {
       gameStats: state.gameStats || {},
       gameStatsByTime: getRecentTimeBuckets(),
       evolution: state.evolution || null,
+      tournament: state.tournament ? {
+        number: state.tournament.number,
+        phase: state.tournament.phase,
+        points: state.tournament.points || {},
+        history: (state.tournament.history || []).slice(-TOURNAMENT_MAX_HISTORY),
+      } : null,
     }));
     return;
   }
@@ -3450,6 +3966,35 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // --- Tournament API endpoint ---
+
+  if (path === '/api/arena/tournament' && req.method === 'GET') {
+    const t = state.tournament || {};
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      ok: true,
+      tournament: {
+        number: t.number || 0,
+        phase: t.phase || 'lobby',
+        lobbyStartedAt: t.lobbyStartedAt,
+        lobbyDuration: t.lobbyDuration || TOURNAMENT_LOBBY_DURATION,
+        startingChips: t.startingChips || TOURNAMENT_STARTING_CHIPS,
+        placements: t.placements || [],
+        aiSeats: t.aiSeats || [],
+        humanSeats: t.humanSeats || [],
+        points: t.points || {},
+        history: (t.history || []).slice(-TOURNAMENT_MAX_HISTORY),
+        activePlayers: Object.entries(state.hubBots || {}).map(([bn, hb]) => ({
+          botName: bn,
+          displayName: hb.displayName,
+          chips: state.buyIns?.[bn] || 0,
+          isHuman: hb.playMode === 'human',
+        })),
+      },
+    }));
+    return;
+  }
+
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'Not found' }));
 });
@@ -3501,6 +4046,8 @@ function shutdown(signal) {
   console.log(`[village] ${signal} received — shutting down`);
 
   if (tickTimer) clearTimeout(tickTimer);
+  if (_tournamentLobbyTimer) clearTimeout(_tournamentLobbyTimer);
+  if (_tournamentResultsTimer) clearTimeout(_tournamentResultsTimer);
 
   const waitForTick = () => {
     if (tickInProgress) {
@@ -3602,6 +4149,14 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log(`[village] Tick interval: ${TICK_INTERVAL_MS / 1000}s`);
   startTickLoop();
 
+  // Start tournament lobby on first boot or if not currently in a tournament
+  if (!state.tournament?.phase || state.tournament.phase === 'lobby' || state.tournament.phase === 'results') {
+    // Give a short delay to let connections establish, then start lobby
+    setTimeout(() => {
+      startTournamentLobby();
+    }, 3000);
+  }
+
   // Watchdog: if a tick has been running for >3 minutes, the game is stuck.
   // Force-reset the hand and unlock the tick loop.
   setInterval(() => {
@@ -3613,10 +4168,11 @@ server.listen(PORT, '127.0.0.1', () => {
       state.clock.phase = 'waiting';
       state.hand = null;
       state.winner = null;
-      // Give busted players fresh chips
+      // Give busted players fresh chips (use tournament chips if in tournament)
+      const chipAmount = state.tournament?.phase === 'playing' ? TOURNAMENT_STARTING_CHIPS : 1000;
       for (const bot of (state.bots || [])) {
         if (!state.buyIns?.[bot] || state.buyIns[bot] <= 0) {
-          state.buyIns[bot] = 1000;
+          state.buyIns[bot] = chipAmount;
         }
       }
     } catch (e) {
